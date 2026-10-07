@@ -237,7 +237,7 @@ html.dark[data-skin='b'] [data-pane='reader'] > section > .drag-region {
 
 /* ---- B2 "Gmail-in-Glass": search bar on top, category tabs, soft-tinted rows ---- */
 html.dark[data-skin='b'] {
-  --selection: color-mix(in srgb, var(--accent) 20%, transparent);
+  --selection: rgb(255 255 255 / 0.13);
   --selection-inactive: rgb(255 255 255 / 0.08);
   --on-selection: var(--foreground);
   --on-selection-dim: var(--muted);
@@ -419,7 +419,7 @@ html.dark[data-skin='b']
 }
 html.dark[data-skin='b'] [role='option'][aria-selected='true'] {
   background: var(--selection);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1);
 }
 html.dark[data-skin='b'] [role='listbox']:not(:focus-within) [role='option'][aria-selected='true'] {
   background: var(--selection-inactive);
