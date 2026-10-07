@@ -1,10 +1,15 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { ChevronDown, ChevronRight, FileText, ImageOff, Paperclip, Star } from 'lucide-react';
 import type { Message } from '@/domain/mail';
 import { useTheme } from '@/app/theme';
 import { cn } from '@/lib/cn';
 import { displayName, formatAddress, formatFullDate, formatSize } from '../format';
-import { PlainTextBody, SafeHtmlFrame } from './safe-html';
+import { PlainTextBody } from './safe-html/PlainTextBody';
+
+// DOMPurify + iframe frame are only needed once an HTML mail is opened.
+const SafeHtmlFrame = lazy(() =>
+  import('./safe-html/SafeHtmlFrame').then((mod) => ({ default: mod.SafeHtmlFrame })),
+);
 
 type Props = {
   message: Message;
@@ -100,14 +105,24 @@ export function MessageView({ message: m, expanded, onToggle, onOpenLink }: Prop
                   </button>
                 </div>
               )}
-              <SafeHtmlFrame
-                title={`Message body: ${m.subject}`}
-                html={m.html}
-                dark={resolved === 'dark'}
-                allowRemoteImages={showRemote}
-                onOpenLink={onOpenLink}
-                onBlockedRemoteContent={setBlocked}
-              />
+              <Suspense
+                fallback={
+                  <div aria-hidden className="space-y-2 py-2">
+                    <div className="h-3 w-3/4 animate-pulse rounded bg-current opacity-10" />
+                    <div className="h-3 w-full animate-pulse rounded bg-current opacity-10" />
+                    <div className="h-3 w-2/3 animate-pulse rounded bg-current opacity-10" />
+                  </div>
+                }
+              >
+                <SafeHtmlFrame
+                  title={`Message body: ${m.subject}`}
+                  html={m.html}
+                  dark={resolved === 'dark'}
+                  allowRemoteImages={showRemote}
+                  onOpenLink={onOpenLink}
+                  onBlockedRemoteContent={setBlocked}
+                />
+              </Suspense>
             </>
           ) : (
             <PlainTextBody text={m.plainText ?? ''} onOpenLink={onOpenLink} />

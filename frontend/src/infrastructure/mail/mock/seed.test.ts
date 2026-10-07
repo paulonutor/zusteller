@@ -22,6 +22,14 @@ describe('createSeedData', () => {
     expect(seed.accounts).toHaveLength(1);
   });
 
+  it('has at least 10 starred non-trash threads', () => {
+    const trashed = new Set(
+      seed.messages.filter((m) => m.labelIds.includes('TRASH')).map((m) => m.threadId),
+    );
+    const starred = new Set(seed.messages.filter((m) => m.isStarred).map((m) => m.threadId));
+    expect([...starred].filter((id) => !trashed.has(id)).length).toBeGreaterThanOrEqual(10);
+  });
+
   it('references only known labels', () => {
     const ids = new Set(seed.labels.map((l) => l.id));
     for (const m of seed.messages) for (const id of m.labelIds) expect(ids.has(id)).toBe(true);

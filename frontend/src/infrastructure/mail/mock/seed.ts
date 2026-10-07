@@ -383,7 +383,7 @@ export function createSeedData(): SeedData {
       to: [DANIEL, SOFIA, MAX],
     }),
   ]);
-  add(null, 'Wochenende bei Oma', 'inbox', ['label-personal'], {}, KARIN, [
+  add(null, 'Wochenende bei Oma', 'inbox', ['label-personal'], { star: true }, KARIN, [
     i(
       daysAgo(6, 17, 2),
       'Hallo Paul, kommst du am Wochenende mit zu Oma? Mira kommt auch. Ich backe den Apfelkuchen.',
@@ -521,7 +521,7 @@ export function createSeedData(): SeedData {
       ],
     );
   }
-  add(null, 'Kostenvoranschlag Küche', 'inbox', ['label-home'], {}, HANDW, [
+  add(null, 'Kostenvoranschlag Küche', 'inbox', ['label-home'], { star: true }, HANDW, [
     i(
       daysAgo(16, 10, 0),
       'Sehr geehrter Herr Onutor, anbei unser Angebot für die Küchenarbeitsplatte (Eiche massiv, 2,80 m).',
@@ -578,7 +578,7 @@ export function createSeedData(): SeedData {
       }),
     ],
   );
-  add(null, 'Wanderung am Samstag?', 'inbox', ['label-personal'], {}, LENA, [
+  add(null, 'Wanderung am Samstag?', 'inbox', ['label-personal'], { star: true }, LENA, [
     i(
       daysAgo(11, 18, 0),
       'Hey! Hast du Lust, am Samstag im Grunewald wandern zu gehen? Wetter soll gut werden.',
@@ -804,7 +804,7 @@ export function createSeedData(): SeedData {
       ),
     ],
   );
-  add(null, 'Steuerunterlagen 2025', 'archive', ['label-finance'], {}, KOCH, [
+  add(null, 'Steuerunterlagen 2025', 'archive', ['label-finance'], { star: true }, KOCH, [
     i(
       daysAgo(55, 10, 0),
       'Guten Tag Herr Onutor, bitte senden Sie mir bis Monatsende Ihre Belege für die Steuererklärung.',
@@ -828,15 +828,23 @@ export function createSeedData(): SeedData {
       }),
     ]);
   }
-  add(null, 'Sprint retro notes', 'archive', ['label-work', 'label-zusteller'], {}, SOFIA, [
-    i(
-      daysAgo(36, 16, 0),
-      'Retro notes: went well - shipping cadence; to improve - flaky e2e tests.',
-      { cc: [MAX] },
-    ),
-    o(daysAgo(36, 16, 40), 'I will own the flaky test cleanup.', { to: [SOFIA], cc: [MAX] }),
-    i(daysAgo(35, 8, 55), 'Great, added to the board.'),
-  ]);
+  add(
+    null,
+    'Sprint retro notes',
+    'archive',
+    ['label-work', 'label-zusteller'],
+    { star: true },
+    SOFIA,
+    [
+      i(
+        daysAgo(36, 16, 0),
+        'Retro notes: went well - shipping cadence; to improve - flaky e2e tests.',
+        { cc: [MAX] },
+      ),
+      o(daysAgo(36, 16, 40), 'I will own the flaky test cleanup.', { to: [SOFIA], cc: [MAX] }),
+      i(daysAgo(35, 8, 55), 'Great, added to the board.'),
+    ],
+  );
   add(null, 'Welcome to 1Password', 'archive', ['label-personal'], {}, PWM, [
     i(
       daysAgo(58, 12, 0),
@@ -850,13 +858,21 @@ export function createSeedData(): SeedData {
       { att: [['Nachtrag_Police.pdf', PDF, 88902]] },
     ),
   ]);
-  add(null, 'Umzugscheckliste', 'archive', ['label-home', 'label-personal'], {}, KARIN, [
-    i(
-      daysAgo(50, 18, 20),
-      'Ich habe dir eine Checkliste für den Umzug gemacht: Nachsendeantrag, Ummeldung, Strom, Internet, Kartons!',
-    ),
-    o(daysAgo(50, 20, 0), 'Danke Mama, die ist Gold wert!'),
-  ]);
+  add(
+    null,
+    'Umzugscheckliste',
+    'archive',
+    ['label-home', 'label-personal'],
+    { star: true },
+    KARIN,
+    [
+      i(
+        daysAgo(50, 18, 20),
+        'Ich habe dir eine Checkliste für den Umzug gemacht: Nachsendeantrag, Ummeldung, Strom, Internet, Kartons!',
+      ),
+      o(daysAgo(50, 20, 0), 'Danke Mama, die ist Gold wert!'),
+    ],
+  );
   add(null, 'Thanks for your order', 'archive', ['label-receipts'], {}, AMAZON, [
     i(daysAgo(44, 19, 30), 'Your package was delivered.', {
       html: receiptHtml('Amazon.de', [['Mechanical keyboard', '119,00 EUR']], '119,00 EUR'),
