@@ -190,8 +190,8 @@ export function MailApp() {
   );
 
   return (
-    <div className="flex h-full min-w-0 overflow-hidden">
-      <div style={{ width: layout.sidebar }} className="h-full shrink-0">
+    <div data-shell className="flex h-full min-w-0 overflow-hidden">
+      <div data-pane="sidebar" style={{ width: layout.sidebar }} className="h-full shrink-0">
         <Sidebar
           account={account}
           labels={labels}
@@ -207,7 +207,7 @@ export function MailApp() {
         max={LIMITS.sidebar[1]}
         onChange={(sidebar) => setLayout((l) => ({ ...l, sidebar }))}
       />
-      <div style={{ width: layout.list }} className="h-full shrink-0">
+      <div data-pane="list" style={{ width: layout.list }} className="h-full shrink-0">
         <ThreadList
           title={title}
           unreadCount={unread}
@@ -255,7 +255,7 @@ export function MailApp() {
         max={LIMITS.list[1]}
         onChange={(list) => setLayout((l) => ({ ...l, list }))}
       />
-      <div className="h-full min-w-[320px] flex-1">
+      <div data-pane="reader" className="h-full min-w-[320px] flex-1">
         <Reader
           selected={selectedSummaries}
           thread={thread.data}

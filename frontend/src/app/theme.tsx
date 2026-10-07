@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { readThemeOverride } from './skin';
 
 export type ThemePreference = 'system' | 'light' | 'dark';
 type ThemeCtx = {
@@ -19,6 +20,8 @@ const KEY = 'zusteller.theme';
 const Ctx = createContext<ThemeCtx | null>(null);
 
 function readStored(): ThemePreference {
+  const forced = readThemeOverride();
+  if (forced) return forced;
   try {
     const v = localStorage.getItem(KEY);
     if (v === 'light' || v === 'dark' || v === 'system') return v;
