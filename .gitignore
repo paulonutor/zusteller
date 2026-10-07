@@ -28,3 +28,6 @@ screenshots/
 .vscode/*
 !.vscode/extensions.json
 *.swp
+
+# Agent worktrees
+.claude/worktrees/
