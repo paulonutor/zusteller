@@ -58,6 +58,15 @@ pixels blocked by default with an explicit "Load remote images" per message; lin
 only via `PlatformService.openExternal`; rendered in `<iframe sandbox="allow-same-origin" srcdoc>` with a CSP and no scripts;
 the parent sizes the frame and intercepts link clicks. Attachments are metadata-only in V1 (no download).
 
+## Hosts & skins
+
+- **Adapters**: `frontend/src/platform/` holds `PlatformService` (notification, badge, openExternal), the browser implementation,
+  and the host adapters `wails.ts` / `tauri.ts`. They are written and unit-tested but not yet wired into `platform/index.ts`.
+- **Hosts**: `hosts/wails` (Go, Wails v3 beta.28) and `hosts/tauri` (Rust, Tauri 2) are thin shells around the shared `frontend/`.
+  No UI code is copied. Native menu items are routed to the same action layer as toolbar and shortcuts.
+- **Skins**: dark mode defaults to skin B2 ("Gmail-in-glass"); `?skin=a|b|c|default` switches (`src/styles/skins.css`).
+- Wails vs Tauri findings and the Mac measurement checklist: `docs/host-comparison.md`.
+
 ## Deliberately not built (later phases)
 
 Wails/Tauri hosts and native vibrancy (Phase 2), Gmail/OAuth/cache (3), compose/reply/send (4), on-device AI (5).
