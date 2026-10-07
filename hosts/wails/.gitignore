@@ -1,0 +1,4 @@
+# Vite build output for embedding (produced by `task build:frontend`)
+appdist/*
+!appdist/.gitkeep
+bin/

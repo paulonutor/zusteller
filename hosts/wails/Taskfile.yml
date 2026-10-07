@@ -1,0 +1,45 @@
+version: '3'
+
+# Plain Taskfile (https://taskfile.dev). No wails3 CLI required: the host is an
+# ordinary Go program that loads the shared ../../frontend Vite project.
+
+vars:
+  # Wails v3 on Linux defaults to GTK4; use `-tags gtk3` with libwebkit2gtk-4.1.
+  DEV_TAGS: '{{if eq OS "linux"}}-tags gtk3{{end}}'
+  PROD_TAGS: '-tags production{{if eq OS "linux"}},gtk3{{end}}'
+
+tasks:
+  deps:
+    desc: Install frontend deps
+    dir: ../../frontend
+    cmds: [npm install]
+
+  dev:vite:
+    desc: Terminal 1 - Vite dev server for ../../frontend
+    dir: ../../frontend
+    cmds: [npm run dev -- --port 5173 --strictPort]
+
+  dev:
+    desc: Terminal 2 - Wails window proxying to the Vite dev server (HMR)
+    cmds:
+      - FRONTEND_DEVSERVER_URL=http://localhost:5173 go run {{.DEV_TAGS}} .
+
+  build:frontend:
+    desc: Build ../../frontend into ./appdist (embedded; build artifact only)
+    dir: ../../frontend
+    cmds:
+      - npx vite build --outDir ../hosts/wails/appdist --emptyOutDir
+      - touch ../hosts/wails/appdist/.gitkeep
+
+  build:
+    desc: Production binary (bin/zusteller)
+    deps: [build:frontend]
+    cmds:
+      - go build {{.PROD_TAGS}} -ldflags="-s -w" -o bin/zusteller .
+
+  test:
+    desc: Pure-Go tests (run on any OS, no GTK needed)
+    cmds: [go test ./internal/...]
+
+  vet:
+    cmds: ['go vet {{.DEV_TAGS}} ./...']

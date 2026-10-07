@@ -1,0 +1,81 @@
+// Package platform holds the host-side half of the frontend's PlatformService
+// (frontend/src/platform/PlatformService.ts). It has no Wails imports so it can
+// be unit-tested on any OS; main.go adapts the Wails services to the small
+// interfaces below.
+package platform
+
+import (
+	"errors"
+	"fmt"
+	"net/url"
+	"strings"
+)
+
+// Dock is the badge capability (Wails dock service).
+type Dock interface {
+	SetBadge(label string) error
+	RemoveBadge() error
+}
+
+// Notifier posts a user notification (Wails notifications service).
+type Notifier interface {
+	Notify(id, title, body string) error
+}
+
+// Opener opens a URL in the user's default handler (Wails Browser manager).
+type Opener interface {
+	OpenURL(url string) error
+}
+
+// Service is bound to the frontend. Only methods PlatformService needs.
+type Service struct {
+	Dock     Dock
+	Notifier Notifier
+	Opener   Opener
+
+	nextID int
+}
+
+// ValidateExternalURL allows only http, https and mailto.
+func ValidateExternalURL(raw string) (string, error) {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return "", fmt.Errorf("invalid URL: %w", err)
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http", "https":
+		if u.Host == "" {
+			return "", errors.New("URL has no host")
+		}
+	case "mailto":
+		if u.Opaque == "" && u.Path == "" {
+			return "", errors.New("mailto URL has no recipient")
+		}
+	default:
+		return "", fmt.Errorf("refusing to open %q URL", u.Scheme)
+	}
+	return u.String(), nil
+}
+
+// OpenExternal opens an http(s)/mailto URL in the default handler.
+func (s *Service) OpenExternal(rawURL string) error {
+	safe, err := ValidateExternalURL(rawURL)
+	if err != nil {
+		return err
+	}
+	return s.Opener.OpenURL(safe)
+}
+
+// SetBadge shows count on the Dock icon; count <= 0 removes the badge.
+func (s *Service) SetBadge(count int) error {
+	if count <= 0 {
+		return s.Dock.RemoveBadge()
+	}
+	return s.Dock.SetBadge(fmt.Sprint(count))
+}
+
+// ShowNotification posts a notification (needs a signed, bundled app on macOS).
+func (s *Service) ShowNotification(title, body string) error {
+	s.nextID++
+	return s.Notifier.Notify(fmt.Sprintf("zusteller-%d", s.nextID), title, body)
+}
