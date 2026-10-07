@@ -1,0 +1,17 @@
+{
+  "name": "zusteller-tauri-host",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Thin Tauri v2 macOS host for the shared zusteller frontend. Holds only the Tauri CLI; the frontend has its own package.json.",
+  "scripts": {
+    "dev": "tauri dev",
+    "dev:vibrancy": "tauri dev --config src-tauri/tauri.vibrancy.conf.json",
+    "build": "tauri build",
+    "build:vibrancy": "tauri build --config src-tauri/tauri.vibrancy.conf.json",
+    "check": "cargo check --manifest-path src-tauri/Cargo.toml",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.1"
+  }
+}
