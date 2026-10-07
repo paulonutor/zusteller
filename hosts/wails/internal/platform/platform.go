@@ -76,6 +76,9 @@ func (s *Service) SetBadge(count int) error {
 
 // ShowNotification posts a notification (needs a signed, bundled app on macOS).
 func (s *Service) ShowNotification(title, body string) error {
+	if s.Notifier == nil {
+		return errors.New("notifications unavailable: not running from a bundled app")
+	}
 	s.nextID++
 	return s.Notifier.Notify(fmt.Sprintf("zusteller-%d", s.nextID), title, body)
 }

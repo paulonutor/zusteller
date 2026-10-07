@@ -6,6 +6,8 @@ import (
 	"embed"
 	"io/fs"
 	"log"
+	"os"
+	"strings"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/services/dock"
@@ -27,7 +29,9 @@ type dockAdapter struct{ d *dock.DockService }
 func (a dockAdapter) SetBadge(l string) error { return a.d.SetBadge(l) }
 func (a dockAdapter) RemoveBadge() error      { return a.d.RemoveBadge() }
 
-type notifAdapter struct{ n *notifications.NotificationService }
+type notifAdapter struct {
+	n *notifications.NotificationService
+}
 
 func (a notifAdapter) Notify(id, title, body string) error {
 	if ok, err := a.n.CheckNotificationAuthorization(); err == nil && !ok {
@@ -42,6 +46,13 @@ type browserAdapter struct{ app *application.App }
 
 func (a browserAdapter) OpenURL(u string) error { return a.app.Browser.OpenURL(u) }
 
+// inAppBundle reports whether we run from a macOS .app bundle. The notifications
+// service refuses to start without a bundle identifier, so under `go run` it is skipped.
+func inAppBundle() bool {
+	exe, err := os.Executable()
+	return err == nil && strings.Contains(exe, ".app/Contents/MacOS/")
+}
+
 func main() {
 	assets, err := fs.Sub(embedded, "appdist")
 	if err != nil {
@@ -49,19 +60,25 @@ func main() {
 	}
 
 	dockSvc := dock.New()
-	notifSvc := notifications.New()
-	hostPlatform := &platform.Service{Dock: dockAdapter{dockSvc}, Notifier: notifAdapter{notifSvc}}
+	hostPlatform := &platform.Service{Dock: dockAdapter{dockSvc}}
+	services := []application.Service{
+		application.NewService(dockSvc),
+		application.NewService(hostPlatform),
+	}
+	if inAppBundle() {
+		notifSvc := notifications.New()
+		hostPlatform.Notifier = notifAdapter{notifSvc}
+		services = append(services, application.NewService(notifSvc))
+	} else {
+		log.Println("notifications disabled: not running from an .app bundle (no bundle identifier)")
+	}
 
 	app := application.New(application.Options{
 		Name:        "zusteller",
 		Description: "Lightweight mail client",
 		// Only the PlatformService is bound to JS. The dock/notification
 		// services are used from Go and intentionally NOT exposed to the page.
-		Services: []application.Service{
-			application.NewService(dockSvc),
-			application.NewService(notifSvc),
-			application.NewService(hostPlatform),
-		},
+		Services: services,
 		Assets: application.AssetOptions{
 			// Also serves /wails/runtime.js, which the frontend adapter loads.
 			Handler: application.BundledAssetFileServer(assets),

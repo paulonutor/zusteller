@@ -49,3 +49,10 @@ func TestBadgeAndNotification(t *testing.T) {
 		t.Fatalf("notified %v", f.notified)
 	}
 }
+
+func TestNotificationWithoutNotifier(t *testing.T) {
+	s := &Service{}
+	if err := s.ShowNotification("Hi", "there"); err == nil {
+		t.Fatal("expected error without a notifier")
+	}
+}
