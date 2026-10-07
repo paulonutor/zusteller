@@ -671,3 +671,21 @@ html.dark[data-skin='c'] [data-pane='reader'] h2 {
 html.dark[data-skin='c'] [data-pane='reader'] article > button {
   padding-block: 7px;
 }
+
+/* ---- Native host chrome (Tauri/Wails overlay titlebar) ---------------------------------- */
+/* Traffic lights float over the top-left of the sidebar: push its header content below them. */
+:root[data-host] [data-pane='sidebar'] > nav > .drag-region {
+  height: 84px !important;
+  padding-top: 42px !important;
+  align-items: flex-end;
+}
+/* Wails marks draggable areas with this custom property (inherited, so opt buttons out). */
+:root[data-host='wails'] .drag-region {
+  --wails-draggable: drag;
+}
+:root[data-host='wails'] .no-drag,
+:root[data-host='wails'] button,
+:root[data-host='wails'] input,
+:root[data-host='wails'] [role='option'] {
+  --wails-draggable: no-drag;
+}

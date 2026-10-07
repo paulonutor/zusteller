@@ -1,3 +1,4 @@
+import { dragRegionProps } from '@/platform/hostChrome';
 import {
   Archive,
   Inbox,
@@ -73,7 +74,7 @@ export function Sidebar({ account, labels, counts, view, onSelectView }: Props) 
   return (
     <nav aria-label="Mailboxes" className="flex h-full flex-col bg-sidebar">
       {/* Reserves room for the native traffic lights when a desktop host overlays the titlebar. */}
-      <div className="drag-region flex h-[52px] shrink-0 items-end px-3 pb-2">
+      <div {...dragRegionProps} className="drag-region flex h-[52px] shrink-0 items-end px-3 pb-2">
         <div className="min-w-0 pl-0.5">
           <div className="truncate text-[13px] font-semibold">{account?.displayName ?? '…'}</div>
           <div className="truncate text-[11px] text-muted">{account?.email}</div>

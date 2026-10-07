@@ -1,3 +1,4 @@
+import { dragRegionProps } from '@/platform/hostChrome';
 import { useEffect, useRef, useState } from 'react';
 import { AlertCircle, Inbox, MailOpen, RefreshCw, Search, Star, X } from 'lucide-react';
 import type { ID, Label, ThreadSummary } from '@/domain/mail';
@@ -122,7 +123,10 @@ export function ThreadList(p: Props) {
 
   return (
     <section aria-label={p.title} className="flex h-full min-w-0 flex-col bg-background">
-      <header className="drag-region flex h-[52px] shrink-0 items-center gap-3 px-3">
+      <header
+        {...dragRegionProps}
+        className="drag-region flex h-[52px] shrink-0 items-center gap-3 px-3"
+      >
         <div className="min-w-0 shrink-0">
           <h1 className="text-[15px] font-semibold leading-tight">{p.title}</h1>
           <p className="text-[11px] leading-tight text-muted">

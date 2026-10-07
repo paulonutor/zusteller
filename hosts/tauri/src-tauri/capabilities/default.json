@@ -2,11 +2,25 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Minimal permissions for the main window. App commands (notify, set_badge) are defined in lib.rs.",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
+    "core:window:allow-start-dragging",
+    "core:window:allow-toggle-maximize",
     {
       "identifier": "opener:allow-open-url",
-      "allow": [{ "url": "https://*" }, { "url": "http://*" }, { "url": "mailto:*" }]
+      "allow": [
+        {
+          "url": "https://*"
+        },
+        {
+          "url": "http://*"
+        },
+        {
+          "url": "mailto:*"
+        }
+      ]
     }
   ]
 }

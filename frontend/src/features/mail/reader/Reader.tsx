@@ -1,3 +1,4 @@
+import { dragRegionProps } from '@/platform/hostChrome';
 import { useState } from 'react';
 import { AlertCircle, MailOpen } from 'lucide-react';
 import type { ID, Label, Thread, ThreadSummary } from '@/domain/mail';
@@ -35,7 +36,10 @@ function Toolbar({
     perform,
   );
   return (
-    <div className="drag-region flex h-[52px] shrink-0 items-center gap-2 border-b border-border px-4">
+    <div
+      {...dragRegionProps}
+      className="drag-region flex h-[52px] shrink-0 items-center gap-2 border-b border-border px-4"
+    >
       <ActionBar
         actions={actions}
         labelItems={labelItems}

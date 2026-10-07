@@ -1,3 +1,4 @@
+import { dragRegionProps } from '@/platform/hostChrome';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MAILBOXES, type ID, type ThreadSummary } from '@/domain/mail';
 import { useServices } from '@/app/services';
@@ -227,7 +228,7 @@ export function MailApp() {
   );
 
   return (
-    <div data-shell className="flex h-full min-w-0 overflow-hidden">
+    <div data-shell {...dragRegionProps} className="flex h-full min-w-0 overflow-hidden">
       <div data-pane="sidebar" style={{ width: layout.sidebar }} className="h-full shrink-0">
         <Sidebar
           account={account}
