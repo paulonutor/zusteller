@@ -47,8 +47,8 @@ Before every push: typecheck, lint, tests and build must all pass. Look at scree
 
 ## Visual skin
 
-Dark mode defaults to skin **B2** ("Gmail-in-glass": Tahoe-style floating panes, title + search together, All/Unread/Starred tabs).
-`?skin=a|b|c|default` switches skins; `?theme=dark` forces dark. Styles live in `frontend/src/styles/skins.css`.
+Skin **B2** is the default in light and dark ("Gmail-in-glass": Tahoe-style floating panes, title + search together, All/Unread/Starred tabs).
+`?skin=a|b|c|default` switches skins (A and C are dark-only); `?theme=dark` forces dark. Styles live in `frontend/src/styles/skins.css`.
 
 ## Layout
 
