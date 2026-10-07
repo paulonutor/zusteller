@@ -45,6 +45,11 @@ Before every push: typecheck, lint, tests and build must all pass. Look at scree
    `MockMailService.test.ts`. Change both together.
 8. State: TanStack Query for async data; React state for selection/focus/pane widths. No Redux.
 
+## Visual skin
+
+Dark mode defaults to skin **B2** ("Gmail-in-glass": Tahoe-style floating panes, title + search together, All/Unread/Starred tabs).
+`?skin=a|b|c|default` switches skins; `?theme=dark` forces dark. Styles live in `frontend/src/styles/skins.css`.
+
 ## Layout
 
 ```

@@ -248,14 +248,21 @@ html.dark[data-skin='b'] [data-pane='list'] > section > header {
   height: 64px;
   padding: 10px 12px 6px;
 }
+html.dark[data-skin='b'] [data-pane='list'] > section > header {
+  gap: 12px;
+}
 html.dark[data-skin='b'] [data-pane='list'] > section > header > div {
-  display: none;
+  padding-left: 4px;
+}
+html.dark[data-skin='b'] [data-pane='list'] > section > header h1 {
+  font-size: 17px;
+  font-weight: 700;
 }
 html.dark[data-skin='b'] [data-pane='list'] input[type='search'] {
-  height: 44px;
-  padding-left: 46px;
-  padding-right: 40px;
-  font-size: 14.5px;
+  height: 38px;
+  padding-left: 40px;
+  padding-right: 36px;
+  font-size: 14px;
   background: rgb(255 255 255 / 0.09);
   box-shadow: none;
   transition:
