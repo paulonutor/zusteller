@@ -11,14 +11,8 @@ import type { PlatformService } from './PlatformService';
  *   - `plugin:opener|open_url { url }`   -> opener plugin, ACL-scoped to http/https/mailto
  *   - event  `zusteller://menu`          -> native menu clicks, payload = item id
  *
- * NOT WIRED: native menu -> mail action mapping (item id -> features/mail/actions.ts):
- *   mail.archive    -> 'archive'
- *   mail.trash      -> 'trash'
- *   mail.markRead   -> 'markRead'
- *   mail.markUnread -> 'markUnread'
- *   mail.star       -> 'star' | 'unstar' (menu item is a toggle; pick via resolveActions)
- *   mail.find       -> no MailActionId yet; needs a search-focus action
- * 'restore' has no menu item. Route through `useMailActions().run`, not new logic.
+ * Wired: platform/index.ts maps item ids to host-neutral MenuActions (menuActions.ts),
+ * which MailApp routes through the same handler as keyboard shortcuts.
  */
 
 type Unlisten = () => void;
@@ -48,7 +42,7 @@ function requireTauri(): TauriGlobal {
   return t;
 }
 
-export function createTauriPlatformService(): PlatformService {
+export function createTauriPlatformService(): Omit<PlatformService, 'subscribeMenuActions'> {
   return {
     async showNotification({ title, body }) {
       await requireTauri().core.invoke('notify', { title, body });

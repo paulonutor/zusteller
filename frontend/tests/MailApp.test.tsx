@@ -1,13 +1,14 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '@/app/App';
 import type { Services } from '@/app/services';
 import { MockMailService, createSeedData } from '@/infrastructure/mail/mock';
-import type { PlatformService } from '@/platform';
+import type { MenuAction, PlatformService } from '@/platform';
 
 let mail: MockMailService;
 let platform: PlatformService;
+let menu: ((a: MenuAction) => void) | undefined;
 
 function setup() {
   mail = new MockMailService(createSeedData(), { latency: 0 });
@@ -15,6 +16,12 @@ function setup() {
     showNotification: vi.fn().mockResolvedValue(undefined),
     setBadge: vi.fn().mockResolvedValue(undefined),
     openExternal: vi.fn().mockResolvedValue(undefined),
+    subscribeMenuActions: (h) => {
+      menu = h;
+      return () => {
+        menu = undefined;
+      };
+    },
   };
   const services: Services = { mail, platform };
   const user = userEvent.setup();
@@ -221,6 +228,19 @@ describe('selection and keyboard', () => {
     await waitFor(() => expect(document.getElementById(target.id)).toBeNull());
   });
 
+  it('native menu actions run through the same handler as shortcuts', async () => {
+    const user = setup();
+    await waitForRows();
+    screen.getByRole('listbox').focus();
+    await user.keyboard('{ArrowDown}{Enter}');
+    const target = rows()[0]!;
+    await waitFor(() => expect(target).toHaveAttribute('aria-selected', 'true'));
+    act(() => menu?.('archive'));
+    await waitFor(() => expect(document.getElementById(target.id)).toBeNull());
+    act(() => menu?.('find'));
+    expect(screen.getByRole('searchbox')).toHaveFocus();
+  });
+
   it('Cmd+A selects all and bulk actions apply to every conversation', async () => {
     const user = setup();
     await waitForRows();
@@ -265,6 +285,7 @@ describe('errors', () => {
       showNotification: vi.fn(),
       setBadge: vi.fn().mockResolvedValue(undefined),
       openExternal: vi.fn(),
+      subscribeMenuActions: () => () => {},
     };
     const user = userEvent.setup();
     render(<App services={{ mail, platform }} />);

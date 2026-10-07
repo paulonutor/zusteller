@@ -169,7 +169,11 @@ export function MailApp() {
     return f ? [f] : [];
   };
   const onShortcut = useCallback(
-    (k: MailActionId | 'toggleStar') => {
+    (k: MailActionId | 'toggleStar' | 'find') => {
+      if (k === 'find') {
+        searchRef.current?.focus();
+        return;
+      }
       const targets = shortcutTargets();
       if (!targets.length) return;
       const available = resolveActions(targets, view);
@@ -184,6 +188,16 @@ export function MailApp() {
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [selectedSummaries, selection.focusedId, items, view, perform],
+  );
+  // Native menu (desktop hosts) goes through the same handler as the keyboard shortcuts.
+  const onShortcutRef = useRef(onShortcut);
+  useEffect(() => {
+    onShortcutRef.current = onShortcut;
+  });
+  useEffect(
+    () =>
+      platform.subscribeMenuActions((a) => onShortcutRef.current(a === 'star' ? 'toggleStar' : a)),
+    [platform],
   );
   useGlobalShortcuts({ onAction: onShortcut, onSearch: () => searchRef.current?.focus() });
 

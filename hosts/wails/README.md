@@ -27,9 +27,9 @@ because beta.28 defaults to GTK4. `.app` bundling/signing is not set up (needs t
 - Frontend: `frontend/src/platform/wails.ts` (`createWailsPlatformService`, `isWailsHost`, `onWailsMailAction`), no npm dependency.
   It lazily `import('/wails/runtime.js')` (served by the host) and sets `window.wails`; calls go through `Call.ByName`
   with the fully-qualified name `zusteller/hosts/wails/internal/platform.Service.<Method>`.
-  `src/platform/index.ts` is NOT wired (by instruction); wiring = `isWailsHost() ? createWailsPlatformService() : browser`.
+  `src/platform/index.ts` is wired: `createPlatformService()` picks Wails (`isWailsHost`) -> Tauri -> browser.
 
-## Native menu -> `src/features/mail` mapping (not wired)
+## Native menu -> `src/features/mail` mapping (wired)
 
 Event `zusteller:mail-action`, string payload:
 
@@ -41,8 +41,9 @@ Event `zusteller:mail-action`, string payload:
 | Star | `star` | toggle: run `star` or `unstar`, whichever `resolveActions()` reports enabled (as the `S` shortcut does) |
 | Find (Cmd+F) | `find` | no MailActionId; focus the search field |
 
-Route it through the same layer as toolbar/shortcuts: `onWailsMailAction(id => run(id))` where `run` is the `useMailActions`
-dispatcher, ignoring ids that are not enabled for the current selection. Mail items intentionally have no plain-key accelerators
+Wiring: `platform/index.ts` adapts `onWailsMailAction` into `PlatformService.subscribeMenuActions` (table in
+`platform/menuActions.ts`); `MailApp` feeds it to the same `onShortcut` handler as the keyboard (star = toggle, find = focus
+search), so actions that are not enabled for the current selection are ignored. Mail items intentionally have no plain-key accelerators
 (a native key equivalent would swallow keystrokes in text inputs); `shortcuts.ts` keeps handling them.
 
 ## Verified vs. not

@@ -70,7 +70,7 @@ async function getRuntime(): Promise<WailsRuntime> {
   return loading;
 }
 
-export function createWailsPlatformService(): PlatformService {
+export function createWailsPlatformService(): Omit<PlatformService, 'subscribeMenuActions'> {
   const call = async (method: string, ...args: unknown[]) => {
     const rt = await getRuntime();
     await rt.Call.ByName(`${SERVICE}.${method}`, ...args);
@@ -91,7 +91,7 @@ export function createWailsPlatformService(): PlatformService {
 
 /**
  * Subscribe to native-menu mail actions. Returns an unsubscribe function.
- * Not wired into the UI yet: see the mapping note in hosts/wails/README.md.
+ * Consumed via platform/index.ts (subscribeMenuActions); see hosts/wails/README.md.
  */
 export async function onWailsMailAction(
   handler: (action: NativeMailAction) => void,

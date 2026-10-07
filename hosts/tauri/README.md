@@ -22,7 +22,7 @@ the whole window definition — keep it in sync with the base config.
   (Archive, Move to Trash, Mark Read/Unread, Add/Remove Star, Find=Cmd+F) emit event `zusteller://menu` with the item id.
   No accelerators on plain-key items so they cannot fire while typing.
 - Capability `default`: only `opener:allow-open-url` with the scope above. No fs/shell/http/core-window permissions.
-- Frontend: `frontend/src/platform/tauri.ts` (+ test). Not wired into `platform/index.ts`; menu-id -> `MailActionId` mapping is in its header comment.
+- Frontend: `frontend/src/platform/tauri.ts` (+ test). Wired via `platform/index.ts` (Wails -> Tauri -> browser); menu ids (`mail.*`) map to actions in `platform/menuActions.ts` and run through `MailApp`'s shortcut handler.
 
 ## Verified (Linux, this repo)
 - `cargo check` in `src-tauri` passes (tauri 2.12.1, tauri-build 2.7.1, opener 2.7.0, notification 2.5.1; CLI 2.12.1 on npm),

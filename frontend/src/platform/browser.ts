@@ -5,6 +5,7 @@ const BASE_TITLE = 'zusteller';
 /** Browser/dev-mode implementation. Desktop hosts supply their own. */
 export function createBrowserPlatformService(): PlatformService {
   return {
+    subscribeMenuActions: () => () => {},
     async showNotification({ title, body }) {
       if (typeof Notification === 'undefined') return;
       if (Notification.permission === 'default') await Notification.requestPermission();
