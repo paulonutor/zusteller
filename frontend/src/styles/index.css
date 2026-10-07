@@ -1,0 +1,129 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Design tokens: macOS-flavoured neutrals with a system-blue accent. */
+:root {
+  --background: #ffffff;
+  --foreground: #1d1d1f;
+  --muted: #6e6e73;
+  --faint: #98989d;
+  --border: #e3e3e6;
+  --sidebar: #f3f3f5;
+  --surface-raised: #ffffff;
+  --hover: rgb(0 0 0 / 0.045);
+  --active: rgb(0 0 0 / 0.08);
+  --accent: #0a6cf0;
+  --accent-fg: #ffffff;
+  --selection: #dbe8fd;
+  --selection-inactive: #e6e6ea;
+  --unread: #0a6cf0;
+  --star: #f5a800;
+  --danger: #d70015;
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', system-ui, 'Segoe UI', sans-serif;
+}
+.dark {
+  --background: #1e1e20;
+  --foreground: #f2f2f4;
+  --muted: #a1a1a8;
+  --faint: #6f6f76;
+  --border: #38383c;
+  --sidebar: #28282b;
+  --surface-raised: #2c2c30;
+  --hover: rgb(255 255 255 / 0.06);
+  --active: rgb(255 255 255 / 0.1);
+  --accent: #3b92ff;
+  --selection: #1d3a64;
+  --selection-inactive: #38383d;
+  --unread: #3b92ff;
+  --star: #ffc933;
+  --danger: #ff6961;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-border: var(--border);
+  --color-sidebar: var(--sidebar);
+  --color-surface-raised: var(--surface-raised);
+  --color-hover: var(--hover);
+  --color-active: var(--active);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-selection: var(--selection);
+  --color-selection-inactive: var(--selection-inactive);
+  --color-unread: var(--unread);
+  --color-star: var(--star);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-sans);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* Message content must remain selectable. */
+.selectable {
+  user-select: text;
+  -webkit-user-select: text;
+}
+.drag-region {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgb(128 128 128 / 0.35);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+@keyframes shimmer {
+  0% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.55;
+  }
+}
+.skeleton {
+  background: var(--active);
+  border-radius: 4px;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}

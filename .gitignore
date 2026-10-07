@@ -1,0 +1,30 @@
+# Dependencies & build output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Desktop hosts (Phase 2)
+hosts/tauri/src-tauri/target/
+hosts/tauri/src-tauri/gen/
+hosts/wails/bin/
+hosts/wails/build/bin/
+hosts/wails/frontend/
+*.app
+*.dmg
+
+# Local artifacts
+screenshots/
+*.log
+.env
+.env.*
+!.env.example
+.vite/
+.cache/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp

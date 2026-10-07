@@ -1,0 +1,131 @@
+import { memo } from 'react';
+import { Paperclip, Star } from 'lucide-react';
+import type { ID, Label, ThreadSummary } from '@/domain/mail';
+import { SYSTEM_LABEL } from '@/domain/mail';
+import { Checkbox } from '@/components/ui/Checkbox';
+import { ContextMenu, type MenuItemSpec } from '@/components/ui/Menu';
+import { cn } from '@/lib/cn';
+import { displayName, formatListDate, labelChipStyle } from '../format';
+
+type Props = {
+  thread: ThreadSummary;
+  accountEmail: string | undefined;
+  labelsById: Map<ID, Label>;
+  selected: boolean;
+  focused: boolean;
+  listHasFocus: boolean;
+  onClick: (e: React.MouseEvent) => void;
+  onToggleSelect: () => void;
+  onToggleStar: () => void;
+  buildContextItems: () => MenuItemSpec[];
+  onContextOpen: () => void;
+};
+
+/** Sender line: other participants first; "me" only if I'm the sole participant. */
+function senders(t: ThreadSummary, me: string | undefined): string {
+  const others = t.participants.filter((p) => p.email.toLowerCase() !== me?.toLowerCase());
+  const list = others.length ? others : t.participants;
+  // A lone correspondent gets their full name; groups get first names to fit.
+  const names =
+    list.length === 1
+      ? [displayName(list[0]!)]
+      : list.slice(0, 3).map((p) => displayName(p).split(' ')[0]);
+  return names.join(', ') + (list.length > 3 ? ` +${list.length - 3}` : '');
+}
+
+export const ThreadRow = memo(function ThreadRow(p: Props) {
+  const t = p.thread;
+  const chips = t.labelIds
+    .map((id) => p.labelsById.get(id))
+    .filter((l): l is Label => !!l && l.type === 'user');
+  const inTrash = t.labelIds.includes(SYSTEM_LABEL.trash);
+
+  return (
+    <ContextMenu items={p.buildContextItems} onOpenChange={(o) => o && p.onContextOpen()}>
+      <div
+        role="option"
+        id={`row-${t.id}`}
+        aria-selected={p.selected}
+        data-unread={!t.isRead}
+        onClick={p.onClick}
+        className={cn(
+          'group relative flex h-[68px] cursor-default gap-2 border-b border-border/70 px-2.5 py-2',
+          p.selected
+            ? p.listHasFocus
+              ? 'bg-selection'
+              : 'bg-selection-inactive'
+            : 'hover:bg-hover',
+          p.focused && p.listHasFocus && 'outline-2 -outline-offset-2 outline-accent/70',
+          inTrash && 'opacity-70',
+        )}
+      >
+        <div className="flex w-[34px] shrink-0 flex-col items-center gap-1.5 pt-0.5">
+          <div className="flex h-[15px] items-center">
+            {!t.isRead ? (
+              <span
+                className="size-2 rounded-full bg-unread group-hover:hidden"
+                aria-label="Unread"
+              />
+            ) : null}
+            <Checkbox
+              label={`Select conversation: ${t.subject}`}
+              checked={p.selected}
+              onChange={p.onToggleSelect}
+              className={cn(!t.isRead && !p.selected && 'hidden group-hover:flex')}
+            />
+          </div>
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label={t.isStarred ? 'Remove star' : 'Add star'}
+            aria-pressed={t.isStarred}
+            onClick={(e) => {
+              e.stopPropagation();
+              p.onToggleStar();
+            }}
+            className="no-drag rounded p-0.5 text-faint hover:text-muted"
+          >
+            <Star size={15} className={cn(t.isStarred && 'fill-star text-star')} />
+          </button>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline gap-1.5">
+            <span
+              className={cn('truncate text-[13.5px]', !t.isRead ? 'font-semibold' : 'font-medium')}
+            >
+              {senders(t, p.accountEmail)}
+            </span>
+            {t.messageCount > 1 && (
+              <span className="shrink-0 text-[11px] text-muted">{t.messageCount}</span>
+            )}
+            <span className="ml-auto flex shrink-0 items-center gap-1 text-[12px] text-muted">
+              {t.hasAttachments && <Paperclip size={12} aria-label="Has attachments" />}
+              {formatListDate(t.lastMessageAt)}
+            </span>
+          </div>
+          <div
+            className={cn('truncate text-[13px]', !t.isRead ? 'font-medium' : 'text-foreground/90')}
+          >
+            {t.subject}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="min-w-0 flex-1 truncate text-[12.5px] text-muted">{t.snippet}</span>
+            {chips.slice(0, 2).map((l) => (
+              <span
+                key={l.id}
+                className="max-w-24 shrink-0 truncate rounded px-1.5 text-[11px] leading-[16px]"
+                style={labelChipStyle(l.color)}
+              >
+                {l.name}
+              </span>
+            ))}
+            {chips.length > 2 && (
+              <span className="shrink-0 text-[11px] text-muted">+{chips.length - 2}</span>
+            )}
+          </div>
+        </div>
+      </div>
+    </ContextMenu>
+  );
+});
