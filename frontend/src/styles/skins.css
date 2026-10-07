@@ -7,6 +7,11 @@
  *   c  "Quiet graphite"  flat, hairlines only, muted accent, small-caps labels
  */
 
+/* Skin-only markup (tabs etc.) stays hidden unless a skin opts in. */
+[data-skin-only] {
+  display: none;
+}
+
 /* ---------- shared (all skins) ---------- */
 html.dark[data-skin] {
   --font-sans:
@@ -173,7 +178,6 @@ html.dark[data-skin='b'] {
   --selection-inactive: rgb(255 255 255 / 0.12);
   --pane-radius: 12px;
   --row-radius: 9px;
-  --row-h: 72px;
   --toolbar-line: transparent;
   --row-line: transparent;
   --sidebar-blur: blur(40px) saturate(1.8);
@@ -230,28 +234,259 @@ html.dark[data-skin='b'] [data-pane='reader'] > section > .drag-region {
   background: transparent;
   height: 56px;
 }
+
+/* ---- B2 "Gmail-in-Glass": search bar on top, category tabs, soft-tinted rows ---- */
+html.dark[data-skin='b'] {
+  --selection: color-mix(in srgb, var(--accent) 20%, transparent);
+  --selection-inactive: rgb(255 255 255 / 0.08);
+  --on-selection: var(--foreground);
+  --on-selection-dim: var(--muted);
+  --row-h: 60px;
+  --gm-star: #f6bf26;
+}
+html.dark[data-skin='b'] [data-pane='list'] > section > header {
+  height: 64px;
+  padding: 10px 12px 6px;
+}
+html.dark[data-skin='b'] [data-pane='list'] > section > header > div {
+  display: none;
+}
 html.dark[data-skin='b'] [data-pane='list'] input[type='search'] {
-  background: rgb(255 255 255 / 0.08);
+  height: 44px;
+  padding-left: 46px;
+  padding-right: 40px;
+  font-size: 14.5px;
+  background: rgb(255 255 255 / 0.09);
+  box-shadow: none;
+  transition:
+    background 0.15s,
+    box-shadow 0.15s;
+}
+html.dark[data-skin='b'] [data-pane='list'] input[type='search']:hover {
+  background: rgb(255 255 255 / 0.12);
+}
+html.dark[data-skin='b'] [data-pane='list'] input[type='search']:focus {
+  background: #2a2a30;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--accent) 70%, transparent),
+    0 4px 14px rgb(0 0 0 / 0.35);
+}
+html.dark[data-skin='b'] [data-pane='list'] header label > svg {
+  left: 16px;
+  width: 19px;
+  height: 19px;
+}
+html.dark[data-skin='b'] [data-pane='list'] header label button svg {
+  width: 16px;
+  height: 16px;
+}
+html.dark[data-skin='b'] [data-pane='list'] header label button {
+  right: 12px;
+}
+
+/* Category tabs */
+html.dark[data-skin='b'] [role='tablist'][data-skin-only] {
+  display: flex;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border);
+}
+html.dark[data-skin='b'] [role='tab'] {
+  flex: 1;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--muted);
+  border-bottom: 3px solid transparent;
+  border-radius: 8px 8px 0 0;
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+html.dark[data-skin='b'] [role='tab']:hover {
+  background: var(--hover);
+  color: var(--foreground);
+}
+html.dark[data-skin='b'] [role='tab'][aria-selected='true'] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+html.dark[data-skin='b'] [role='tab'] [data-count] {
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 18px;
+  min-width: 20px;
+  padding: 0 6px;
   border-radius: 999px;
-  height: 30px;
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+  background: rgb(255 255 255 / 0.1);
+  color: var(--muted);
 }
-html.dark[data-skin='b'] [data-pane='list'] > section > div:not([role='listbox']) {
+html.dark[data-skin='b'] [role='tab'][aria-selected='true'] [data-count] {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
+}
+
+/* Gmail-like list toolbar */
+html.dark[data-skin='b']
+  [data-pane='list']
+  > section
+  > div:not([role='listbox']):not([role='tablist']) {
   border: 0;
-  height: 30px;
+  height: 44px;
+  padding-inline: 14px;
+  gap: 10px;
 }
+html.dark[data-skin='b'] [data-pane='list'] [role='checkbox'] {
+  width: 18px;
+  height: 18px;
+  border-width: 2px;
+  border-radius: 4px;
+  background: transparent;
+}
+html.dark[data-skin='b'] [data-pane='list'] [role='checkbox'][aria-checked='true'],
+html.dark[data-skin='b'] [data-pane='list'] [role='checkbox'][aria-checked='mixed'] {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+html.dark[data-skin='b'] [data-pane='list'] [role='checkbox'] svg {
+  width: 13px;
+  height: 13px;
+}
+html.dark[data-skin='b'] [data-pane='list'] > section > div > button[aria-label='Refresh'] {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+}
+html.dark[data-skin='b'] [data-pane='list'] > section > div > button[aria-label='Refresh'] svg {
+  width: 17px;
+  height: 17px;
+}
+
+/* Rows: checkbox + star always visible, two lines, soft tinted selection */
 html.dark[data-skin='b'] [role='listbox'] {
   padding: 2px 0 8px;
 }
 html.dark[data-skin='b'] [role='option'] {
-  margin: 2px 8px;
-  padding-inline: 10px;
+  margin: 1px 8px;
+  padding: 0 12px 0 6px;
+  align-items: center;
+  border-radius: 12px;
+  gap: 8px;
+}
+html.dark[data-skin='b'] [role='option'] [data-lead] {
+  flex-direction: row;
+  width: auto;
+  gap: 4px;
+  padding-top: 0;
+  align-items: center;
+}
+html.dark[data-skin='b'] [role='option'] [data-unread-dot] {
+  display: none;
+}
+html.dark[data-skin='b'] [role='option'] [role='checkbox'] {
+  display: flex !important;
+}
+html.dark[data-skin='b'] [role='option'] [data-lead] button[aria-label$='star'] {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  padding: 0;
+}
+html.dark[data-skin='b'] [role='option'] [data-lead] button[aria-label$='star']:hover {
+  background: var(--hover);
+}
+html.dark[data-skin='b'] [role='option'] [data-lead] button svg {
+  width: 18px;
+  height: 18px;
+}
+html.dark[data-skin='b'] [role='option'] .fill-star,
+html.dark[data-skin='b']
+  [role='listbox']:focus-within
+  [role='option'][aria-selected='true']
+  .fill-star {
+  fill: var(--gm-star);
+  color: var(--gm-star);
 }
 html.dark[data-skin='b'] [role='option'][aria-selected='true'] {
-  box-shadow: 0 2px 8px rgb(10 132 255 / 0.25);
+  background: var(--selection);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
 }
 html.dark[data-skin='b'] [role='listbox']:not(:focus-within) [role='option'][aria-selected='true'] {
+  background: var(--selection-inactive);
   box-shadow: none;
+}
+html.dark[data-skin='b'] [role='listbox']:focus-within [role='option'][aria-selected='true'] {
+  --unread: var(--accent);
+  --star: var(--gm-star);
+}
+html.dark[data-skin='b'] [role='option'] [data-sender] {
+  font-size: 14px;
+}
+html.dark[data-skin='b'] [role='option'][data-unread='true'] [data-sender] {
+  font-weight: 700;
+}
+html.dark[data-skin='b'] [role='option'][data-unread='false'] [data-sender] {
+  font-weight: 400;
+  color: var(--muted);
+}
+html.dark[data-skin='b'] [role='option'][aria-selected='true'][data-unread='false'] [data-sender] {
+  color: var(--foreground);
+}
+html.dark[data-skin='b'] [role='option'] [data-line2] {
+  display: flex;
+  align-items: baseline;
+  margin-top: 1px;
+}
+html.dark[data-skin='b'] [role='option'] [data-subject] {
+  flex: 0 1 auto;
+  max-width: 52%;
+  font-weight: 400;
+}
+html.dark[data-skin='b'] [role='option'][data-unread='true'] [data-subject] {
+  font-weight: 600;
+}
+html.dark[data-skin='b'] [role='option'] [data-snippet-row] {
+  flex: 1 1 0;
+  min-width: 0;
+}
+html.dark[data-skin='b'] [role='option'] [data-snippet]::before {
+  content: '–';
+  margin: 0 6px;
+}
+/* Gmail label chips: solid label colour, white text, one per row. */
+html.dark[data-skin='b'] [role='option'] [data-snippet-row] > span[style] {
+  background: color-mix(in srgb, var(--chip) 80%, #1d1d20) !important;
+  color: #fff !important;
+  font-weight: 600;
+  font-size: 10px;
+  line-height: 15px;
+  border-radius: 4px;
+  padding-inline: 5px;
+  max-width: 74px;
+}
+html.dark[data-skin='b'] [role='option'] [data-snippet-row] > span[style] ~ span[style] {
+  display: none;
+}
+
+/* Reader toolbar: round icon buttons with a hover circle */
+html.dark[data-skin='b'] [role='toolbar'] {
+  gap: 4px;
+}
+html.dark[data-skin='b'] [role='toolbar'] button {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  padding: 0;
+}
+html.dark[data-skin='b'] [role='toolbar'] button:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.12);
+}
+html.dark[data-skin='b'] [role='toolbar'] button svg {
+  width: 18px;
+  height: 18px;
 }
 html.dark[data-skin='b'] [data-pane='reader'] header.selectable {
   padding: 8px 28px 14px;

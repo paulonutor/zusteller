@@ -4,7 +4,7 @@ import { useServices } from '@/app/services';
 import { Resizer } from '@/components/ui/Resizer';
 import { resolveActions, type MailActionId } from './actions';
 import { useAccounts, useCounts, useLabels, useThread, useThreadList } from './hooks';
-import { ThreadList } from './list/ThreadList';
+import { ThreadList, type ListFilter } from './list/ThreadList';
 import { Reader } from './reader/Reader';
 import { Sidebar } from './sidebar/Sidebar';
 import {
@@ -72,12 +72,17 @@ export function MailApp() {
   const [searchText, setSearchTextState] = useState('');
   const search = useDebounced(searchText, 250);
   const [selection, setSelection] = useState<Selection>(emptySelection);
+  const [filter, setFilterState] = useState<ListFilter>('all');
   const [layout, setLayout] = useState(loadLayout);
   const searchRef = useRef<HTMLInputElement | null>(null);
 
   // A different view or search shows different rows, so the old selection is meaningless.
   const setView = (v: MailView) => {
     setViewState(v);
+    setSelection(emptySelection);
+  };
+  const setFilter = (f: ListFilter) => {
+    setFilterState(f);
     setSelection(emptySelection);
   };
   const setSearchText = (t: string) => {
@@ -87,7 +92,25 @@ export function MailApp() {
 
   const query = accountId ? toQuery(accountId, view, search) : undefined;
   const list = useThreadList(query);
-  const items = list.items;
+  const loaded = list.items;
+  // Client-side tab filter over the loaded rows. Selected rows stay visible so that opening an
+  // unread thread (which marks it read) or unstarring doesn't make the open conversation vanish.
+  const items = useMemo(
+    () =>
+      filter === 'all'
+        ? loaded
+        : loaded.filter(
+            (t) => selection.selected.has(t.id) || (filter === 'unread' ? !t.isRead : t.isStarred),
+          ),
+    [loaded, filter, selection.selected],
+  );
+  const filterCounts = useMemo(
+    () => ({
+      unread: loaded.filter((t) => !t.isRead).length,
+      starred: loaded.filter((t) => t.isStarred).length,
+    }),
+    [loaded],
+  );
   const ids = useMemo(() => items.map((t) => t.id), [items]);
   const { run, refresh } = useMailActions(accountId);
 
@@ -222,11 +245,18 @@ export function MailApp() {
           isFetchingMore={list.isFetchingNextPage}
           searchText={searchText}
           onSearchMount={(el) => void (searchRef.current = el)}
+          filter={filter}
+          filterCounts={filterCounts}
+          onFilterChange={setFilter}
           emptyMessage={
             search
               ? `No results for “${search}”.`
-              : (EMPTY[view.kind === 'mailbox' ? view.mailbox : ''] ??
-                'No conversations with this label.')
+              : filter === 'unread'
+                ? 'No unread conversations here.'
+                : filter === 'starred'
+                  ? 'No starred conversations here.'
+                  : (EMPTY[view.kind === 'mailbox' ? view.mailbox : ''] ??
+                    'No conversations with this label.')
           }
           onSearchChange={setSearchText}
           onFetchMore={() => void list.fetchNextPage()}

@@ -35,7 +35,9 @@ export const formatFullDate = (iso: string) =>
 export const formatAddress = (a: Address) => (a.name ? `${a.name} <${a.email}>` : a.email);
 
 /** Tinted chip that stays legible in both themes. */
-export const labelChipStyle = (color = '#888'): CSSProperties => ({
-  background: `color-mix(in srgb, ${color} 18%, transparent)`,
-  color: `color-mix(in srgb, ${color} 65%, var(--foreground))`,
-});
+export const labelChipStyle = (color = '#888'): CSSProperties =>
+  ({
+    '--chip': color,
+    background: `color-mix(in srgb, ${color} 18%, transparent)`,
+    color: `color-mix(in srgb, ${color} 65%, var(--foreground))`,
+  }) as CSSProperties;

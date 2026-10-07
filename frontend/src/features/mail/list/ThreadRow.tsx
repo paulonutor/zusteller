@@ -59,10 +59,11 @@ export const ThreadRow = memo(function ThreadRow(p: Props) {
           inTrash && 'opacity-70',
         )}
       >
-        <div className="flex w-[34px] shrink-0 flex-col items-center gap-1.5 pt-0.5">
+        <div data-lead className="flex w-[34px] shrink-0 flex-col items-center gap-1.5 pt-0.5">
           <div className="flex h-[15px] items-center">
             {!t.isRead ? (
               <span
+                data-unread-dot
                 className="size-2 rounded-full bg-unread group-hover:hidden"
                 aria-label="Unread"
               />
@@ -92,6 +93,7 @@ export const ThreadRow = memo(function ThreadRow(p: Props) {
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-1.5">
             <span
+              data-sender
               className={cn('truncate text-[13.5px]', !t.isRead ? 'font-semibold' : 'font-medium')}
             >
               {senders(t, p.accountEmail)}
@@ -104,25 +106,33 @@ export const ThreadRow = memo(function ThreadRow(p: Props) {
               {formatListDate(t.lastMessageAt)}
             </span>
           </div>
-          <div
-            className={cn('truncate text-[13px]', !t.isRead ? 'font-medium' : 'text-foreground/90')}
-          >
-            {t.subject}
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="min-w-0 flex-1 truncate text-[12.5px] text-muted">{t.snippet}</span>
-            {chips.slice(0, 2).map((l) => (
-              <span
-                key={l.id}
-                className="max-w-24 shrink-0 truncate rounded px-1.5 text-[11px] leading-[16px]"
-                style={labelChipStyle(l.color)}
-              >
-                {l.name}
+          <div data-line2 className="min-w-0">
+            <div
+              data-subject
+              className={cn(
+                'truncate text-[13px]',
+                !t.isRead ? 'font-medium' : 'text-foreground/90',
+              )}
+            >
+              {t.subject}
+            </div>
+            <div data-snippet-row className="flex items-center gap-1.5">
+              <span data-snippet className="min-w-0 flex-1 truncate text-[12.5px] text-muted">
+                {t.snippet}
               </span>
-            ))}
-            {chips.length > 2 && (
-              <span className="shrink-0 text-[11px] text-muted">+{chips.length - 2}</span>
-            )}
+              {chips.slice(0, 2).map((l) => (
+                <span
+                  key={l.id}
+                  className="max-w-24 shrink-0 truncate rounded px-1.5 text-[11px] leading-[16px]"
+                  style={labelChipStyle(l.color)}
+                >
+                  {l.name}
+                </span>
+              ))}
+              {chips.length > 2 && (
+                <span className="shrink-0 text-[11px] text-muted">+{chips.length - 2}</span>
+              )}
+            </div>
           </div>
         </div>
       </div>

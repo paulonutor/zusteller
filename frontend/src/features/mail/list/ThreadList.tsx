@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertCircle, Inbox, RefreshCw, Search, X } from 'lucide-react';
+import { AlertCircle, Inbox, MailOpen, RefreshCw, Search, Star, X } from 'lucide-react';
 import type { ID, Label, ThreadSummary } from '@/domain/mail';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
@@ -8,7 +8,18 @@ import { cn } from '@/lib/cn';
 import type { Selection } from '../selection';
 import { ThreadRow } from './ThreadRow';
 
+export type ListFilter = 'all' | 'unread' | 'starred';
+
+const TABS: { id: ListFilter; label: string; icon: typeof Inbox }[] = [
+  { id: 'all', label: 'All', icon: Inbox },
+  { id: 'unread', label: 'Unread', icon: MailOpen },
+  { id: 'starred', label: 'Starred', icon: Star },
+];
+
 type Props = {
+  filter: ListFilter;
+  filterCounts: { unread: number; starred: number };
+  onFilterChange: (f: ListFilter) => void;
   title: string;
   unreadCount?: number;
   items: ThreadSummary[];
@@ -128,7 +139,7 @@ export function ThreadList(p: Props) {
             ref={(el) => onSearchMount(el)}
             type="search"
             value={p.searchText}
-            placeholder="Search"
+            placeholder="Search mail"
             onChange={(e) => p.onSearchChange(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Escape') {
@@ -150,6 +161,31 @@ export function ThreadList(p: Props) {
           )}
         </label>
       </header>
+
+      <div
+        role="tablist"
+        aria-label="Filter conversations"
+        data-skin-only
+        className="no-drag shrink-0"
+      >
+        {TABS.map(({ id, label, icon: Icon }) => {
+          const n = id === 'all' ? 0 : p.filterCounts[id];
+          return (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={p.filter === id}
+              onClick={() => p.onFilterChange(id)}
+              className="inline-flex items-center"
+            >
+              <Icon size={15} aria-hidden />
+              <span>{label}</span>
+              {n > 0 && <span data-count>{n}</span>}
+            </button>
+          );
+        })}
+      </div>
 
       <div className="flex h-8 shrink-0 items-center gap-2 border-y border-border px-3">
         <Checkbox
