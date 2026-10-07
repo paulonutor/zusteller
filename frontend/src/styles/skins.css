@@ -252,10 +252,11 @@ html:not(.__)[data-skin='b'] [data-pane='reader'] > section > .drag-region {
 
 /* ---- B2 "Gmail-in-Glass": search bar on top, category tabs, soft-tinted rows ---- */
 html.dark[data-skin='b'] {
-  --selection: rgb(255 255 255 / 0.13);
-  --selection-inactive: rgb(255 255 255 / 0.08);
-  --on-selection: var(--foreground);
-  --on-selection-dim: var(--muted);
+  --selection: var(--sel-accent, #0a64d6);
+  --selection-inactive: rgb(255 255 255 / 0.13);
+  --on-selection: var(--sel-accent-text, #ffffff);
+  --on-selection-dim: color-mix(in srgb, var(--on-selection) 72%, transparent);
+  --sel-ring: transparent;
   --row-h: 60px;
   --gm-star: #f6bf26;
 }
@@ -443,7 +444,7 @@ html:not(.__)[data-skin='b']
   box-shadow: none;
 }
 html:not(.__)[data-skin='b'] [role='listbox']:focus-within [role='option'][aria-selected='true'] {
-  --unread: var(--accent);
+  --unread: var(--on-selection);
   --star: var(--gm-star);
 }
 html:not(.__)[data-skin='b'] [role='option'] [data-sender] {
@@ -459,7 +460,7 @@ html:not(.__)[data-skin='b'] [role='option'][data-unread='false'] [data-sender] 
 html:not(.__)[data-skin='b']
   [role='option'][aria-selected='true'][data-unread='false']
   [data-sender] {
-  color: var(--foreground);
+  color: inherit;
 }
 html:not(.__)[data-skin='b'] [role='option'] [data-line2] {
   display: flex;
@@ -555,10 +556,10 @@ html:not(.dark)[data-skin='b'] {
   --hover: rgb(0 0 0 / 0.05);
   --active: rgb(0 0 0 / 0.09);
   --accent: #0a6cf0;
-  --selection: rgb(0 0 0 / 0.075);
-  --selection-inactive: rgb(0 0 0 / 0.05);
-  --on-selection: var(--foreground);
-  --on-selection-dim: var(--muted);
+  --selection: var(--sel-accent, #0a6cf0);
+  --selection-inactive: rgb(0 0 0 / 0.09);
+  --on-selection: var(--sel-accent-text, #ffffff);
+  --on-selection-dim: color-mix(in srgb, var(--on-selection) 72%, transparent);
   --pane-radius: 12px;
   --row-radius: 9px;
   --row-h: 60px;
@@ -577,7 +578,7 @@ html:not(.dark)[data-skin='b'] {
   --fill-2: rgb(0 0 0 / 0.09);
   --search-focus-bg: #ffffff;
   --focus-shadow: rgb(0 0 0 / 0.14);
-  --sel-ring: rgb(0 0 0 / 0.06);
+  --sel-ring: transparent;
   --card-bg: #ffffff;
   --chip-base: #6e6e73;
 }
@@ -688,4 +689,29 @@ html.dark[data-skin='c'] [data-pane='reader'] article > button {
 :root[data-host='wails'] input,
 :root[data-host='wails'] [role='option'] {
   --wails-draggable: no-drag;
+}
+
+/* ---- Selection follows the system accent in native hosts; gray when the window is inactive ---- */
+/* WKWebView resolves the CSS system colour `AccentColor` to the user's macOS accent colour. */
+:root[data-host][data-skin] {
+  --sel-accent: AccentColor;
+  --sel-accent-text: AccentColorText;
+  --accent: AccentColor;
+  --accent-fg: AccentColorText;
+}
+/* macOS "unemphasised" selection: window not key => gray fill, normal text. */
+:root[data-window-inactive][data-skin] {
+  --selection: var(--selection-inactive);
+  --on-selection: var(--foreground);
+  --on-selection-dim: var(--muted);
+}
+
+/* Checked box on the blue selection: invert so it stays visible. */
+html:not([data-window-inactive])[data-skin='b']
+  [role='listbox']:focus-within
+  [role='option'][aria-selected='true']
+  [role='checkbox'][aria-checked='true'] {
+  background: var(--on-selection);
+  border-color: var(--on-selection);
+  color: var(--selection);
 }

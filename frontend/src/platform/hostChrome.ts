@@ -25,3 +25,12 @@ export function applyHostChrome(): void {
  * element itself); Wails reads the `--wails-draggable` CSS property set in index.css.
  */
 export const dragRegionProps = { 'data-tauri-drag-region': '' } as const;
+
+/** Mirrors window focus into `data-window-inactive` so selection can turn gray like native lists. */
+export function trackWindowFocus(): void {
+  const root = document.documentElement;
+  const sync = () => root.toggleAttribute('data-window-inactive', !document.hasFocus());
+  window.addEventListener('focus', sync);
+  window.addEventListener('blur', sync);
+  sync();
+}
