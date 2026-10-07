@@ -1,7 +1,7 @@
 export type Skin = 'a' | 'b' | 'c';
 
 /**
- * Visual skins (dark mode only), picked once at startup via `?skin=a|b|c|default`.
+ * Visual skins (B in both themes, A/C dark only), picked once at startup via `?skin=a|b|c|default`.
  * Skin B ("Gmail-in-glass") is the default; `?skin=default` restores the plain look.
  */
 export function readSkinParam(search: string = window.location.search): Skin | null {
