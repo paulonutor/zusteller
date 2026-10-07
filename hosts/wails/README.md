@@ -6,6 +6,16 @@ dev proxies to the Vite dev server (`FRONTEND_DEVSERVER_URL`); production embeds
 
 Wails: `github.com/wailsapp/wails/v3 v3.0.0-beta.28` (latest on the Go proxy on 2026-10-07; API read from the module source).
 
+## First run (macOS)
+
+```bash
+brew install go go-task                       # Go >= 1.25 and Task
+(cd ../../frontend && npm install)            # shared frontend deps
+task dev:vite                                 # terminal 1
+task dev                                      # terminal 2
+# without Task: FRONTEND_DEVSERVER_URL=http://localhost:5173 go run .
+```
+
 ## Commands (needs Go >= 1.25 and [Task](https://taskfile.dev); no `wails3` CLI)
 
 | Task | |

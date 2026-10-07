@@ -3,6 +3,16 @@
 Loads the shared `frontend/` Vite project; no UI code lives here. Paths in `tauri.conf.json` are relative to `src-tauri/`
 (`frontendDist = ../../../frontend/dist`); the before-commands run from `hosts/tauri/` via `npm --prefix ../../frontend`.
 
+
+## First run (macOS)
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh   # if `cargo -V` fails
+(cd ../../frontend && npm install)                               # shared frontend deps
+npm install                                                      # installs the Tauri CLI (this folder)
+npm run dev                                                      # or: npm run dev:vibrancy
+```
+
 ## Use (macOS)
 ```
 cd frontend && npm install && cd ../hosts/tauri && npm install
