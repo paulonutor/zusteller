@@ -41,3 +41,19 @@ export const labelChipStyle = (color = '#888'): CSSProperties =>
     background: `color-mix(in srgb, ${color} 18%, transparent)`,
     color: `color-mix(in srgb, ${color} 65%, var(--foreground))`,
   }) as CSSProperties;
+
+/** Up to two initials for an avatar: first + last name word, else the email's first letter. */
+export function initials(a: Address): string {
+  const words = (a.name?.trim() ?? '').split(/\s+/).filter((w) => /\p{L}/u.test(w));
+  const pick = (w: string) => (w.match(/\p{L}/u)?.[0] ?? '').toUpperCase();
+  if (words.length >= 2) return pick(words[0]!) + pick(words[words.length - 1]!);
+  if (words.length === 1) return pick(words[0]!);
+  return pick(a.email.split('@')[0] ?? '') || '?';
+}
+
+/** Deterministic hue (0-359) from an email, so a sender always gets the same avatar colour. */
+export function avatarHue(email: string): number {
+  let h = 2166136261;
+  for (const ch of email.trim().toLowerCase()) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return (h >>> 0) % 360;
+}

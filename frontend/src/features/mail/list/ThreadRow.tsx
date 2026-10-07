@@ -5,7 +5,7 @@ import { SYSTEM_LABEL } from '@/domain/mail';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { ContextMenu, type MenuItemSpec } from '@/components/ui/Menu';
 import { cn } from '@/lib/cn';
-import { displayName, formatListDate, labelChipStyle } from '../format';
+import { avatarHue, displayName, formatListDate, initials, labelChipStyle } from '../format';
 
 type Props = {
   thread: ThreadSummary;
@@ -20,6 +20,13 @@ type Props = {
   buildContextItems: () => MenuItemSpec[];
   onContextOpen: () => void;
 };
+
+/** The correspondent shown on the avatar: first participant who isn't me. */
+function leadSender(t: ThreadSummary, me: string | undefined) {
+  return (
+    t.participants.find((x) => x.email.toLowerCase() !== me?.toLowerCase()) ?? t.participants[0]
+  );
+}
 
 /** Sender line: other participants first; "me" only if I'm the sole participant. */
 function senders(t: ThreadSummary, me: string | undefined): string {
@@ -38,6 +45,7 @@ export const ThreadRow = memo(function ThreadRow(p: Props) {
   const chips = t.labelIds
     .map((id) => p.labelsById.get(id))
     .filter((l): l is Label => !!l && l.type === 'user');
+  const lead = leadSender(t, p.accountEmail);
   const inTrash = t.labelIds.includes(SYSTEM_LABEL.trash);
 
   return (
@@ -47,6 +55,7 @@ export const ThreadRow = memo(function ThreadRow(p: Props) {
         id={`row-${t.id}`}
         aria-selected={p.selected}
         data-unread={!t.isRead}
+        data-focused={p.focused && p.listHasFocus}
         onClick={p.onClick}
         className={cn(
           'group relative flex h-[68px] cursor-default gap-2 border-b border-border/70 px-2.5 py-2',
@@ -59,35 +68,29 @@ export const ThreadRow = memo(function ThreadRow(p: Props) {
           inTrash && 'opacity-70',
         )}
       >
-        <div data-lead className="flex w-[34px] shrink-0 flex-col items-center gap-1.5 pt-0.5">
-          <div className="flex h-[15px] items-center">
-            {!t.isRead ? (
-              <span
-                data-unread-dot
-                className="size-2 rounded-full bg-unread group-hover:hidden"
-                aria-label="Unread"
-              />
-            ) : null}
-            <Checkbox
-              label={`Select conversation: ${t.subject}`}
-              checked={p.selected}
-              onChange={p.onToggleSelect}
-              className={cn(!t.isRead && !p.selected && 'hidden group-hover:flex')}
+        <div data-lead className="relative flex size-8 shrink-0 items-center justify-center">
+          {lead ? (
+            <span
+              data-avatar
+              aria-hidden="true"
+              style={{ '--av-h': avatarHue(lead.email) } as React.CSSProperties}
+            >
+              {initials(lead)}
+            </span>
+          ) : null}
+          {!t.isRead ? (
+            <span
+              data-unread-dot
+              className="size-2 rounded-full bg-unread group-hover:hidden"
+              aria-label="Unread"
             />
-          </div>
-          <button
-            type="button"
-            tabIndex={-1}
-            aria-label={t.isStarred ? 'Remove star' : 'Add star'}
-            aria-pressed={t.isStarred}
-            onClick={(e) => {
-              e.stopPropagation();
-              p.onToggleStar();
-            }}
-            className="no-drag rounded p-0.5 text-faint hover:text-muted"
-          >
-            <Star size={15} className={cn(t.isStarred && 'fill-star text-star')} />
-          </button>
+          ) : null}
+          <Checkbox
+            label={`Select conversation: ${t.subject}`}
+            checked={p.selected}
+            onChange={p.onToggleSelect}
+            className={cn(!t.isRead && !p.selected && 'hidden group-hover:flex')}
+          />
         </div>
 
         <div className="min-w-0 flex-1">
@@ -105,6 +108,20 @@ export const ThreadRow = memo(function ThreadRow(p: Props) {
               {t.hasAttachments && <Paperclip size={12} aria-label="Has attachments" />}
               {formatListDate(t.lastMessageAt)}
             </span>
+            <button
+              type="button"
+              data-star
+              tabIndex={-1}
+              aria-label={t.isStarred ? 'Remove star' : 'Add star'}
+              aria-pressed={t.isStarred}
+              onClick={(e) => {
+                e.stopPropagation();
+                p.onToggleStar();
+              }}
+              className="no-drag -mr-1 rounded p-0.5 text-faint hover:text-muted"
+            >
+              <Star size={15} className={cn(t.isStarred && 'fill-star text-star')} />
+            </button>
           </div>
           <div data-line2 className="min-w-0">
             <div

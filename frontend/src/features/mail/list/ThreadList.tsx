@@ -93,6 +93,12 @@ export function ThreadList(p: Props) {
   const labelsById = new Map(p.labels.map((l) => [l.id, l]));
   const allSelected = p.items.length > 0 && p.selection.selected.size === p.items.length;
   const someSelected = p.selection.selected.size > 0;
+  // 'Selection mode': avatars become checkboxes once the user explicitly multi-selects.
+  // A plain click that opens one thread leaves it off.
+  const [multi, setMulti] = useState(false);
+  // Keyboard modality: the focus cursor only reveals row controls while keys drive the list.
+  const [kbd, setKbd] = useState(false);
+  const selectionMode = someSelected && (multi || p.selection.selected.size > 1);
 
   // Keep the keyboard cursor visible.
   useEffect(() => {
@@ -103,6 +109,7 @@ export function ThreadList(p: Props) {
   const onScroll = useLoadMoreOnScroll(scroller, p.hasMore, p.isFetchingMore, p.onFetchMore);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
+    setKbd(true);
     const mod = e.metaKey || e.ctrlKey;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
@@ -112,9 +119,11 @@ export function ThreadList(p: Props) {
       p.onOpenFocused();
     } else if (e.key === ' ') {
       e.preventDefault();
+      setMulti(true);
       p.onToggleFocused();
     } else if (mod && e.key.toLowerCase() === 'a') {
       e.preventDefault();
+      setMulti(true);
       p.onSelectAll();
     } else if (e.key === 'Escape') {
       p.onClear();
@@ -214,6 +223,9 @@ export function ThreadList(p: Props) {
         role="listbox"
         aria-label={`${p.title} conversations`}
         aria-multiselectable
+        data-selection-mode={selectionMode}
+        data-kbd={kbd}
+        onPointerDown={() => setKbd(false)}
         aria-activedescendant={p.selection.focusedId ? `row-${p.selection.focusedId}` : undefined}
         tabIndex={0}
         onKeyDown={onKeyDown}
@@ -260,10 +272,15 @@ export function ThreadList(p: Props) {
                 selected={p.selection.selected.has(t.id)}
                 focused={p.selection.focusedId === t.id}
                 listHasFocus={hasFocus}
-                onClick={(e) =>
-                  p.onClickRow(t.id, { meta: e.metaKey || e.ctrlKey, shift: e.shiftKey })
-                }
-                onToggleSelect={() => p.onToggleRow(t.id)}
+                onClick={(e) => {
+                  const mods = { meta: e.metaKey || e.ctrlKey, shift: e.shiftKey };
+                  setMulti(mods.meta || mods.shift);
+                  p.onClickRow(t.id, mods);
+                }}
+                onToggleSelect={() => {
+                  setMulti(true);
+                  p.onToggleRow(t.id);
+                }}
                 onToggleStar={() => p.onToggleStar(t)}
                 buildContextItems={() => p.buildContextItems(t.id)}
                 onContextOpen={() => p.onContextOpen(t.id)}

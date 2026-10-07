@@ -1,3 +1,8 @@
+/* Avatars only exist in skin B (shared row markup). */
+[data-avatar] {
+  display: none;
+}
+
 /*
  * Visual skins (B has dark and light variants; A and C are dark-only), selected with `?skin=a|b|c` (sets data-skin on <html>).
  * No skin attribute = the default look, untouched. Everything is token overrides plus a few
@@ -386,7 +391,7 @@ html:not(.__)[data-skin='b'] [data-pane='list'] > section > div > button[aria-la
   height: 17px;
 }
 
-/* Rows: checkbox + star always visible, two lines, soft tinted selection */
+/* Rows: avatar that morphs into a checkbox, two lines, soft tinted selection */
 html:not(.__)[data-skin='b'] [role='listbox'] {
   padding: 2px 0 8px;
 }
@@ -398,32 +403,142 @@ html:not(.__)[data-skin='b'] [role='option'] {
   gap: 8px;
 }
 html:not(.__)[data-skin='b'] [role='option'] [data-lead] {
-  flex-direction: row;
-  width: auto;
-  gap: 4px;
+  width: 32px;
+  height: 32px;
   padding-top: 0;
-  align-items: center;
+}
+/* Avatar -> checkbox: the avatar is the resting state; the checkbox takes its place
+   on hover / keyboard focus, and everywhere once the list is in selection mode. */
+html:not(.__)[data-skin='b'] [role='option'] [data-avatar] {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: hsl(var(--av-h) 40% 88%);
+  background: hsl(var(--av-h) 26% 34%);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+html:not(.__):not(.dark)[data-skin='b'] [role='option'] [data-avatar] {
+  color: hsl(var(--av-h) 45% 24%);
+  background: hsl(var(--av-h) 40% 84%);
 }
 html:not(.__)[data-skin='b'] [role='option'] [data-unread-dot] {
-  display: none;
+  display: block !important;
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 10px;
+  height: 10px;
+  box-sizing: border-box;
+  border: 2px solid var(--background);
+  background: var(--unread);
+  transition: opacity 120ms ease;
 }
 html:not(.__)[data-skin='b'] [role='option'] [role='checkbox'] {
   display: flex !important;
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 20px;
+  height: 20px;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.8);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease,
+    width 120ms ease,
+    height 120ms ease,
+    background-color 120ms ease;
 }
-html:not(.__)[data-skin='b'] [role='option'] [data-lead] button[aria-label$='star'] {
+/* Reveal the checkbox, hide avatar + unread dot. */
+html:not(.__)[data-skin='b'] [role='option']:hover [role='checkbox'],
+html:not(.__)[data-skin='b']
+  [data-kbd='true']
+  [role='option'][data-focused='true']
+  [role='checkbox'],
+html:not(.__)[data-skin='b'] [role='option'] [role='checkbox']:focus-visible,
+html:not(.__)[data-skin='b'] [role='listbox'][data-selection-mode='true'] [role='checkbox'] {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+html:not(.__)[data-skin='b'] [role='option']:hover [data-avatar],
+html:not(.__)[data-skin='b'] [data-kbd='true'] [role='option'][data-focused='true'] [data-avatar],
+html:not(.__)[data-skin='b'] [role='option']:has([role='checkbox']:focus-visible) [data-avatar],
+html:not(.__)[data-skin='b'] [role='listbox'][data-selection-mode='true'] [data-avatar] {
+  opacity: 0;
+  transform: scale(0.8);
+}
+html:not(.__)[data-skin='b'] [role='option']:hover [data-unread-dot],
+html:not(.__)[data-skin='b']
+  [data-kbd='true']
+  [role='option'][data-focused='true']
+  [data-unread-dot],
+html:not(.__)[data-skin='b'] [role='listbox'][data-selection-mode='true'] [data-unread-dot] {
+  opacity: 0;
+}
+/* Checked in selection mode: a check inside the avatar circle. */
+html:not(.__)[data-skin='b']
+  [role='listbox'][data-selection-mode='true']
+  [role='option'][aria-selected='true']
+  [role='checkbox'][aria-checked='true'] {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border-color: transparent;
+  background: var(--on-selection, #fff);
+  color: var(--selection, var(--accent));
+}
+html:not(.__)[data-skin='b']
+  [role='listbox'][data-selection-mode='true']
+  [role='option'][aria-selected='true']
+  [role='checkbox'][aria-checked='true']
+  svg {
+  width: 17px;
+  height: 17px;
+}
+/* Star: right of the time, only when starred or on hover / focus. Space is always reserved. */
+html:not(.__)[data-skin='b'] [role='option'] [data-star] {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
+  width: 22px;
+  height: 22px;
+  margin-left: 2px;
+  margin-right: -4px;
   padding: 0;
+  border-radius: 999px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
 }
-html:not(.__)[data-skin='b'] [role='option'] [data-lead] button[aria-label$='star']:hover {
+html:not(.__)[data-skin='b'] [role='option']:hover [data-star],
+html:not(.__)[data-skin='b'] [data-kbd='true'] [role='option'][data-focused='true'] [data-star],
+html:not(.__)[data-skin='b'] [role='option'] [data-star]:focus-visible,
+html:not(.__)[data-skin='b'] [role='option'] [data-star][aria-pressed='true'] {
+  opacity: 1;
+  pointer-events: auto;
+}
+html:not(.__)[data-skin='b'] [role='option'] [data-star]:hover {
   background: var(--hover);
 }
-html:not(.__)[data-skin='b'] [role='option'] [data-lead] button svg {
-  width: 18px;
-  height: 18px;
+html:not(.__)[data-skin='b'] [role='option'] [data-star] svg {
+  width: 16px;
+  height: 16px;
+}
+@media (prefers-reduced-motion: reduce) {
+  html:not(.__)[data-skin='b'] [role='option'] [data-avatar],
+  html:not(.__)[data-skin='b'] [role='option'] [data-unread-dot],
+  html:not(.__)[data-skin='b'] [role='option'] [role='checkbox'],
+  html:not(.__)[data-skin='b'] [role='option'] [data-star] {
+    transition: none;
+  }
 }
 html:not(.__)[data-skin='b'] [role='option'] .fill-star,
 html:not(.__)[data-skin='b']
