@@ -6,6 +6,11 @@ Instructions for coding agents (and humans) working in this repo.
 The product/engineering plan lives in `zusteller-plan.md` (original spec) and `docs/architecture.md` (what is built).
 **The plan describes intent; Trello tracks execution.** Never use Markdown/TODO files as the source of truth for progress.
 
+## Communication style
+
+- Be concise: short, scannable answers with minimal prose, easy to read and react to.
+- When a decision is needed, ask **one** question with a few options and a clear recommendation (marked first).
+
 ## Current state
 
 Phase 1 (shared mock mail reader) is implemented in `frontend/`. Phase 2 (Wails/Tauri hosts), 3 (Gmail), 4 (compose/send)
