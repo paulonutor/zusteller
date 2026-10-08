@@ -92,6 +92,21 @@ export function DropdownMenu({
   ComponentProps<typeof DM.Content>,
   'children'
 >) {
+  const { platform } = useServices();
+  const native = platform.showContextMenu?.bind(platform);
+  if (native) {
+    // Native hosts draw the menu themselves, popped up at the pointer that clicked the trigger.
+    const el = trigger as ReactElement<ComponentProps<'button'>>;
+    return cloneElement(el, {
+      'aria-haspopup': 'menu',
+      onClick: (e: React.MouseEvent<HTMLButtonElement>) => {
+        el.props.onClick?.(e);
+        const actions = new Map<string, () => void>();
+        const tree = toNative(items, actions);
+        void native(tree, (id) => actions.get(id)?.()).catch(() => undefined);
+      },
+    });
+  }
   return (
     <DM.Root modal={false}>
       <DM.Trigger asChild>{trigger}</DM.Trigger>

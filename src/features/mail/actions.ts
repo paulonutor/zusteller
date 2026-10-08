@@ -71,8 +71,8 @@ export function resolveActions(threads: ThreadSummary[], view: MailView): Action
       ? { id: 'markUnread', label: 'Mark as Unread', shortcut: '⇧U', enabled: some }
       : { id: 'markRead', label: 'Mark as Read', shortcut: '⇧I', enabled: some },
   );
-  // Junk is a place to leave, not to organise: no starring or labelling there.
-  if (!inJunkView) {
+  // Junk and Trash are places to leave, not to organise: no starring, labelling or junk-marking.
+  if (!inJunkView && !inTrashView) {
     list.push(
       allStarred
         ? { id: 'unstar', label: 'Remove Star', shortcut: 'S', enabled: some }

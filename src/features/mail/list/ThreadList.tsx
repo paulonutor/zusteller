@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { DropdownMenu, type MenuItemSpec } from '@/components/ui/Menu';
 import type { Selection } from '../selection';
 import { ThreadRow } from './ThreadRow';
+import { useExitingRows } from './useExitingRows';
 
 /** Lists longer than this are windowed; shorter ones render every row as before. */
 export const VIRTUALIZE_THRESHOLD = 100;
@@ -207,6 +208,12 @@ export function ThreadList(p: Props) {
     }
   };
 
+  const entries = useExitingRows(
+    p.items,
+    `${p.filter}|${p.title}|${p.searchText}`,
+    !virtual && !p.isLoading,
+  );
+
   const renderRow = (t: ThreadSummary, index?: number) => (
     <ThreadRow
       key={t.id}
@@ -386,7 +393,15 @@ export function ThreadList(p: Props) {
                 })}
               </div>
             ) : (
-              p.items.map((t) => renderRow(t))
+              entries.map((e) =>
+                e.exiting ? (
+                  <div key={e.thread.id} data-row-exit aria-hidden="true" inert>
+                    {renderRow(e.thread)}
+                  </div>
+                ) : (
+                  renderRow(e.thread)
+                ),
+              )
             )}
             {p.isFetchingMore && (
               <div className="py-3 text-center text-[12px] text-muted">Loading…</div>

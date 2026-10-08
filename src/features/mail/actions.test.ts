@@ -42,9 +42,9 @@ describe('resolveActions', () => {
     const a = resolveActions([t({ isRead: true }), t({ isRead: false })], inbox);
     expect(a.map((x) => x.id)).toContain('markRead');
   });
-  it('trash view swaps archive/trash for restore', () => {
+  it('trash view swaps archive/trash for restore and offers no star', () => {
     const a = resolveActions([t({ labelIds: ['TRASH'] })], { kind: 'mailbox', mailbox: 'trash' });
-    expect(a.map((x) => x.id)).toEqual(['restore', 'markRead', 'star', 'markJunk']);
+    expect(a.map((x) => x.id)).toEqual(['restore', 'markRead']);
   });
   it('archive is disabled when nothing is in the inbox; all disabled when empty', () => {
     expect(ids(resolveActions([t({ labelIds: [] })], inbox))).not.toContain('archive');

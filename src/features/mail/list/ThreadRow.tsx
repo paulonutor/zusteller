@@ -1,7 +1,6 @@
 import { memo } from 'react';
 import { Paperclip, Star } from 'lucide-react';
 import type { ID, Label, ThreadSummary } from '@/domain/mail';
-import { SYSTEM_LABEL } from '@/domain/mail';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { ContextMenu, type MenuItemSpec } from '@/components/ui/Menu';
 import { cn } from '@/lib/cn';
@@ -55,7 +54,6 @@ export const ThreadRow = memo(function ThreadRow(p: Props) {
     .map((id) => p.labelsById.get(id))
     .filter((l): l is Label => !!l && l.type === 'user');
   const lead = leadSender(t, p.accountEmail);
-  const inTrash = t.labelIds.includes(SYSTEM_LABEL.trash);
 
   // A sidebar label dragged onto the row. Refused when the row already has it (unless it is part
   // of a selection, where other rows may still lack it).
@@ -90,7 +88,6 @@ export const ThreadRow = memo(function ThreadRow(p: Props) {
               : 'bg-selection-inactive'
             : 'hover:bg-hover',
           p.focused && p.listHasFocus && 'outline-2 -outline-offset-2 outline-accent/70',
-          inTrash && 'opacity-70',
         )}
       >
         <div data-lead className="relative flex size-8 shrink-0 items-center justify-center">

@@ -25,7 +25,11 @@ export function buildThreadActions(
     const states = labelStates(threads, labels);
     const userLabels = labels.filter((l) => l.type === 'user');
     const none = threads.length === 0;
-    const canLabel = !(view.kind === 'mailbox' && view.mailbox === 'junk');
+    // Junk and Trash are places to leave, not to organise.
+    const canLabel = !(
+      view.kind === 'mailbox' &&
+      (view.mailbox === 'junk' || view.mailbox === 'trash')
+    );
 
     const labelItems: MenuItemSpec[] = userLabels.map((l) => ({
       kind: 'check',

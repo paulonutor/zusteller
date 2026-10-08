@@ -44,7 +44,7 @@ export function Resizer({ label, value, min, max, onChange }: Props) {
         }}
       >
         {/* Wider invisible hit target. */}
-        <span className="absolute inset-y-0 -left-1.5 w-3 group-hover:bg-accent/20 group-focus-visible:bg-accent/30" />
+        <span className="absolute inset-y-0 -left-1.5 w-3 group-focus-visible:bg-accent/30" />
       </div>
     </div>
   );

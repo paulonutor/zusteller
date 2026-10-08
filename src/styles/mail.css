@@ -586,3 +586,22 @@ html:root [role='option'] [data-row-check]::before {
 html:root nav [data-mailbox-icon] {
   color: var(--accent);
 }
+
+/* A row that left the list collapses out instead of vanishing (see useExitingRows, 220ms). */
+@keyframes row-exit {
+  from {
+    max-height: var(--row-h, 68px);
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    max-height: 0;
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+}
+html:root [data-row-exit] {
+  overflow: hidden;
+  pointer-events: none;
+  animation: row-exit 220ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
