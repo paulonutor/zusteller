@@ -21,6 +21,8 @@ const PINNED_CSS = `
 html, body, button, input, textarea, select { font-family: 'Inter', sans-serif !important; }
 `;
 
+const FRAME_CSS = `html, body { font-family: 'Inter', sans-serif !important; }`;
+
 /** Installs the pinned font into every document the page creates (top level + iframes). */
 async function pinFont(page: Page) {
   await page.addInitScript((css) => {
@@ -35,18 +37,36 @@ async function pinFont(page: Page) {
   }, PINNED_CSS);
 }
 
-/** Sandboxed srcdoc frames may skip init scripts, so also inject into the reader iframe directly. */
+/**
+ * The reader iframe has a strict CSP (no font-src), so an @font-face data: URL is blocked there.
+ * Fonts built from raw bytes with the FontFace API are not fetched, so CSP does not apply. The
+ * rule below only sets the family; the CSP itself stays untouched.
+ */
 export async function pinFrameFont(page: Page) {
-  await page.evaluate((css) => {
-    for (const f of document.querySelectorAll('iframe')) {
-      const doc = f.contentDocument;
-      if (!doc || doc.querySelector('style[data-test-font]')) continue;
-      const style = doc.createElement('style');
-      style.setAttribute('data-test-font', '');
-      style.textContent = css;
-      doc.head.appendChild(style);
-    }
-  }, PINNED_CSS);
+  await page.evaluate(
+    async ({ b64, css }) => {
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const docs: Document[] = [];
+      for (const f of document.querySelectorAll('iframe')) {
+        const doc = f.contentDocument;
+        const win = f.contentWindow as (Window & { FontFace: typeof FontFace }) | null;
+        if (!doc || !win) continue;
+        docs.push(doc);
+        if (doc.querySelector('style[data-test-font]')) continue;
+        const face = new win.FontFace('Inter', bytes.buffer.slice(0), { weight: '100 900' });
+        await face.load();
+        doc.fonts.add(face);
+        const style = doc.createElement('style');
+        style.setAttribute('data-test-font', '');
+        style.textContent = css;
+        doc.head.appendChild(style);
+      }
+      // Let the reader's auto-resize settle (two frames) so the screenshot never races the reflow.
+      await Promise.all(docs.map((d) => d.fonts.ready));
+      await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+    },
+    { b64: FONT_B64, css: FRAME_CSS },
+  );
   await page.evaluate(() => document.fonts.ready);
 }
 
