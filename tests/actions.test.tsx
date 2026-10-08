@@ -10,6 +10,7 @@ const platform: PlatformService = {
   setBadge: vi.fn().mockResolvedValue(undefined),
   openExternal: vi.fn().mockResolvedValue(undefined),
   setWindowTheme: vi.fn().mockResolvedValue(undefined),
+  confirm: () => Promise.resolve(true),
   subscribeMenuActions: () => () => {},
 };
 
@@ -82,6 +83,7 @@ describe('startup failure', () => {
       showNotification: vi.fn(),
       setBadge: vi.fn().mockResolvedValue(undefined),
       openExternal: vi.fn(),
+      confirm: () => Promise.resolve(true),
       subscribeMenuActions: () => () => undefined,
     };
     const user = userEvent.setup();
@@ -100,6 +102,7 @@ describe('list header selection state', () => {
       showNotification: vi.fn(),
       setBadge: vi.fn().mockResolvedValue(undefined),
       openExternal: vi.fn(),
+      confirm: () => Promise.resolve(true),
       subscribeMenuActions: () => () => undefined,
     };
     const user = userEvent.setup();

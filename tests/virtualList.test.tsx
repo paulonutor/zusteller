@@ -74,6 +74,7 @@ async function setup(n = N) {
       setBadge: vi.fn().mockResolvedValue(undefined),
       openExternal: vi.fn().mockResolvedValue(undefined),
       setWindowTheme: vi.fn().mockResolvedValue(undefined),
+      confirm: () => Promise.resolve(true),
       subscribeMenuActions: () => () => {},
     },
   };

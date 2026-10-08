@@ -6,6 +6,9 @@ const BASE_TITLE = 'zusteller';
 export function createBrowserPlatformService(): PlatformService {
   return {
     subscribeMenuActions: () => () => {},
+    async confirm({ title, message }) {
+      return window.confirm(`${title}\n\n${message}`);
+    },
     async showNotification({ title, body }) {
       if (typeof Notification === 'undefined') return;
       if (Notification.permission === 'default') await Notification.requestPermission();
