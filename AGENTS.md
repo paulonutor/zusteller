@@ -87,4 +87,7 @@ Board: **Zusteller** — https://trello.com/b/LJT3FtfE/zusteller (lists: Ideas �
 
 - Work on the assigned feature branch; pushing to `main` is allowed after finishing work, **fast-forward only** —
   no merge commits (`git merge --ff-only`, or rebase onto `origin/main` first).
+- Commit identity: author/committer **Paul Onutor <paul@onutor.de>** (`git config user.name/user.email` in the repo).
+  Keep the `Co-Authored-By: Claude ... <noreply@anthropic.com>` trailer; do **not** add a `Claude-Session:` line.
+- History is only rewritten when Paul explicitly asks (it needs a force-push; take a backup tag first).
 - Small, descriptive commits. Never commit `node_modules`, `dist`, screenshots or secrets.
