@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync/atomic"
 )
 
 // Dock is the badge capability (Wails dock service).
@@ -33,7 +34,7 @@ type Service struct {
 	Notifier Notifier
 	Opener   Opener
 
-	nextID int
+	nextID atomic.Int64
 }
 
 // ValidateExternalURL allows only http, https and mailto.
@@ -79,6 +80,5 @@ func (s *Service) ShowNotification(title, body string) error {
 	if s.Notifier == nil {
 		return errors.New("notifications unavailable: not running from a bundled app")
 	}
-	s.nextID++
-	return s.Notifier.Notify(fmt.Sprintf("zusteller-%d", s.nextID), title, body)
+	return s.Notifier.Notify(fmt.Sprintf("zusteller-%d", s.nextID.Add(1)), title, body)
 }

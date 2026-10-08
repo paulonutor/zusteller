@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"io/fs"
 	"log"
@@ -46,6 +47,21 @@ type browserAdapter struct{ app *application.App }
 
 func (a browserAdapter) OpenURL(u string) error { return a.app.Browser.OpenURL(u) }
 
+// lifecycle registers a Go-only service with Wails without binding any of its methods to the
+// page. Wails binds every exported method of a registered service except ServiceName,
+// ServiceStartup, ServiceShutdown and ServeHTTP, so this wrapper only forwards those hooks.
+type lifecycle struct {
+	name     string
+	startup  func(context.Context, application.ServiceOptions) error
+	shutdown func() error
+}
+
+func (l lifecycle) ServiceName() string { return l.name }
+func (l lifecycle) ServiceStartup(ctx context.Context, o application.ServiceOptions) error {
+	return l.startup(ctx, o)
+}
+func (l lifecycle) ServiceShutdown() error { return l.shutdown() }
+
 // inAppBundle reports whether we run from a macOS .app bundle. The notifications
 // service refuses to start without a bundle identifier, so under `go run` it is skipped.
 func inAppBundle() bool {
@@ -62,13 +78,14 @@ func main() {
 	dockSvc := dock.New()
 	hostPlatform := &platform.Service{Dock: dockAdapter{dockSvc}}
 	services := []application.Service{
-		application.NewService(dockSvc),
+		application.NewService(&lifecycle{"dock", dockSvc.ServiceStartup, dockSvc.ServiceShutdown}),
 		application.NewService(hostPlatform),
 	}
 	if inAppBundle() {
 		notifSvc := notifications.New()
 		hostPlatform.Notifier = notifAdapter{notifSvc}
-		services = append(services, application.NewService(notifSvc))
+		services = append(services, application.NewService(
+			&lifecycle{"notifications", notifSvc.ServiceStartup, notifSvc.ServiceShutdown}))
 	} else {
 		log.Println("notifications disabled: not running from an .app bundle (no bundle identifier)")
 	}
@@ -76,8 +93,8 @@ func main() {
 	app := application.New(application.Options{
 		Name:        "zusteller",
 		Description: "Lightweight mail client",
-		// Only the PlatformService is bound to JS. The dock/notification
-		// services are used from Go and intentionally NOT exposed to the page.
+		// Only platform.Service is bound to JS. The dock/notification services are used from
+		// Go and registered through `lifecycle`, which binds no methods (see main_test.go).
 		Services: services,
 		Assets: application.AssetOptions{
 			// Also serves /wails/runtime.js, which the frontend adapter loads.
