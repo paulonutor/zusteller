@@ -1,3 +1,4 @@
+import type { PlatformService } from './PlatformService';
 import { isTauriHost } from './tauri';
 import { isWailsHost } from './wails';
 
@@ -45,5 +46,29 @@ export function trackWindowFocus(): void {
   };
   window.addEventListener('focus', sync);
   window.addEventListener('blur', sync);
+  sync();
+}
+
+/**
+ * WKWebView resolves the CSS system accent (`AccentColor`, `-apple-system-control-accent`) to default
+ * blue whatever System Settings says, so native hosts report the real colour. It is exposed as
+ * `--host-accent` (see skins.css), kept live by the host's change event and re-read on focus.
+ */
+export function trackNativeAccent(
+  platform: Pick<PlatformService, 'getAccentColor' | 'subscribeAccentColor'>,
+): void {
+  const get = platform.getAccentColor;
+  if (!get) return;
+  const root = document.documentElement;
+  const sync = () => {
+    get.call(platform).then(
+      (c) =>
+        c ? root.style.setProperty('--host-accent', c) : root.style.removeProperty('--host-accent'),
+      () => undefined,
+    );
+  };
+  const set = (c: string) => root.style.setProperty('--host-accent', c);
+  window.addEventListener('focus', sync);
+  platform.subscribeAccentColor?.(set);
   sync();
 }

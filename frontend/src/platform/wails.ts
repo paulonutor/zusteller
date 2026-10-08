@@ -1,3 +1,4 @@
+import { parseAccent } from './accent';
 import type { PlatformService } from './PlatformService';
 
 /**
@@ -31,6 +32,7 @@ const SERVICE = 'zusteller/hosts/wails/internal/platform.Service';
 const RUNTIME_URL = '/wails/runtime.js';
 
 /** Event emitted by the native menu; payload is a mail action id string. */
+export const WAILS_ACCENT_EVENT = 'zusteller:accent';
 export const WAILS_MAIL_ACTION_EVENT = 'zusteller:mail-action';
 
 /**
@@ -73,12 +75,34 @@ async function getRuntime(): Promise<WailsRuntime> {
 export function createWailsPlatformService(): Omit<PlatformService, 'subscribeMenuActions'> {
   const call = async (method: string, ...args: unknown[]) => {
     const rt = await getRuntime();
-    await rt.Call.ByName(`${SERVICE}.${method}`, ...args);
+    return rt.Call.ByName(`${SERVICE}.${method}`, ...args);
   };
   return {
-    showNotification: ({ title, body }) => call('ShowNotification', title, body ?? ''),
-    setBadge: (count) => call('SetBadge', count ?? 0),
-    setWindowTheme: (theme) => call('SetWindowTheme', theme),
+    showNotification: async ({ title, body }) =>
+      void (await call('ShowNotification', title, body ?? '')),
+    getAccentColor: async () => parseAccent(await call('AccentColor')),
+    subscribeAccentColor(handler) {
+      let off: (() => void) | undefined;
+      let cancelled = false;
+      getRuntime().then(
+        (rt) => {
+          const u = rt.Events.On(WAILS_ACCENT_EVENT, (event) => {
+            const data = Array.isArray(event.data) ? event.data[0] : event.data;
+            const c = parseAccent(data);
+            if (c) handler(c);
+          });
+          if (cancelled) u();
+          else off = u;
+        },
+        () => undefined,
+      );
+      return () => {
+        cancelled = true;
+        off?.();
+      };
+    },
+    setBadge: async (count) => void (await call('SetBadge', count ?? 0)),
+    setWindowTheme: async (theme) => void (await call('SetWindowTheme', theme)),
     async openExternal(url) {
       // Defence in depth; the Go side enforces the same allow-list.
       const parsed = new URL(url);

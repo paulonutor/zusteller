@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/services/dock"
@@ -24,6 +25,9 @@ import (
 //
 //go:embed all:appdist
 var embedded embed.FS
+
+// AccentEvent is the Wails event the frontend listens to; the payload is the new "#rrggbb".
+const AccentEvent = "zusteller:accent"
 
 type dockAdapter struct{ d *dock.DockService }
 
@@ -105,6 +109,11 @@ func main() {
 	hostPlatform.Opener = browserAdapter{app}
 
 	app.Menu.Set(buildMenu(app))
+
+	if hostPlatform.Appearance != nil {
+		go platform.WatchAccent(context.Background(), time.Second, hostPlatform.AccentColor,
+			func(c string) { app.Event.Emit(AccentEvent, c) })
+	}
 
 	opts := platform.ParseWindowOptions(os.Getenv)
 	mac := application.MacWindow{

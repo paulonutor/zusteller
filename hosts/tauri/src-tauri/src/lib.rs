@@ -113,12 +113,63 @@ fn set_window_theme(app: AppHandle, theme: Option<String>) -> Result<(), String>
     window.set_theme(theme).map_err(|e| e.to_string())
 }
 
+/// Event emitted (payload `#rrggbb`) when the system accent colour changes.
+const ACCENT_EVENT: &str = "zusteller://accent";
+
+/// The user's macOS accent colour as `#rrggbb` (sRGB). WKWebView resolves the CSS system accent to
+/// default blue regardless of System Settings, so the page asks the host.
+#[tauri::command]
+fn accent_color() -> Result<String, String> {
+    read_accent()
+}
+
+fn read_accent() -> Result<String, String> {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::{NSColor, NSColorSpace};
+        let c =
+            { NSColor::controlAccentColor().colorUsingColorSpace(&NSColorSpace::sRGBColorSpace()) }
+                .ok_or_else(|| "accent colour unavailable".to_string())?;
+        let ch = |v: f64| (v * 255.0).round() as u8;
+        Ok(format!(
+            "#{:02x}{:02x}{:02x}",
+            ch(c.redComponent()),
+            ch(c.greenComponent()),
+            ch(c.blueComponent())
+        ))
+    }
+    #[cfg(not(target_os = "macos"))]
+    Err("accent colour unavailable on this platform".to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
-        .invoke_handler(tauri::generate_handler![notify, set_badge, set_window_theme])
+        .invoke_handler(tauri::generate_handler![
+            notify,
+            set_badge,
+            set_window_theme,
+            accent_color
+        ])
+        .setup(|app| {
+            // No cheap in-process callback for accent changes: check once a second, emit on change.
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                let mut last = read_accent().ok();
+                loop {
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+                    if let Ok(now) = read_accent() {
+                        if last.as_deref() != Some(now.as_str()) {
+                            let _ = handle.emit(ACCENT_EVENT, now.clone());
+                            last = Some(now);
+                        }
+                    }
+                }
+            });
+            Ok(())
+        })
         .menu(|app| build_menu(app))
         .on_menu_event(|app, event| {
             let id = event.id().as_ref();

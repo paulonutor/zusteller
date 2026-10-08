@@ -31,6 +31,8 @@ type Opener interface {
 // Appearance pins the native window appearance at runtime ("light" | "dark"; "system" follows the OS).
 type Appearance interface {
 	SetAppearance(theme string) error
+	// AccentColor is the user's system accent colour as "#rrggbb".
+	AccentColor() (string, error)
 }
 
 // Service is bound to the frontend. Only methods PlatformService needs.
@@ -101,4 +103,13 @@ func (s *Service) SetWindowTheme(theme string) error {
 		return errors.New("window theme unavailable on this platform")
 	}
 	return s.Appearance.SetAppearance(theme)
+}
+
+// AccentColor returns the macOS accent colour as "#rrggbb". WKWebView reports default blue for the
+// CSS system accent whatever the user picked, so the page asks the host instead.
+func (s *Service) AccentColor() (string, error) {
+	if s.Appearance == nil {
+		return "", errors.New("accent colour unavailable on this platform")
+	}
+	return s.Appearance.AccentColor()
 }

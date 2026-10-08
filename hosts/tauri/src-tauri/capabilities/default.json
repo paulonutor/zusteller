@@ -1,13 +1,15 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Minimal permissions for the main window. App commands (notify, set_badge) are defined in lib.rs.",
+  "description": "Minimal permissions for the main window. App commands (notify, set_badge, set_window_theme, accent_color) are defined in lib.rs; event listening is needed for menu and accent events.",
   "windows": [
     "main"
   ],
   "permissions": [
     "core:window:allow-start-dragging",
     "core:window:allow-toggle-maximize",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
     {
       "identifier": "opener:allow-open-url",
       "allow": [

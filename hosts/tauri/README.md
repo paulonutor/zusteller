@@ -62,3 +62,9 @@ The window theme is pinned to the in-app theme (`set_window_theme`, called from 
 always matches the page colours; choosing "System" in the app lets the window follow the OS again.
 
 Mac test steps and checklist: [`docs/mac-test-runbook.md`](../../docs/mac-test-runbook.md); measurements: `scripts/measure-host.sh`.
+
+## System accent colour
+
+WKWebView resolves the CSS system accent to default blue whatever System Settings says, so the `accent_color` command reads
+`NSColor.controlAccentColor` (objc2-app-kit, sRGB `#rrggbb`) and a background thread emits `zusteller://accent` when it changes (1 s check,
+deliberately not an observer). The page applies it as `--host-accent`. Event listening needs `core:event:allow-listen` in the capability.

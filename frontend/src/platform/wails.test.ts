@@ -3,6 +3,7 @@ import {
   createWailsPlatformService,
   isWailsHost,
   onWailsMailAction,
+  WAILS_ACCENT_EVENT,
   WAILS_MAIL_ACTION_EVENT,
 } from './wails';
 
@@ -74,5 +75,30 @@ describe('wails platform adapter', () => {
     off();
     emit('trash');
     expect(seen).toEqual(['archive', 'markRead']);
+  });
+});
+
+describe('wails accent colour', () => {
+  it('reads the accent from the host and ignores junk', async () => {
+    const { ByName } = stubRuntime();
+    ByName.mockResolvedValueOnce('#a550a7').mockResolvedValueOnce('javascript:x');
+    const p = createWailsPlatformService();
+    expect(await p.getAccentColor?.()).toBe('#a550a7');
+    expect(await p.getAccentColor?.()).toBeNull();
+    expect(ByName).toHaveBeenCalledWith(`${SVC}.AccentColor`);
+  });
+
+  it('forwards accent change events until unsubscribed', async () => {
+    const { On } = stubRuntime();
+    const seen: string[] = [];
+    const off = createWailsPlatformService().subscribeAccentColor?.((c) => seen.push(c));
+    await vi.waitFor(() =>
+      expect(On).toHaveBeenCalledWith(WAILS_ACCENT_EVENT, expect.any(Function)),
+    );
+    const cb = On.mock.calls[0]?.[1] as (e: { name: string; data: unknown }) => void;
+    cb({ name: WAILS_ACCENT_EVENT, data: '#f74f9e' });
+    cb({ name: WAILS_ACCENT_EVENT, data: 'red' });
+    expect(seen).toEqual(['#f74f9e']);
+    off?.();
   });
 });

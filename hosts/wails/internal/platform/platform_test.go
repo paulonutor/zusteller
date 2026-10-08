@@ -10,6 +10,7 @@ type fakes struct {
 }
 
 func (f *fakes) SetAppearance(t string) error { f.themes = append(f.themes, t); return nil }
+func (f *fakes) AccentColor() (string, error) { return "#a550a7", nil }
 
 func (f *fakes) SetBadge(l string) error { f.badge = append(f.badge, l); return nil }
 func (f *fakes) RemoveBadge() error      { f.removed++; return nil }
@@ -77,6 +78,15 @@ func TestSetWindowTheme(t *testing.T) {
 		t.Fatalf("themes %v", f.themes)
 	}
 	if err := (&Service{}).SetWindowTheme("dark"); err == nil {
+		t.Fatal("expected error without an Appearance")
+	}
+}
+
+func TestAccentColor(t *testing.T) {
+	if c, err := (&Service{Appearance: &fakes{}}).AccentColor(); err != nil || c != "#a550a7" {
+		t.Fatalf("got %q, %v", c, err)
+	}
+	if _, err := (&Service{}).AccentColor(); err == nil {
 		t.Fatal("expected error without an Appearance")
 	}
 }

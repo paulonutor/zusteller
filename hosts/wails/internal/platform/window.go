@@ -19,7 +19,8 @@ type WindowOptions struct {
 }
 
 // ParseWindowOptions reads ZUSTELLER_VIBRANCY (default on; "0" turns it off),
-// ZUSTELLER_BACKDROP=glass and ZUSTELLER_APPEARANCE=dark|light.
+// ZUSTELLER_BACKDROP=glass, ZUSTELLER_APPEARANCE=dark|light and
+// ZUSTELLER_DEBUG=accent (opens the page with ?debug=accent).
 func ParseWindowOptions(getenv func(string) string) WindowOptions {
 	o := WindowOptions{URL: "/"}
 	o.Vibrancy = getenv("ZUSTELLER_VIBRANCY") != "0"
@@ -30,6 +31,13 @@ func ParseWindowOptions(getenv func(string) string) WindowOptions {
 	}
 	if o.Vibrancy {
 		o.URL = "/?vibrancy=1"
+	}
+	if strings.EqualFold(getenv("ZUSTELLER_DEBUG"), "accent") {
+		sep := "?"
+		if strings.Contains(o.URL, "?") {
+			sep = "&"
+		}
+		o.URL += sep + "debug=accent"
 	}
 	return o
 }

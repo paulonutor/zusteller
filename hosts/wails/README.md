@@ -90,6 +90,14 @@ runtime: `setWindowTheme` -> `Service.SetWindowTheme` -> `NSApp.appearance` (`ap
 itself only accepts `Mac.Appearance` at window creation, hence the small cgo shim. `ZUSTELLER_APPEARANCE=dark|light` still pins the
 initial window appearance; the in-app theme takes over once the page loads.
 
+## System accent colour
+
+WKWebView resolves the CSS system accent (`AccentColor`, `-apple-system-control-accent`) to default blue whatever System Settings says.
+The host therefore reports it: `Service.AccentColor` reads `NSColor.controlAccentColor` (sRGB `#rrggbb`, cgo), the page sets `--host-accent`
+(`trackNativeAccent`), and `internal/platform.WatchAccent` checks once a second and emits `zusteller:accent` on change (deliberately
+polling: an observer needs Objective-C blocks for little gain). `ZUSTELLER_DEBUG=accent` opens the page with `?debug=accent`
+(`open --env ZUSTELLER_DEBUG=accent bin/zusteller.app`).
+
 ## Vibrancy (default, macOS)
 
 Vibrancy is on by default: translucent (or `task dev:glass`: Liquid Glass, macOS 15+) backdrop, transparent window, page opened as

@@ -16,8 +16,21 @@ static void zustellerSetAppearance(int mode) {
 		[NSApp setAppearance:a];
 	});
 }
+
+// The user's accent colour in sRGB, as "#rrggbb" (empty on failure).
+static void zustellerAccentHex(char *out, size_t n) {
+	NSColor *c = [[NSColor controlAccentColor] colorUsingColorSpace:[NSColorSpace sRGBColorSpace]];
+	if (c == nil) { out[0] = 0; return; }
+	snprintf(out, n, "#%02x%02x%02x", (int)lround(c.redComponent * 255), (int)lround(c.greenComponent * 255),
+	         (int)lround(c.blueComponent * 255));
+}
 */
 import "C"
+
+import (
+	"errors"
+	"unsafe"
+)
 
 import "zusteller/hosts/wails/internal/platform"
 
@@ -37,4 +50,13 @@ func (appAppearance) SetAppearance(theme string) error {
 		C.zustellerSetAppearance(0)
 	}
 	return nil
+}
+
+func (appAppearance) AccentColor() (string, error) {
+	var buf [16]C.char
+	C.zustellerAccentHex(&buf[0], C.size_t(len(buf)))
+	if buf[0] == 0 {
+		return "", errors.New("accent colour unavailable")
+	}
+	return C.GoString((*C.char)(unsafe.Pointer(&buf[0]))), nil
 }

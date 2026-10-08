@@ -1,3 +1,4 @@
+import { parseAccent } from './accent';
 import type { PlatformService } from './PlatformService';
 
 /**
@@ -24,6 +25,7 @@ type TauriGlobal = {
   };
 };
 
+export const TAURI_ACCENT_EVENT = 'zusteller://accent';
 export const TAURI_MENU_EVENT = 'zusteller://menu';
 
 function tauriGlobal(): TauriGlobal | undefined {
@@ -54,6 +56,23 @@ export function createTauriPlatformService(): Omit<PlatformService, 'subscribeMe
       await requireTauri().core.invoke('set_window_theme', {
         theme: theme === 'system' ? null : theme,
       });
+    },
+    async getAccentColor() {
+      return parseAccent(await requireTauri().core.invoke('accent_color'));
+    },
+    subscribeAccentColor(handler) {
+      const listen = tauriGlobal()?.event?.listen;
+      if (!listen) return () => {};
+      let off: Unlisten | undefined;
+      let cancelled = false;
+      void listen(TAURI_ACCENT_EVENT, (e) => {
+        const c = parseAccent(e.payload);
+        if (c) handler(c);
+      }).then((u) => (cancelled ? u() : (off = u)));
+      return () => {
+        cancelled = true;
+        off?.();
+      };
     },
     async openExternal(url) {
       // Defence in depth; the Rust-side capability scope enforces the same list.
