@@ -309,7 +309,7 @@ export function MailApp() {
         max={LIMITS.list[1]}
         onChange={(list) => setLayout((l) => ({ ...l, list }))}
       />
-      <div data-pane="reader" className="h-full min-w-[320px] flex-1">
+      <main data-pane="reader" className="h-full min-w-[320px] flex-1">
         <Reader
           selected={selectedSummaries}
           thread={thread.data}
@@ -321,7 +321,7 @@ export function MailApp() {
           perform={perform}
           onOpenLink={openLink}
         />
-      </div>
+      </main>
     </div>
   );
 }

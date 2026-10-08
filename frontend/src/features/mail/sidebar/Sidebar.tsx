@@ -61,8 +61,9 @@ function Row({
       <span className="flex w-4 shrink-0 items-center justify-center">{icon}</span>
       <span className="flex-1 truncate">{label}</span>
       {!!count && (
-        <span className="text-[12px] tabular-nums text-muted" aria-label={`${count} unread`}>
-          {count}
+        <span className="text-[12px] tabular-nums text-muted">
+          <span aria-hidden="true">{count}</span>
+          <span className="sr-only">, {count} unread</span>
         </span>
       )}
     </button>
@@ -145,12 +146,23 @@ function ThemeSwitch() {
         aria-label="Appearance"
         className="no-drag flex rounded-md bg-hover p-0.5"
       >
-        {THEMES.map(({ id, label, Icon }) => (
+        {THEMES.map(({ id, label, Icon }, i) => (
           <button
             key={id}
             type="button"
             role="radio"
+            id={`theme-${id}`}
             aria-checked={preference === id}
+            // Radio group: one tab stop (the checked one), arrows move + select.
+            tabIndex={preference === id ? 0 : -1}
+            onKeyDown={(e) => {
+              const d = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+              if (!d) return;
+              e.preventDefault();
+              const n = THEMES[(i + d + THEMES.length) % THEMES.length]!;
+              setPreference(n.id);
+              document.getElementById(`theme-${n.id}`)?.focus();
+            }}
             aria-label={label}
             title={label}
             onClick={() => setPreference(id)}

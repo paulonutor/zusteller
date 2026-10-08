@@ -56,7 +56,7 @@ html.dark[data-skin='c'] [data-pane='list'] input[type='search'] {
   border-radius: 5px;
   height: 26px;
 }
-html.dark[data-skin='c'] [data-pane='list'] > section > div:not([role='listbox']) {
+html.dark[data-skin='c'] [data-pane='list'] > section > div:not([data-list-scroller]) {
   height: 28px;
 }
 html.dark[data-skin='c'] [role='option'] {

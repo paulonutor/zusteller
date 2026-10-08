@@ -125,6 +125,7 @@ export function ThreadList(p: Props) {
   const [kbd, setKbd] = useState(false);
   const selectionMode = someSelected && (multi || p.selection.selected.size > 1);
 
+  const showRows = !p.isLoading && p.items.length > 0;
   const virtual = p.items.length > VIRTUALIZE_THRESHOLD;
   const rowsRef = useRef<HTMLDivElement>(null);
   const [scrollMargin, setScrollMargin] = useState(0);
@@ -206,6 +207,20 @@ export function ThreadList(p: Props) {
     } else if (e.key === 'Escape') {
       p.onClear();
     }
+  };
+
+  const onTabKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
+    const keys: Record<string, (i: number) => number> = {
+      ArrowRight: (i) => (i + 1) % TABS.length,
+      ArrowLeft: (i) => (i + TABS.length - 1) % TABS.length,
+      Home: () => 0,
+      End: () => TABS.length - 1,
+    };
+    const next = keys[e.key];
+    if (!next) return;
+    e.preventDefault();
+    const i = TABS.findIndex((t) => `tab-${t.id}` === e.currentTarget.id);
+    document.getElementById(`tab-${TABS[next(i)]!.id}`)?.focus();
   };
 
   const renderRow = (t: ThreadSummary, index?: number) => (
@@ -292,7 +307,13 @@ export function ThreadList(p: Props) {
               key={id}
               type="button"
               role="tab"
+              id={`tab-${id}`}
               aria-selected={p.filter === id}
+              aria-controls="thread-list"
+              // Roving tabindex: one tab stop; arrows move focus, Enter/Space activate (manual
+              // activation, so browsing the tabs doesn't clear the selection on every step).
+              tabIndex={p.filter === id ? 0 : -1}
+              onKeyDown={onTabKeyDown}
               onClick={() => p.onFilterChange(id)}
               className="inline-flex items-center"
             >
@@ -306,6 +327,7 @@ export function ThreadList(p: Props) {
 
       <div className="flex h-8 shrink-0 items-center gap-2 border-y border-border px-3">
         <Checkbox
+          tabIndex={0}
           label={allSelected ? 'Deselect all' : 'Select all'}
           checked={allSelected ? true : someSelected ? 'mixed' : false}
           onChange={() => (allSelected || someSelected ? p.onClear() : p.onSelectAll())}
@@ -324,13 +346,19 @@ export function ThreadList(p: Props) {
 
       <div
         ref={scroller}
-        role="listbox"
+        id="thread-list"
+        data-list-scroller
+        // A listbox needs options; empty / loading / error states are plain regions.
+        role={showRows ? 'listbox' : 'region'}
         aria-label={`${p.title} conversations`}
-        aria-multiselectable
+        aria-multiselectable={showRows || undefined}
+        aria-busy={p.isLoading || undefined}
         data-selection-mode={selectionMode}
         data-kbd={kbd}
         onPointerDown={() => setKbd(false)}
-        aria-activedescendant={p.selection.focusedId ? `row-${p.selection.focusedId}` : undefined}
+        aria-activedescendant={
+          showRows && p.selection.focusedId ? `row-${p.selection.focusedId}` : undefined
+        }
         tabIndex={0}
         onKeyDown={onKeyDown}
         onFocus={() => setHasFocus(true)}
@@ -348,7 +376,12 @@ export function ThreadList(p: Props) {
             </Button>
           </div>
         ) : p.isLoading ? (
-          <Skeleton />
+          <>
+            <p role="status" className="sr-only">
+              Loading conversations
+            </p>
+            <Skeleton />
+          </>
         ) : p.items.length === 0 ? (
           <div className="flex flex-col items-center gap-2 px-6 py-16 text-center text-muted">
             <Inbox size={22} />

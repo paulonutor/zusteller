@@ -98,7 +98,7 @@ export function MessageView({ message: m, expanded, onToggle, onOpenLink }: Prop
                   <ImageOff size={14} /> Remote content is blocked to protect your privacy.
                   <button
                     type="button"
-                    className="ml-auto text-accent hover:underline"
+                    className="ml-auto text-[color-mix(in_srgb,var(--accent)_75%,var(--foreground))] hover:underline"
                     onClick={() => setShowRemote(true)}
                   >
                     Load remote images

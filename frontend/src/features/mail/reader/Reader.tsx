@@ -71,7 +71,7 @@ export function Reader(p: Props) {
           </Button>
         </div>
       ) : !p.thread ? (
-        <div className="space-y-3 p-6" aria-busy aria-label="Loading conversation">
+        <div className="space-y-3 p-6" role="status" aria-busy aria-label="Loading conversation">
           <div className="skeleton h-6 w-1/2" />
           <div className="skeleton h-3 w-1/3" />
           <div className="skeleton mt-6 h-3 w-full" />

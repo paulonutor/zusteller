@@ -31,6 +31,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         className="pointer-events-none fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 flex-col gap-2"
         role="status"
         aria-live="polite"
+        aria-atomic="false"
       >
         {toasts.map((t) => (
           <div

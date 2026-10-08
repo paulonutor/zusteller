@@ -37,6 +37,9 @@ const rowFor = (subject: RegExp | string) =>
       ? r.textContent?.includes(subject)
       : subject.test(r.textContent ?? ''),
   )!;
+// Row star / checkbox are pointer-only affordances (nested controls are invalid inside role=option).
+const starOf = (row: HTMLElement) => row.querySelector<HTMLElement>('[data-star]')!;
+const checkOf = (row: HTMLElement) => row.querySelector<HTMLElement>('[data-row-check]')!;
 const waitForRows = () => waitFor(() => expect(rows().length).toBeGreaterThan(0));
 const inboxUnread = () =>
   within(screen.getByRole('navigation', { name: 'Mailboxes' })).getByRole('button', {
@@ -106,12 +109,11 @@ describe('actions', () => {
     const user = setup();
     await waitForRows();
     const row = rowFor('Lunch Thursday');
-    await user.click(within(row).getByRole('button', { name: 'Add star' }));
+    await user.click(starOf(row));
     await waitFor(() =>
-      expect(
-        within(rowFor('Lunch Thursday')).getByRole('button', { name: 'Remove star' }),
-      ).toBeInTheDocument(),
+      expect(starOf(rowFor('Lunch Thursday'))).toHaveAttribute('data-starred', 'true'),
     );
+    expect(rowFor('Lunch Thursday')).toHaveAccessibleName(/Starred/);
     await user.click(screen.getByRole('button', { name: /^Starred/ }));
     await waitFor(() => expect(rowFor('Lunch Thursday')).toBeTruthy());
   });
@@ -151,12 +153,10 @@ describe('actions', () => {
     await waitForRows();
     mail.failNext('setStarred');
     const row = rowFor('Lunch Thursday');
-    await user.click(within(row).getByRole('button', { name: 'Add star' }));
+    await user.click(starOf(row));
     expect(await screen.findByText(/Couldn.t update star/)).toBeInTheDocument();
     await waitFor(() =>
-      expect(
-        within(rowFor('Lunch Thursday')).getByRole('button', { name: 'Add star' }),
-      ).toBeInTheDocument(),
+      expect(starOf(rowFor('Lunch Thursday'))).toHaveAttribute('data-starred', 'false'),
     );
   });
 
@@ -259,7 +259,7 @@ describe('selection and keyboard', () => {
   it('supports checkbox and shift-range selection', async () => {
     const user = setup();
     await waitForRows();
-    await user.click(within(rows()[0]!).getByRole('checkbox'));
+    await user.click(checkOf(rows()[0]!));
     await user.keyboard('{Shift>}');
     await user.click(rows()[2]!);
     await user.keyboard('{/Shift}');

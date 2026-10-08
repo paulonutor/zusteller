@@ -62,7 +62,7 @@ html:is(.dark[data-skin], [data-skin='b']) [data-pane='reader'] > section > .dra
 html:is(.dark[data-skin], [data-skin='b'])
   [data-pane='list']
   > section
-  > div:not([role='listbox']) {
+  > div:not([data-list-scroller]) {
   border-color: var(--row-line);
 }
 /* Rows */

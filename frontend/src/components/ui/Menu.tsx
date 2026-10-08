@@ -23,7 +23,7 @@ export type MenuItemSpec =
   | { kind: 'sub'; label: string; disabled?: boolean; items: MenuItemSpec[] };
 
 const Shortcut = ({ children }: { children: ReactNode }) => (
-  <span className="ml-auto pl-6 text-[12px] opacity-60">{children}</span>
+  <span className="ml-auto pl-6 text-[12px] opacity-70">{children}</span>
 );
 
 function CheckMark({ state }: { state: 'all' | 'some' | 'none' }) {
@@ -84,7 +84,7 @@ export function DropdownMenu({
   'children'
 >) {
   return (
-    <DM.Root>
+    <DM.Root modal={false}>
       <DM.Trigger asChild>{trigger}</DM.Trigger>
       <DM.Portal>
         <DM.Content className={content} sideOffset={4} align="end" {...rest}>
@@ -106,7 +106,7 @@ export function ContextMenu({
   onOpenChange?: (open: boolean) => void;
 }) {
   return (
-    <CM.Root onOpenChange={onOpenChange}>
+    <CM.Root modal={false} onOpenChange={onOpenChange}>
       <CM.Trigger asChild>{children}</CM.Trigger>
       <CM.Portal>
         <CM.Content className={content}>

@@ -86,11 +86,14 @@ export const ThreadRow = memo(function ThreadRow(p: Props) {
           {!t.isRead ? (
             <span
               data-unread-dot
+              aria-hidden="true"
               className="size-2 rounded-full bg-unread group-hover:hidden"
-              aria-label="Unread"
             />
           ) : null}
+          {/* Pointer-only: a nested control inside role=option is invalid ARIA. Keyboard: Space
+              toggles the focused row; selection is exposed through aria-selected. */}
           <Checkbox
+            decorative
             label={`Select conversation: ${t.subject}`}
             checked={p.selected}
             onChange={p.onToggleSelect}
@@ -104,29 +107,35 @@ export const ThreadRow = memo(function ThreadRow(p: Props) {
               data-sender
               className={cn('truncate text-[13.5px]', !t.isRead ? 'font-semibold' : 'font-medium')}
             >
+              {!t.isRead && <span className="sr-only">Unread, </span>}
               {senders(t, p.accountEmail)}
             </span>
             {t.messageCount > 1 && (
               <span className="shrink-0 text-[11px] text-muted">{t.messageCount}</span>
             )}
             <span className="ml-auto flex shrink-0 items-center gap-1 text-[12px] text-muted">
-              {t.hasAttachments && <Paperclip size={12} aria-label="Has attachments" />}
+              {t.hasAttachments && (
+                <>
+                  <Paperclip size={12} aria-hidden="true" />
+                  <span className="sr-only">Has attachments, </span>
+                </>
+              )}
+              {t.isStarred && <span className="sr-only">Starred, </span>}
               {formatListDate(t.lastMessageAt)}
             </span>
-            <button
-              type="button"
+            {/* Pointer-only (see checkbox above). Keyboard: S; also toolbar and context menu. */}
+            <span
               data-star
-              tabIndex={-1}
-              aria-label={t.isStarred ? 'Remove star' : 'Add star'}
-              aria-pressed={t.isStarred}
+              data-starred={t.isStarred}
+              aria-hidden="true"
               onClick={(e) => {
                 e.stopPropagation();
                 p.onToggleStar();
               }}
-              className="no-drag -mr-1 rounded p-0.5 text-faint hover:text-muted"
+              className="no-drag -mr-1 inline-flex rounded p-0.5 text-faint hover:text-muted"
             >
               <Star size={15} className={cn(t.isStarred && 'fill-star text-star')} />
-            </button>
+            </span>
           </div>
           <div data-line2 className="min-w-0">
             <div

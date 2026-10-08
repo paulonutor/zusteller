@@ -57,7 +57,7 @@ html.dark[data-skin='a'] nav h2 {
   color: var(--faint);
   padding-top: 18px;
 }
-html.dark[data-skin='a'] [data-pane='list'] > section > div:not([role='listbox']) {
+html.dark[data-skin='a'] [data-pane='list'] > section > div:not([data-list-scroller]) {
   background: var(--background);
 }
 html.dark[data-skin='a'] [role='option'] [class~='text-[13.5px]'] {

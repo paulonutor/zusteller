@@ -49,7 +49,7 @@
 html:not([data-window-inactive])[data-skin='b']
   [role='listbox']:focus-within
   [role='option'][aria-selected='true']
-  [role='checkbox'][aria-checked='true'] {
+  [data-row-check][data-checked='true'] {
   background: var(--on-selection);
   border-color: var(--on-selection);
   color: var(--selection);

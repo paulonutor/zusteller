@@ -43,7 +43,7 @@ html:not(.dark)[data-skin='b'] {
   --window: #e9e9ec;
   --background: #ffffff;
   --foreground: #1d1d1f;
-  --muted: #6e6e73;
+  --muted: #66666b; /* was #6e6e73: 4.1-4.45:1 on hover/selection tints */
   --faint: #98989d;
   --border: rgb(0 0 0 / 0.08);
   --sidebar: rgb(246 246 248 / 0.7);
@@ -104,6 +104,9 @@ html:root[data-skin='b'] nav button {
   height: 30px;
   border-radius: 9px;
   padding-inline: 10px;
+}
+html:root[data-skin='b'] nav button[aria-current='page'] .tabular-nums {
+  color: var(--foreground); /* muted on the selected-item tint is < 4.5:1 */
 }
 html:root[data-skin='b'] nav ul {
   row-gap: 2px;
@@ -197,6 +200,9 @@ html:root[data-skin='b'] [role='tab']:hover {
   background: var(--hover);
   color: var(--foreground);
 }
+html:root[data-skin='b'] [role='tab'][aria-selected='true']:hover {
+  background: transparent; /* accent text on the hover tint is < 4.5:1 */
+}
 html:root[data-skin='b'] [role='tab'][aria-selected='true'] {
   color: var(--accent);
   border-bottom-color: var(--accent);
@@ -213,20 +219,20 @@ html:root[data-skin='b'] [role='tab'] [data-count] {
 }
 html:root[data-skin='b'] [role='tab'][aria-selected='true'] [data-count] {
   background: color-mix(in srgb, var(--accent) 22%, transparent);
-  color: var(--accent);
+  color: color-mix(in srgb, var(--accent) 70%, var(--foreground));
 }
 
 /* Gmail-like list toolbar */
 html:root[data-skin='b']
   [data-pane='list']
   > section
-  > div:not([role='listbox']):not([role='tablist']) {
+  > div:not([data-list-scroller]):not([role='tablist']) {
   border: 0;
   height: 44px;
   padding-inline: 14px;
   gap: 10px;
 }
-html:root[data-skin='b'] [data-pane='list'] [role='checkbox'] {
+html:root[data-skin='b'] [data-pane='list'] :is([role='checkbox'], [data-row-check]) {
   width: 18px;
   height: 18px;
   border-width: 2px;
@@ -234,11 +240,12 @@ html:root[data-skin='b'] [data-pane='list'] [role='checkbox'] {
   background: transparent;
 }
 html:root[data-skin='b'] [data-pane='list'] [role='checkbox'][aria-checked='true'],
-html:root[data-skin='b'] [data-pane='list'] [role='checkbox'][aria-checked='mixed'] {
+html:root[data-skin='b'] [data-pane='list'] [role='checkbox'][aria-checked='mixed'],
+html:root[data-skin='b'] [data-pane='list'] [data-row-check][data-checked='true'] {
   background: var(--accent);
   border-color: var(--accent);
 }
-html:root[data-skin='b'] [data-pane='list'] [role='checkbox'] svg {
+html:root[data-skin='b'] [data-pane='list'] :is([role='checkbox'], [data-row-check]) svg {
   width: 13px;
   height: 13px;
 }
@@ -301,7 +308,7 @@ html:root[data-skin='b'] [role='option'] [data-unread-dot] {
   background: var(--unread);
   transition: opacity 120ms ease;
 }
-html:root[data-skin='b'] [role='option'] [role='checkbox'] {
+html:root[data-skin='b'] [role='option'] [data-row-check] {
   display: flex !important;
   position: absolute;
   inset: 0;
@@ -321,17 +328,15 @@ html:root[data-skin='b'] [role='option'] [role='checkbox'] {
 }
 /* Reveal the checkbox, hide avatar + unread dot. Hover only counts over the avatar itself
    (not the whole row). */
-html:root[data-skin='b'] [role='option'] [data-lead]:hover [role='checkbox'],
-html:root[data-skin='b'] [data-kbd='true'] [role='option'][data-focused='true'] [role='checkbox'],
-html:root[data-skin='b'] [role='option'] [role='checkbox']:focus-visible,
-html:root[data-skin='b'] [role='listbox'][data-selection-mode='true'] [role='checkbox'] {
+html:root[data-skin='b'] [role='option'] [data-lead]:hover [data-row-check],
+html:root[data-skin='b'] [data-kbd='true'] [role='option'][data-focused='true'] [data-row-check],
+html:root[data-skin='b'] [role='listbox'][data-selection-mode='true'] [data-row-check] {
   opacity: 1;
   pointer-events: auto;
   transform: none;
 }
 html:root[data-skin='b'] [role='option'] [data-lead]:hover [data-avatar],
 html:root[data-skin='b'] [data-kbd='true'] [role='option'][data-focused='true'] [data-avatar],
-html:root[data-skin='b'] [role='option']:has([role='checkbox']:focus-visible) [data-avatar],
 html:root[data-skin='b'] [role='listbox'][data-selection-mode='true'] [data-avatar] {
   opacity: 0;
   transform: scale(0.8);
@@ -344,7 +349,7 @@ html:root[data-skin='b'] [role='listbox'][data-selection-mode='true'] [data-unre
 /* Checked: round checkmark filling the avatar circle. */
 html:root[data-skin='b']
   [role='option'][aria-selected='true']
-  [role='checkbox'][aria-checked='true'] {
+  [data-row-check][data-checked='true'] {
   width: 32px;
   height: 32px;
   border-radius: 999px;
@@ -354,7 +359,7 @@ html:root[data-skin='b']
 }
 html:root[data-skin='b']
   [role='option'][aria-selected='true']
-  [role='checkbox'][aria-checked='true']
+  [data-row-check][data-checked='true']
   svg {
   width: 17px;
   height: 17px;
@@ -375,8 +380,7 @@ html:root[data-skin='b'] [role='option'] [data-star] {
 }
 html:root[data-skin='b'] [role='option']:hover [data-star],
 html:root[data-skin='b'] [data-kbd='true'] [role='option'][data-focused='true'] [data-star],
-html:root[data-skin='b'] [role='option'] [data-star]:focus-visible,
-html:root[data-skin='b'] [role='option'] [data-star][aria-pressed='true'] {
+html:root[data-skin='b'] [role='option'] [data-star][data-starred='true'] {
   opacity: 1;
   pointer-events: auto;
 }
@@ -390,7 +394,7 @@ html:root[data-skin='b'] [role='option'] [data-star] svg {
 @media (prefers-reduced-motion: reduce) {
   html:root[data-skin='b'] [role='option'] [data-avatar],
   html:root[data-skin='b'] [role='option'] [data-unread-dot],
-  html:root[data-skin='b'] [role='option'] [role='checkbox'],
+  html:root[data-skin='b'] [role='option'] [data-row-check],
   html:root[data-skin='b'] [role='option'] [data-star] {
     transition: none;
   }
@@ -513,7 +517,7 @@ html:root[data-skin='b'] ul[aria-label='Attachments'] li {
 /* Generous hit area: the visible circle is small, so an invisible extension (part of the button,
    and of its hover zone) turns near-misses into a toggle instead of a row click that would replace
    the selection. Only active while the checkbox is revealed (it is pointer-events: none otherwise). */
-html:root[data-skin='b'] [role='option'] [role='checkbox']::before {
+html:root[data-skin='b'] [role='option'] [data-row-check]::before {
   content: '';
   position: absolute;
   inset: -16px -10px;
