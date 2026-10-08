@@ -75,21 +75,39 @@ function Skeleton() {
   );
 }
 
-/** Fetch the next page near the bottom, and keep fetching while the first pages don't fill the viewport. */
+/** Extra pages fetched automatically to fill the viewport before waiting for user scroll. */
+export const MAX_AUTO_PAGES = 3;
+
+/**
+ * Fetch the next page near the bottom, and keep fetching (a bounded number of pages) while the
+ * first pages don't fill the viewport. Never auto-loads while an error is showing.
+ */
 function useLoadMoreOnScroll(
   ref: React.RefObject<HTMLDivElement | null>,
   hasMore: boolean,
   busy: boolean,
+  hasError: boolean,
+  resetKey: string,
+  itemsLength: number,
   fetchMore: () => void,
 ) {
+  const auto = useRef({ key: resetKey, count: 0 });
   useEffect(() => {
+    if (auto.current.key !== resetKey) auto.current = { key: resetKey, count: 0 };
     const el = ref.current;
-    if (el && hasMore && !busy && el.scrollHeight <= el.clientHeight) fetchMore();
-  });
+    if (!el || !hasMore || busy || hasError) return;
+    if (el.scrollHeight > el.clientHeight || auto.current.count >= MAX_AUTO_PAGES) return;
+    auto.current.count++;
+    fetchMore();
+    // fetchMore is an inline closure; the inputs that matter are listed explicitly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasMore, busy, hasError, resetKey, itemsLength]);
   return () => {
     const el = ref.current;
-    if (el && hasMore && !busy && el.scrollHeight - el.scrollTop - el.clientHeight < 300)
+    if (el && hasMore && !busy && el.scrollHeight - el.scrollTop - el.clientHeight < 300) {
+      auto.current.count = 0; // user intent: allow more auto-fill afterwards
       fetchMore();
+    }
   };
 }
 
@@ -158,7 +176,15 @@ export function ThreadList(p: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [p.selection.focusedId]);
 
-  const onScroll = useLoadMoreOnScroll(scroller, p.hasMore, p.isFetchingMore, p.onFetchMore);
+  const onScroll = useLoadMoreOnScroll(
+    scroller,
+    p.hasMore,
+    p.isFetchingMore,
+    !!p.error,
+    `${p.filter}|${p.title}|${p.searchText}`,
+    p.items.length,
+    p.onFetchMore,
+  );
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     setKbd(true);

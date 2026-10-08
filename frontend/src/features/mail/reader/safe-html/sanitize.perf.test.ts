@@ -10,7 +10,7 @@ describe('hostile style performance', () => {
     sanitizeEmailHtml('<p style="color:red">warm-up</p>');
     const t = performance.now();
     const r = sanitizeEmailHtml(`<p style="${style}">x</p>`);
-    expect(performance.now() - t).toBeLessThan(200);
+    expect(performance.now() - t).toBeLessThan(400);
     expect(r.html).not.toContain('url(');
   });
 

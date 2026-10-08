@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { App } from '@/app/App';
@@ -61,6 +61,12 @@ function bigSeed(n: number) {
 
 async function setup(n = N) {
   const mail = new MockMailService(bigSeed(n), { latency: 0 });
+  let pages = 0;
+  const getThreads = mail.getThreads.bind(mail);
+  mail.getThreads = (q) => {
+    pages++;
+    return getThreads(q);
+  };
   const services: Services = {
     mail,
     platform: {
@@ -76,8 +82,12 @@ async function setup(n = N) {
   render(<App services={services} />);
   const list = await screen.findByRole('listbox', { name: /conversations/i });
   fill = true;
-  // Wait until enough pages loaded to cross the virtualization threshold.
-  await waitFor(() => expect(rows()[0]?.getAttribute('aria-posinset')).toBe('1'));
+  // Automatic fill is capped, so scroll (user intent) until enough pages have loaded to cross
+  // the virtualization threshold and the 150-row keyboard test.
+  await waitFor(() => {
+    fireEvent.scroll(list);
+    expect(pages).toBeGreaterThanOrEqual(8); // 30 rows per page
+  });
   fill = false;
   return { user, list, mount: performance.now() - t0 };
 }
