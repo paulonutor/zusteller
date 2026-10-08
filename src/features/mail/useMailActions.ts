@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { useQueryClient, type InfiniteData, type QueryClient } from '@tanstack/react-query';
 import { mailKeys, type ID, type Page, type ThreadSummary } from '@/domain/mail';
 import { useServices } from '@/app/services';
@@ -52,9 +52,13 @@ export function useMailActions(accountId: ID | undefined) {
   const qc = useQueryClient();
   const toast = useToast();
 
-  const run = useCallback(
-    async (action: PerformAction, threadIds: ID[], opts: RunOptions = {}) => {
-      if (!accountId || threadIds.length === 0) return false;
+  // Identical action on identical threads already in flight (double-click, key mashing) is one
+  // mutation: later callers share the first call's result instead of firing the service again.
+  const inFlight = useRef(new Map<string, Promise<boolean>>());
+
+  const execute = useCallback(
+    async (action: PerformAction, threadIds: ID[], opts: RunOptions) => {
+      if (!accountId) return false;
       const ids = new Set(threadIds);
       let rollback: (() => void) | undefined;
       try {
@@ -106,6 +110,19 @@ export function useMailActions(accountId: ID | undefined) {
       }
     },
     [accountId, mail, qc, toast],
+  );
+
+  const run = useCallback(
+    (action: PerformAction, threadIds: ID[], opts: RunOptions = {}): Promise<boolean> => {
+      if (!accountId || threadIds.length === 0) return Promise.resolve(false);
+      const dedupeKey = `${action}|${opts.labelId ?? ''}|${[...new Set(threadIds)].sort().join(',')}`;
+      const pending = inFlight.current.get(dedupeKey);
+      if (pending) return pending;
+      const p = execute(action, threadIds, opts).finally(() => inFlight.current.delete(dedupeKey));
+      inFlight.current.set(dedupeKey, p);
+      return p;
+    },
+    [accountId, execute],
   );
 
   const refresh = useCallback(
