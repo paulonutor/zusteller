@@ -25,6 +25,9 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    // Integration tests drive the whole app through userEvent; generous limits keep them stable on
+    // loaded or 2-vCPU CI machines without changing what is asserted.
+    testTimeout: 20_000,
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}', 'tests/**/*.test.{ts,tsx}'],
   },

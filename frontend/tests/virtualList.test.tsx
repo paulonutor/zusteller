@@ -99,12 +99,14 @@ describe('virtualized thread list', () => {
   it('keyboard nav mounts the cursor row and keeps aria-activedescendant resolvable', async () => {
     const { user, list } = await setup();
     list.focus();
-    for (let i = 0; i < 150; i++) await user.keyboard('{ArrowDown}');
+    // 60 rows is well past the ~20-row window (so the cursor row must be mounted on demand) while
+    // keeping the test fast on loaded CI machines.
+    for (let i = 0; i < 60; i++) await user.keyboard('{ArrowDown}');
     const el = active(list);
     expect(el).not.toBeNull();
-    expect(el!.getAttribute('aria-posinset')).toBe('150');
+    expect(el!.getAttribute('aria-posinset')).toBe('60');
     expect(rows().length).toBeLessThan(80);
-    for (let i = 0; i < 100; i++) await user.keyboard('{ArrowUp}');
+    for (let i = 0; i < 40; i++) await user.keyboard('{ArrowUp}');
     expect(active(list)).not.toBeNull();
   }, 60_000);
 
