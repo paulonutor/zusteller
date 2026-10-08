@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ThreadSummary } from '@/domain/mail';
-import { flightEndsAt } from '../dropAnimation';
+import { COLLAPSE_MS, flightEndsAt } from '../dropAnimation';
 
 /** Keep in sync with the `data-state` animations in mail.css. */
 export const ROW_EXIT_MS = 150;
@@ -62,7 +62,11 @@ export function useListMotion(
       const k = `x:${g.thread.id}`;
       if (scheduled.current.has(k)) continue;
       scheduled.current.add(k);
-      const hold = Math.max(ROW_EXIT_MS + 30, flightEndsAt(g.thread.id) - Date.now());
+      const flying = flightEndsAt(g.thread.id) > 0;
+      // A flying row still needs its full (longer) gap collapse, even if the list updated late.
+      const hold = flying
+        ? Math.max(COLLAPSE_MS + 40, flightEndsAt(g.thread.id) - Date.now())
+        : ROW_EXIT_MS + 30;
       setTimeout(() => {
         scheduled.current.delete(k);
         setGhosts((cur) => cur.filter((x) => x.thread.id !== g.thread.id));

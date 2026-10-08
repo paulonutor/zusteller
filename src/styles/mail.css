@@ -643,14 +643,14 @@ html:root [data-row-slot][data-state='exit'] {
   animation: slot-exit 150ms cubic-bezier(0.3, 0, 0.8, 0.4) forwards;
 }
 /* A copy of the row is flying to a drop target. The (invisible) real row keeps its gap open until
-   the copy lands (`wait`), then the gap closes (`go`, once the list has dropped the row). */
+   the copy is on its way (`wait`), then the gap closes (`go`, once the list has dropped the row). */
 html:root [data-row-slot][data-state='exit'][data-fly='wait'] {
   animation: none;
   opacity: 1;
   transform: none;
 }
 html:root [data-row-slot][data-state='exit'][data-fly='go'] {
-  animation: slot-collapse 220ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: slot-collapse 280ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
 }
 html:root [data-row-slot][data-state='enter'] {
   animation: slot-enter 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;

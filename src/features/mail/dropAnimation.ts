@@ -8,7 +8,9 @@ import type { DropTarget } from './dnd';
 
 const FLY_MS = 320;
 /** Keep in sync with `slot-collapse` in mail.css. */
-const COLLAPSE_MS = 220;
+export const COLLAPSE_MS = 280;
+/** The gap starts closing this far into the flight, while the copy is still leaving. */
+const GAP_START = 0.3;
 const MAX_FLYERS = 5;
 /** Fallback if the move never removes the row (it failed): put everything back. */
 const RESTORE_AFTER_MS = 1800;
@@ -54,13 +56,22 @@ export function flyRowsToTarget(ids: ID[], target: DropTarget) {
     });
     document.body.append(clone);
     row.style.opacity = '0';
-    // The gap stays open while the copy flies; `go` (set when it lands) lets the slot collapse.
+    // The gap stays open at first; `go` (a third into the flight) lets the slot collapse.
     slot.dataset.fly = 'wait';
 
     const dx = to.left + 24 - from.left;
     const dy = to.top + to.height / 2 - (from.top + from.height / 2);
     const delay = i * 45;
-    flights.set(id, Date.now() + delay + FLY_MS + COLLAPSE_MS + 60);
+    flights.set(id, Date.now() + delay + FLY_MS * GAP_START + COLLAPSE_MS + 60);
+    // Close the gap on our own clock, not when the server round trip finishes.
+    setTimeout(
+      () => {
+        if (!slot.isConnected || !slot.dataset.fly) return;
+        slot.dataset.state = 'exit';
+        slot.dataset.fly = 'go';
+      },
+      delay + FLY_MS * GAP_START,
+    );
     const fly = clone.animate(
       [
         { transform: 'translate(0,0) scale(1)', opacity: 1 },
@@ -75,13 +86,13 @@ export function flyRowsToTarget(ids: ID[], target: DropTarget) {
     );
     fly.onfinish = fly.oncancel = () => {
       clone.remove();
-      if (slot.isConnected) slot.dataset.fly = 'go';
     };
     // If the move never removes the row (it failed), put it back.
     setTimeout(() => {
       flights.delete(id);
       if (!row.isConnected) return;
       row.style.opacity = '';
+      delete slot.dataset.state;
       delete slot.dataset.fly;
     }, RESTORE_AFTER_MS);
   });
