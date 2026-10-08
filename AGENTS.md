@@ -31,6 +31,7 @@ Frontend (run from `frontend/`):
 | Typecheck / lint / test | `npm run typecheck` · `npm run lint` · `npm test` (also `npm run test:watch`, `npm run format`) |
 | Production build | `npm run build` (typecheck + vite) |
 | Accessibility audit (needs dev server) | `npm run a11y` (axe via Playwright over many states, light/dark, host+vibrancy, `?seed=big`; `CHROMIUM_PATH=...`, `A11Y_VERBOSE=1`; non-zero exit on violations; known design-token findings are listed, not failing). Structure/ARIA also asserted in `tests/a11y.test.tsx` |
+| Visual regression | `npm run test:visual` (Playwright `toHaveScreenshot`, baselines in `frontend/tests-visual/__screenshots__/`, starts its own dev server on :5304, clock frozen to the seed's now). After an intentional visual change run `npm run test:visual:update`, LOOK at the changed PNGs, commit them. Baselines are `-linux`; regenerate on the CI runner via the manual `update-visual-baselines` workflow if fonts differ |
 | Screenshots (needs dev server) | `CHROMIUM_PATH=/opt/pw-browsers/chromium node scripts/screenshots.mjs http://localhost:5173 screenshots` |
 
 Hosts (macOS; details in each `hosts/*/README.md`):
@@ -40,7 +41,7 @@ Hosts (macOS; details in each `hosts/*/README.md`):
 | Wails (from `hosts/wails/`; Go ≥ 1.25 + Task) | `task dev:vite` then `task dev` · `task dev:glass` · `task dev:opaque` · `task build` · `task test` · `task vet` |
 | Tauri (from `hosts/tauri/`) | `npm install`, then `npm run dev` · `dev:opaque` · `build` · `build:opaque` · `check` (cargo check) |
 
-CI (`.github/workflows/`): `frontend.yml` runs typecheck, lint, test and build on every push/PR; `hosts.yml` runs Wails vet/build/test and
+CI (`.github/workflows/`): `frontend.yml` runs typecheck, lint, test and build (job `check`) plus visual regression (job `visual`) on every push/PR; `update-visual-baselines.yml` (manual) regenerates baselines and uploads them as an artifact (never auto-commits); `hosts.yml` runs Wails vet/build/test and
 Tauri `cargo check` when `hosts/**` or `frontend/src/platform/**` change.
 
 Before every push: typecheck, lint, tests and build must all pass. Look at screenshots for any visual change.

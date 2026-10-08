@@ -19,7 +19,16 @@ const hostRestricted = [
 ];
 
 export default tseslint.config(
-  { ignores: ['dist', 'node_modules', 'coverage', 'screenshots'] },
+  {
+    ignores: [
+      'dist',
+      'node_modules',
+      'coverage',
+      'screenshots',
+      'test-results',
+      'playwright-report',
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

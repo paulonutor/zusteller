@@ -31,3 +31,6 @@ screenshots/
 
 # Agent worktrees
 .claude/worktrees/
+
+test-results/
+playwright-report/
