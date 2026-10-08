@@ -34,10 +34,31 @@ export const formatFullDate = (iso: string) =>
 
 export const formatAddress = (a: Address) => (a.name ? `${a.name} <${a.email}>` : a.email);
 
+const channel = (v: number) => {
+  const c = v / 255;
+  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+};
+
+/** Text colour for a chip: white, or near-black when white would fall below 4.5:1. */
+export function chipTextColor(color: string): string {
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim());
+  if (!m) return '#fff';
+  const hex = m[1]!.length === 3 ? [...m[1]!].map((c) => c + c).join('') : m[1]!;
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  // The chip paints the label colour mixed 80/20 with a theme base; ~#4a4a4f is the middle of both.
+  const mix = (v: number, base: number) => 0.8 * v + 0.2 * base;
+  const lum =
+    0.2126 * channel(mix(r!, 0x4a)) +
+    0.7152 * channel(mix(g!, 0x4a)) +
+    0.0722 * channel(mix(b!, 0x4f));
+  return 1.05 / (lum + 0.05) >= 4.5 ? '#fff' : '#111';
+}
+
 /** Tinted chip that stays legible in both themes. */
 export const labelChipStyle = (color = '#888'): CSSProperties =>
   ({
     '--chip': color,
+    '--chip-fg': chipTextColor(color),
     background: `color-mix(in srgb, ${color} 18%, transparent)`,
     color: `color-mix(in srgb, ${color} 65%, var(--foreground))`,
   }) as CSSProperties;

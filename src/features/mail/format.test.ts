@@ -21,3 +21,14 @@ describe('avatarHue', () => {
     expect(avatarHue('a@b.c')).toBeLessThan(360);
   });
 });
+
+describe('chipTextColor', () => {
+  it('uses white on dark label colours and dark text on light ones', async () => {
+    const { chipTextColor } = await import('./format');
+    expect(chipTextColor('#0b804b')).toBe('#fff');
+    expect(chipTextColor('#16a766')).toBe('#111');
+    expect(chipTextColor('#fad165')).toBe('#111');
+    expect(chipTextColor('#b9e4d0')).toBe('#111');
+    expect(chipTextColor('not-a-colour')).toBe('#fff');
+  });
+});

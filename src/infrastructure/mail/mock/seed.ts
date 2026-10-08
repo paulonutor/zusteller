@@ -185,7 +185,7 @@ export function createSeedData(): SeedData {
     usr('label-work', 'Work', '#1a73e8'),
     usr('label-personal', 'Personal', '#e91e63'),
     usr('label-finance', 'Finance', '#2e7d32'),
-    usr('label-travel', 'Travel', '#ef6c00'),
+    usr('label-travel', 'Travel', '#b85a00'),
     usr('label-receipts', 'Receipts', '#6d4c41'),
     usr('label-newsletters', 'Newsletters', '#8e24aa'),
     usr('label-zusteller', 'Zusteller', '#00897b'),
