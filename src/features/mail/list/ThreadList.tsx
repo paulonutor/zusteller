@@ -335,7 +335,7 @@ export function ThreadList(p: Props) {
         onFocus={() => setHasFocus(true)}
         onBlur={() => setHasFocus(false)}
         onScroll={onScroll}
-        className="relative min-h-0 flex-1 overflow-y-auto outline-none focus-visible:outline-none"
+        className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden outline-none focus-visible:outline-none"
       >
         {p.error && !p.items.length ? (
           <div className="flex flex-col items-center gap-2 px-6 py-16 text-center text-muted">
