@@ -121,7 +121,7 @@ export const ThreadRow = memo(function ThreadRow(p: Props) {
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-1.5">
+          <div className="flex items-center gap-1.5">
             <span
               data-sender
               className={cn('truncate text-[13.5px]', !t.isRead ? 'font-semibold' : 'font-medium')}
