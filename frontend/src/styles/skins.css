@@ -830,3 +830,13 @@ html:not([data-window-inactive])[data-skin='b']
   border-color: var(--on-selection);
   color: var(--selection);
 }
+
+/* Generous hit area: the visible circle is small, so an invisible extension (part of the button,
+   and of its hover zone) turns near-misses into a toggle instead of a row click that would replace
+   the selection. Only active while the checkbox is revealed (it is pointer-events: none otherwise). */
+html:not(.__)[data-skin='b'] [role='option'] [role='checkbox']::before {
+  content: '';
+  position: absolute;
+  inset: -16px -10px;
+  border-radius: 14px;
+}
