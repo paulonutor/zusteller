@@ -92,3 +92,33 @@ describe('startup failure', () => {
     await waitFor(() => expect(screen.getAllByRole('option').length).toBeGreaterThan(0));
   });
 });
+
+describe('list header selection state', () => {
+  it('opening one thread is not "1 selected"; explicit multi-select is', async () => {
+    const mail = new MockMailService(createSeedData(), { latency: 0 });
+    const platform = {
+      showNotification: vi.fn(),
+      setBadge: vi.fn().mockResolvedValue(undefined),
+      openExternal: vi.fn(),
+      subscribeMenuActions: () => () => undefined,
+    };
+    const user = userEvent.setup();
+    render(<App services={{ mail, platform }} />);
+    await waitFor(() => expect(screen.getAllByRole('option').length).toBeGreaterThan(1));
+
+    await user.click(screen.getAllByRole('option')[1]!);
+    expect(screen.queryByText(/\d+ selected/)).not.toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Select all' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    );
+
+    screen.getByRole('listbox').focus();
+    await user.keyboard('{Control>}a{/Control}');
+    expect(await screen.findByText(/\d+ selected/)).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Deselect all' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+  });
+});

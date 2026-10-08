@@ -123,6 +123,8 @@ export function ThreadList(p: Props) {
   const [multi, setMulti] = useState(false);
   // Keyboard modality: the focus cursor only reveals row controls while keys drive the list.
   const [kbd, setKbd] = useState(false);
+  // The header's select-all state and count only reflect an explicit multi-selection; merely opening
+  // one thread (a single selected row) must not look like "1 selected".
   const selectionMode = someSelected && (multi || p.selection.selected.size > 1);
 
   const showRows = !p.isLoading && p.items.length > 0;
@@ -328,15 +330,15 @@ export function ThreadList(p: Props) {
       <div className="flex h-8 shrink-0 items-center gap-2 border-y border-border px-3">
         <Checkbox
           tabIndex={0}
-          label={allSelected ? 'Deselect all' : 'Select all'}
-          checked={allSelected ? true : someSelected ? 'mixed' : false}
-          onChange={() => (allSelected || someSelected ? p.onClear() : p.onSelectAll())}
+          label={selectionMode && allSelected ? 'Deselect all' : 'Select all'}
+          checked={selectionMode ? (allSelected ? true : 'mixed') : false}
+          onChange={() => (selectionMode ? p.onClear() : p.onSelectAll())}
         />
         <Button size="sm" aria-label="Refresh" title="Refresh" onClick={p.onRefresh}>
           <RefreshCw size={13} className={cn(p.isFetching && 'animate-spin')} />
         </Button>
         <span className="ml-auto text-[12px] text-muted" aria-live="polite">
-          {someSelected
+          {selectionMode
             ? `${p.selection.selected.size} selected`
             : p.searchText
               ? 'Search results'
