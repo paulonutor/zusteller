@@ -37,7 +37,12 @@ export const dragRegionProps = { 'data-tauri-drag-region': '' } as const;
 /** Mirrors window focus into `data-window-inactive` so selection can turn gray like native lists. */
 export function trackWindowFocus(): void {
   const root = document.documentElement;
-  const sync = () => root.toggleAttribute('data-window-inactive', !document.hasFocus());
+  const sync = () => {
+    root.toggleAttribute('data-window-inactive', !document.hasFocus());
+    // The accent colour can change in System Settings while we are in the background. Changing an
+    // inherited custom property forces every system-colour consumer to be re-resolved.
+    root.style.setProperty('--accent-tick', String(Date.now()));
+  };
   window.addEventListener('focus', sync);
   window.addEventListener('blur', sync);
   sync();

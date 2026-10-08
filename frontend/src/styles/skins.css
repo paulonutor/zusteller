@@ -816,6 +816,14 @@ html.dark[data-skin='c'] [data-pane='reader'] article > button {
     --accent: AccentColor;
   }
 }
+/* WebKit's own dynamic system colour (what NSColor.controlAccentColor is): preferred when present,
+   it tracks System Settings > Appearance > Accent colour. Declared last so it wins. */
+@supports (color: -apple-system-control-accent) {
+  :root[data-host][data-skin] {
+    --sel-accent: -apple-system-control-accent;
+    --accent: -apple-system-control-accent;
+  }
+}
 :root[data-host][data-skin] {
   --sel-accent-text: #ffffff;
   --accent-fg: #ffffff;

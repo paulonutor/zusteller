@@ -89,21 +89,39 @@ func main() {
 
 	app.Menu.Set(buildMenu(app))
 
+	opts := platform.ParseWindowOptions(os.Getenv)
+	mac := application.MacWindow{
+		// Hidden titlebar, full-size content, genuine traffic lights, inset further (Unified toolbar style).
+		TitleBar: application.MacTitleBarHiddenInsetUnified,
+		Backdrop: application.MacBackdropNormal,
+	}
+	// Opaque by default. Vibrancy is an opt-in experiment (see README): translucent backdrop +
+	// transparent window; the webview itself only turns transparent with -tags private_mac_apis.
+	background := application.NewRGBA(28, 28, 30, 255)
+	if opts.Vibrancy {
+		background = application.NewRGBA(0, 0, 0, 0)
+		mac.Backdrop = application.MacBackdropTranslucent
+		if opts.Glass {
+			mac.Backdrop = application.MacBackdropLiquidGlass
+		}
+	}
+	switch opts.Appearance {
+	case "dark":
+		mac.Appearance = application.NSAppearanceNameDarkAqua
+	case "light":
+		mac.Appearance = application.NSAppearanceNameAqua
+	}
+
 	app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Name:      "main",
-		Title:     "zusteller",
-		Width:     1280,
-		Height:    800,
-		MinWidth:  900,
-		MinHeight: 600,
-		URL:       "/",
-		// Transparent so a native backdrop can show through the React sidebar.
-		BackgroundColour: application.NewRGBA(0, 0, 0, 0),
-		Mac: application.MacWindow{
-			Backdrop: application.MacBackdropTranslucent,
-			// Hidden titlebar, full-size content, genuine traffic lights, inset further (Unified toolbar style).
-			TitleBar: application.MacTitleBarHiddenInsetUnified,
-		},
+		Name:             "main",
+		Title:            "zusteller",
+		Width:            1280,
+		Height:           800,
+		MinWidth:         900,
+		MinHeight:        600,
+		URL:              opts.URL,
+		BackgroundColour: background,
+		Mac:              mac,
 	})
 
 	if err := app.Run(); err != nil {

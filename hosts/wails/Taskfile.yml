@@ -24,6 +24,16 @@ tasks:
     cmds:
       - FRONTEND_DEVSERVER_URL=http://localhost:5173 go run {{.DEV_TAGS}} .
 
+  dev:vibrancy:
+    desc: EXPERIMENT (macOS) - translucent backdrop + transparent webview. Uses the private_mac_apis build tag.
+    cmds:
+      - ZUSTELLER_VIBRANCY=1 FRONTEND_DEVSERVER_URL=http://localhost:5173 go run -tags private_mac_apis {{.DEV_TAGS}} .
+
+  dev:vibrancy:glass:
+    desc: EXPERIMENT (macOS 15+) - like dev:vibrancy but with Liquid Glass; ZUSTELLER_APPEARANCE=dark|light optional
+    cmds:
+      - ZUSTELLER_VIBRANCY=1 ZUSTELLER_BACKDROP=glass FRONTEND_DEVSERVER_URL=http://localhost:5173 go run -tags private_mac_apis {{.DEV_TAGS}} .
+
   build:frontend:
     desc: Build ../../frontend into ./appdist (embedded; build artifact only)
     dir: ../../frontend
