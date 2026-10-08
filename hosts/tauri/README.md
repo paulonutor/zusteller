@@ -21,7 +21,7 @@ npm run dev            # native vibrancy (default): transparent window + sidebar
 npm run dev:opaque     # plain opaque window (overlay config) for comparison / fallback
 ```
 Vibrancy is configured in `src-tauri/tauri.conf.json` (`macOSPrivateApi`, `transparent`, `windowEffects: sidebar`, window `url`
-`index.html?vibrancy=1`) and requires Tauri's `macos-private-api` Cargo feature (a private AppKit API), which must match the config.
+`index.html?vibrancy=1`) and uses a private AppKit API for transparency. In Tauri 2.12.1 the `macos-private-api` Cargo feature/config is a no-op (the APIs are always compiled in; the private WKWebView key is set whenever `transparent` is requested). The feature is still declared in `Cargo.toml` so it matches the config on older versions.
 `dev:opaque`/`build:opaque` merge `src-tauri/tauri.opaque.conf.json`; config merge replaces arrays, so it repeats the whole window
 definition — keep it in sync with the base config.
 
