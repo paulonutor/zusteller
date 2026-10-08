@@ -41,9 +41,12 @@ for (const scheme of ['light', 'dark'] as const) {
   test.describe(`default skin / ${scheme}`, () => {
     test.use({ colorScheme: scheme });
 
-    const shot = async (page: Page, name: string) => {
+    const shot = async (page: Page, name: string, maxDiffPixelRatio?: number) => {
       await page.evaluate(() => document.fonts.ready);
-      await expect(page).toHaveScreenshot(`${name}-${scheme}.png`, { caret: 'hide' });
+      await expect(page).toHaveScreenshot(`${name}-${scheme}.png`, {
+        caret: 'hide',
+        ...(maxDiffPixelRatio === undefined ? {} : { maxDiffPixelRatio }),
+      });
     };
 
     test('inbox', async ({ page }) => {
@@ -63,7 +66,10 @@ for (const scheme of ['light', 'dark'] as const) {
       await openThread(page, /Hacker Newsletter #712/);
       await waitForHtmlBody(page);
       await page.mouse.move(640, 795);
-      await shot(page, 'thread-html');
+      // The sandboxed iframe's text measures ~2% wider on the CI runner than in the Playwright
+      // image (same Inter, same flags; cause unknown), so Docker- and CI-made baselines differ by
+      // ~0.8% of the frame, all of it inside the email body. Everything else matches exactly.
+      await shot(page, 'thread-html', 0.012);
     });
 
     test('avatar hover shows checkbox', async ({ page }) => {
