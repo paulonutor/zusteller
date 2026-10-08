@@ -1,21 +1,21 @@
 # Mac test checklist: Tauri only (remaining items)
 
 For a local Claude desktop session with computer use. Setup and run commands: `docs/mac-test-runbook.md` §1–2 (Tauri parts only).
-Wails was dropped (see `docs/host-decision.md`). Record results as Trello comments on the "Test on Mac" card. Do not change source, push or commit screenshots.
+Wails was dropped (see `docs/host-decision.md`). Record results as Trello comments on the "Mac verification" card (trello.com/c/DK3gnZ3G). Do not change source, push or commit screenshots.
 
 **Already verified by Paul, skip:** dark mode / theme mismatch, accent colour (live update + inactive gray), traffic lights, vibrancy.
 
-Run each item on `npm run dev` (vibrancy) unless noted. Mark PASS / FAIL / N/A + one-line observation.
+Run each item on the debug `.app` (`npm run tauri build -- --debug --bundles app`, then `open` it; `tauri dev` binaries cannot be driven by computer use, see AGENTS.md) unless noted. Browser-only parts may use `npm run dev` (http://localhost:47831). Mark PASS / FAIL / N/A + one-line observation.
 
 ## A. Window and launch
 
 1. Launches to the mock inbox with no blank/white window; a thread opens in the reader.
-2. Window drag: dragging the title/search strip moves the window (needs `data-tauri-drag-region`; likely FAIL until added).
+2. Window drag: dragging the title/search strip moves the window (`drag-region` is now set on the list and reader headers; verify it works and that buttons/inputs do not drag).
    Double-click on the strip zooms/restores. Clicking inputs/buttons does not drag.
 3. Fullscreen enter/exit, minimum size 900x600, minimize/restore, move between displays (if available): no layout glitches.
-4. Opaque variant (`npm run dev:opaque`): no see-through anywhere. Reduce Transparency on (System Settings > Accessibility >
+4. Opaque variant (`npm run tauri:build:opaque` then open the `.app`): no see-through anywhere. Reduce Transparency on (System Settings > Accessibility >
    Display) degrades sanely in the vibrancy variant.
-5. Release build (`npm run build`, open the `.app`): no white/solid background where dev was transparent.
+5. Release build (`npm run tauri build`, open the `.app`): no white/solid background where dev was transparent.
 
 ## B. Native menus
 
@@ -55,7 +55,7 @@ Run each item on `npm run dev` (vibrancy) unless noted. Mark PASS / FAIL / N/A +
 ## F. Performance
 
 22. `?seed=big` (5000 threads): scrolling stays smooth, no visible jank; Activity Monitor shows sane CPU/RAM after 30 s idle.
-23. Run `scripts/measure-host.sh` (Tauri rows) and paste the table into `docs/host-comparison.md`.
+23. Run `scripts/measure-host.sh` (Tauri rows) and paste the table into `docs/host-decision.md` if useful.
 
 ## Screenshots (save outside the repo, e.g. ~/Desktop/zusteller-tests/)
 
@@ -68,5 +68,5 @@ Test the zusteller Tauri host on this Mac. Read AGENTS.md and docs/mac-test-runb
 docs/mac-test-checklist-tauri.md. Skip anything marked already verified. Do not change source, commit or push.
 Run items in order (dev first, release build for 5, 10, 11), use computer use for screenshots and real input. Report a table
 item x PASS/FAIL/N/A with one short observation, screenshot paths, and verbatim errors. Post the result as a comment on the
-Trello "Test on Mac" card. Stop and ask if a step needs a password or Apple ID.
+Trello "Mac verification" card (trello.com/c/DK3gnZ3G). Stop and ask if a step needs a password or Apple ID.
 ```
