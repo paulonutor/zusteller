@@ -1,0 +1,95 @@
+/*
+ * Visual skins, selected with `?skin=a|b|c|default` (sets data-skin on <html>). Load order matters:
+ *   shared.css  hidden-by-default markup + structural rules shared by every skin
+ *   a.css       A "Mail"            dark-only opt-in: graphite source list, solid-blue selection
+ *   b.css       B "Gmail-in-glass"  the default, light + dark: floating panes, tabs, avatar rows
+ *   c.css       C "Quiet graphite"  dark-only opt-in: flat, hairlines, muted accent
+ *   host.css    native host chrome (Tauri/Wails), system accent, inactive window, vibrancy
+ * No skin attribute (`?skin=default`) = the plain look. Colours always come from tokens.
+ * Skin B selectors use `html:root[data-skin='b']` (specificity 0,2,1) to tie with the shared
+ * `html:is(.dark[data-skin], [data-skin='b'])` prefix; later rules win ties.
+ */
+
+/* Avatars only exist in skin B (shared row markup). */
+[data-avatar] {
+  display: none;
+}
+
+/* Skin-only markup (tabs etc.) stays hidden unless a skin opts in. */
+[data-skin-only] {
+  display: none;
+}
+
+/* ---------- shared (all skins) ---------- */
+html:is(.dark[data-skin], [data-skin='b']) {
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', system-ui, 'Segoe UI', sans-serif;
+  --on-selection: #ffffff;
+  --on-selection-dim: rgb(255 255 255 / 0.72);
+  --window: var(--background);
+  --pane-radius: 0px;
+  --row-radius: 0px;
+  --row-gap: 0px;
+  --row-h: 68px;
+  --toolbar-bg: var(--background);
+  --toolbar-line: var(--border);
+  --sidebar-blur: none;
+  --pane-shadow: none;
+  --row-line: var(--border);
+}
+html:is(.dark[data-skin], [data-skin='b']) body {
+  background: var(--window);
+}
+html:is(.dark[data-skin], [data-skin='b']) [data-shell] {
+  background: var(--window);
+}
+html:is(.dark[data-skin], [data-skin='b']) [data-pane] {
+  border-radius: var(--pane-radius);
+  overflow: hidden;
+  box-shadow: var(--pane-shadow);
+}
+html:is(.dark[data-skin], [data-skin='b']) [data-pane='sidebar'] > nav {
+  background: var(--sidebar);
+  -webkit-backdrop-filter: var(--sidebar-blur);
+  backdrop-filter: var(--sidebar-blur);
+}
+/* Toolbars (list header + reader toolbar). */
+html:is(.dark[data-skin], [data-skin='b']) [data-pane='list'] > section > header,
+html:is(.dark[data-skin], [data-skin='b']) [data-pane='reader'] > section > .drag-region {
+  background: var(--toolbar-bg);
+  border-bottom: 1px solid var(--toolbar-line);
+}
+html:is(.dark[data-skin], [data-skin='b'])
+  [data-pane='list']
+  > section
+  > div:not([role='listbox']) {
+  border-color: var(--row-line);
+}
+/* Rows */
+html:is(.dark[data-skin], [data-skin='b']) [role='option'] {
+  height: var(--row-h);
+  border-radius: var(--row-radius);
+  border-bottom-color: var(--row-line);
+}
+/* Selected row text: readable on the (dark/blue) selection fill. */
+html:is(.dark[data-skin], [data-skin='b'])
+  [role='listbox']:focus-within
+  [role='option'][aria-selected='true'] {
+  color: var(--on-selection);
+  --muted: var(--on-selection-dim);
+  --faint: var(--on-selection-dim);
+  --unread: var(--on-selection);
+  --star: var(--on-selection);
+}
+html:is(.dark[data-skin], [data-skin='b']) [role='option'] [class~='text-foreground/90'] {
+  color: inherit;
+}
+html:is(.dark[data-skin], [data-skin='b'])
+  [role='listbox']:focus-within
+  [role='option'][aria-selected='true']
+  .fill-star {
+  fill: var(--on-selection);
+}
+html:is(.dark[data-skin], [data-skin='b']) [role='option'][aria-selected='true'] {
+  outline: none;
+}

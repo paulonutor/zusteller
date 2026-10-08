@@ -1,0 +1,77 @@
+/* ---- Native host chrome (Tauri/Wails overlay titlebar) ---------------------------------- */
+/* Traffic lights float over the top-left of the sidebar: push its header content below them. */
+:root[data-host] [data-pane='sidebar'] > nav > .drag-region {
+  height: 76px !important;
+  padding-top: 40px !important;
+  align-items: flex-end;
+}
+/* Wails marks draggable areas with this custom property (inherited, so opt buttons out). */
+:root[data-host='wails'] .drag-region {
+  --wails-draggable: drag;
+}
+:root[data-host='wails'] .no-drag,
+:root[data-host='wails'] button,
+:root[data-host='wails'] input,
+:root[data-host='wails'] [role='option'] {
+  --wails-draggable: no-drag;
+}
+
+/* ---- Selection follows the system accent in native hosts; gray when the window is inactive ---- */
+/* WKWebView resolves the CSS system colour `AccentColor` to the user's macOS accent colour. */
+/* Text on the accent is always white (AccentColorText resolves to black on bright blues, which
+   made the selected row unreadable). Guarded so engines without AccentColor keep the default blue. */
+@supports (color: AccentColor) {
+  :root[data-host][data-skin] {
+    --sel-accent: AccentColor;
+    --accent: AccentColor;
+  }
+}
+/* WebKit's own dynamic system colour (what NSColor.controlAccentColor is): preferred when present,
+   it tracks System Settings > Appearance > Accent colour. Declared last so it wins. */
+@supports (color: -apple-system-control-accent) {
+  :root[data-host][data-skin] {
+    --sel-accent: -apple-system-control-accent;
+    --accent: -apple-system-control-accent;
+  }
+}
+:root[data-host][data-skin] {
+  --sel-accent-text: #ffffff;
+  --accent-fg: #ffffff;
+}
+/* macOS "unemphasised" selection: window not key => gray fill, normal text. */
+:root[data-window-inactive][data-skin] {
+  --selection: var(--selection-inactive);
+  --on-selection: var(--foreground);
+  --on-selection-dim: var(--muted);
+}
+
+/* Checked box on the blue selection: invert so it stays visible. */
+html:not([data-window-inactive])[data-skin='b']
+  [role='listbox']:focus-within
+  [role='option'][aria-selected='true']
+  [role='checkbox'][aria-checked='true'] {
+  background: var(--on-selection);
+  border-color: var(--on-selection);
+  color: var(--selection);
+}
+
+/* ---- Native vibrancy (Tauri dev:vibrancy: transparent window + macOS `sidebar` material) ----
+   `data-vibrancy` is set by hostChrome.ts when the host opens the app with ?vibrancy=1.
+   The page must stop painting opaque colour over the material: window backdrop, gutters and the
+   sidebar become transparent. List + reader panes stay opaque (plan: opaque message surfaces). */
+:root[data-vibrancy],
+:root[data-vibrancy] body,
+:root[data-vibrancy] #root {
+  background: transparent !important;
+}
+:root[data-vibrancy][data-skin] {
+  --window: transparent;
+}
+:root[data-vibrancy][data-skin] [data-shell],
+:root[data-vibrancy][data-skin] [data-pane='sidebar'],
+:root[data-vibrancy][data-skin] [data-pane='sidebar'] > nav {
+  background: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  box-shadow: none !important;
+}

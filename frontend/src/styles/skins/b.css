@@ -1,0 +1,526 @@
+/* ================= B: Gmail-in-glass (default; light + dark) ================= */
+/* Tokens: dark palette first, then the light counterpart (gray selection). */
+html.dark[data-skin='b'] {
+  --window: #0f0f11;
+  --background: #1d1d20;
+  --foreground: #f3f3f6;
+  --muted: #a6a6ae;
+  --faint: #707078;
+  --border: rgb(255 255 255 / 0.07);
+  --sidebar: rgb(60 60 68 / 0.55);
+  --surface-raised: #36363c;
+  --hover: rgb(255 255 255 / 0.06);
+  --active: rgb(255 255 255 / 0.12);
+  --accent: #4a9bff;
+  --selection: var(--sel-accent, #0a64d6);
+  --selection-inactive: rgb(255 255 255 / 0.13);
+  --on-selection: var(--sel-accent-text, #ffffff);
+  --on-selection-dim: color-mix(in srgb, var(--on-selection) 72%, transparent);
+  --pane-radius: 12px;
+  --row-radius: 9px;
+  --row-h: 60px;
+  --toolbar-line: transparent;
+  --row-line: transparent;
+  --sidebar-blur: blur(40px) saturate(1.8);
+  --gm-star: #f6bf26;
+  --pane-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.06), 0 6px 18px rgb(0 0 0 / 0.35), 0 1px 2px rgb(0 0 0 / 0.4);
+  --sidebar-bg: linear-gradient(160deg, #34343c 0%, #26262b 60%, #212125 100%);
+  --sidebar-edge: rgb(255 255 255 / 0.1);
+  --nav-sel: rgb(255 255 255 / 0.14);
+  --nav-sel-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08), 0 1px 3px rgb(0 0 0 / 0.25);
+  --fill-0: rgb(255 255 255 / 0.05);
+  --fill-1: rgb(255 255 255 / 0.09);
+  --fill-2: rgb(255 255 255 / 0.12);
+  --search-focus-bg: #2a2a30;
+  --focus-shadow: rgb(0 0 0 / 0.35);
+  --sel-ring: transparent;
+  --card-bg: rgb(255 255 255 / 0.03);
+  --chip-base: #1d1d20;
+}
+/* ---- B light: macOS-light counterpart (same structure, light palette, gray selection) ---- */
+html:not(.dark)[data-skin='b'] {
+  --window: #e9e9ec;
+  --background: #ffffff;
+  --foreground: #1d1d1f;
+  --muted: #6e6e73;
+  --faint: #98989d;
+  --border: rgb(0 0 0 / 0.08);
+  --sidebar: rgb(246 246 248 / 0.7);
+  --surface-raised: #ffffff;
+  --hover: rgb(0 0 0 / 0.05);
+  --active: rgb(0 0 0 / 0.09);
+  --accent: #0a6cf0;
+  --selection: var(--sel-accent, #0a6cf0);
+  --selection-inactive: rgb(0 0 0 / 0.09);
+  --on-selection: var(--sel-accent-text, #ffffff);
+  --on-selection-dim: color-mix(in srgb, var(--on-selection) 72%, transparent);
+  --pane-radius: 12px;
+  --row-radius: 9px;
+  --row-h: 60px;
+  --toolbar-line: transparent;
+  --row-line: transparent;
+  --sidebar-blur: blur(40px) saturate(1.8);
+  --gm-star: #f6bf26;
+  --pane-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.06), 0 6px 18px rgb(0 0 0 / 0.08), 0 1px 2px rgb(0 0 0 / 0.1);
+  --sidebar-bg: linear-gradient(160deg, #f7f7f9 0%, #ededf1 100%);
+  --sidebar-edge: rgb(255 255 255 / 0.8);
+  --nav-sel: rgb(0 0 0 / 0.08);
+  --nav-sel-shadow: none;
+  --fill-0: rgb(0 0 0 / 0.04);
+  --fill-1: rgb(0 0 0 / 0.06);
+  --fill-2: rgb(0 0 0 / 0.09);
+  --search-focus-bg: #ffffff;
+  --focus-shadow: rgb(0 0 0 / 0.14);
+  --sel-ring: transparent;
+  --card-bg: #ffffff;
+  --chip-base: #6e6e73;
+}
+
+html:root[data-skin='b'] [data-shell] {
+  padding: 8px;
+  gap: 0;
+}
+html:root[data-skin='b'] [role='separator'] {
+  width: 8px;
+  background: transparent;
+}
+html:root[data-skin='b'] [role='separator'] > span {
+  inset-inline: 0;
+  left: 0;
+  width: 100%;
+}
+html:root[data-skin='b'] [data-pane='sidebar'] {
+  background: var(--sidebar-bg);
+}
+html:root[data-skin='b'] [data-pane='sidebar'] > nav {
+  box-shadow: inset 0 1px 0 var(--sidebar-edge);
+}
+html:root[data-skin='b'] [data-pane='sidebar'] > nav > .drag-region {
+  height: 48px;
+}
+html:root[data-skin='b'] nav button {
+  height: 30px;
+  border-radius: 9px;
+  padding-inline: 10px;
+}
+html:root[data-skin='b'] nav ul {
+  row-gap: 2px;
+  display: grid;
+}
+html:root[data-skin='b'] nav button[aria-current='page'] {
+  background: var(--nav-sel);
+  box-shadow: var(--nav-sel-shadow);
+}
+html:root[data-skin='b'] nav h2 {
+  text-transform: none;
+  font-size: 12px;
+  letter-spacing: 0;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 20px 10px 6px;
+}
+html:root[data-skin='b'] [data-pane='reader'] > section > .drag-region {
+  background: transparent;
+  height: 56px;
+}
+
+/* ---- Layout: search bar on top, category tabs, soft-tinted rows ---- */
+html:root[data-skin='b'] [data-pane='list'] > section > header {
+  background: transparent;
+  height: 64px;
+  padding: 10px 12px 6px;
+  gap: 12px;
+}
+html:root[data-skin='b'] [data-pane='list'] > section > header > div {
+  padding-left: 4px;
+}
+html:root[data-skin='b'] [data-pane='list'] > section > header h1 {
+  font-size: 17px;
+  font-weight: 700;
+}
+html:root[data-skin='b'] [data-pane='list'] input[type='search'] {
+  height: 38px;
+  padding-left: 40px;
+  padding-right: 36px;
+  font-size: 14px;
+  background: var(--fill-1);
+  box-shadow: none;
+  transition:
+    background 0.15s,
+    box-shadow 0.15s;
+}
+html:root[data-skin='b'] [data-pane='list'] input[type='search']:hover {
+  background: var(--fill-2);
+}
+html:root[data-skin='b'] [data-pane='list'] input[type='search']:focus {
+  background: var(--search-focus-bg);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--accent) 70%, transparent),
+    0 4px 14px var(--focus-shadow);
+}
+html:root[data-skin='b'] [data-pane='list'] header label > svg {
+  left: 16px;
+  width: 19px;
+  height: 19px;
+}
+html:root[data-skin='b'] [data-pane='list'] header label button svg {
+  width: 16px;
+  height: 16px;
+}
+html:root[data-skin='b'] [data-pane='list'] header label button {
+  right: 12px;
+}
+
+/* Category tabs */
+html:root[data-skin='b'] [role='tablist'][data-skin-only] {
+  display: flex;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border);
+}
+html:root[data-skin='b'] [role='tab'] {
+  flex: 1;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--muted);
+  border-bottom: 3px solid transparent;
+  border-radius: 8px 8px 0 0;
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+html:root[data-skin='b'] [role='tab']:hover {
+  background: var(--hover);
+  color: var(--foreground);
+}
+html:root[data-skin='b'] [role='tab'][aria-selected='true'] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+html:root[data-skin='b'] [role='tab'] [data-count] {
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 18px;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--fill-1);
+  color: var(--muted);
+}
+html:root[data-skin='b'] [role='tab'][aria-selected='true'] [data-count] {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
+}
+
+/* Gmail-like list toolbar */
+html:root[data-skin='b']
+  [data-pane='list']
+  > section
+  > div:not([role='listbox']):not([role='tablist']) {
+  border: 0;
+  height: 44px;
+  padding-inline: 14px;
+  gap: 10px;
+}
+html:root[data-skin='b'] [data-pane='list'] [role='checkbox'] {
+  width: 18px;
+  height: 18px;
+  border-width: 2px;
+  border-radius: 4px;
+  background: transparent;
+}
+html:root[data-skin='b'] [data-pane='list'] [role='checkbox'][aria-checked='true'],
+html:root[data-skin='b'] [data-pane='list'] [role='checkbox'][aria-checked='mixed'] {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+html:root[data-skin='b'] [data-pane='list'] [role='checkbox'] svg {
+  width: 13px;
+  height: 13px;
+}
+html:root[data-skin='b'] [data-pane='list'] > section > div > button[aria-label='Refresh'] {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+}
+html:root[data-skin='b'] [data-pane='list'] > section > div > button[aria-label='Refresh'] svg {
+  width: 17px;
+  height: 17px;
+}
+
+/* Rows: avatar that morphs into a checkbox, two lines, soft tinted selection */
+html:root[data-skin='b'] [role='listbox'] {
+  padding: 2px 0 8px;
+}
+html:root[data-skin='b'] [role='option'] {
+  margin: 1px 8px;
+  padding: 0 12px 0 6px;
+  align-items: center;
+  border-radius: 12px;
+  gap: 8px;
+}
+html:root[data-skin='b'] [role='option'] [data-lead] {
+  width: 32px;
+  height: 32px;
+  padding-top: 0;
+}
+/* Avatar -> checkbox: the avatar is the resting state; the checkbox takes its place
+   on hover / keyboard focus, and everywhere once the list is in selection mode. */
+html:root[data-skin='b'] [role='option'] [data-avatar] {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: hsl(var(--av-h) 40% 88%);
+  background: hsl(var(--av-h) 26% 34%);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+html:root:not(.dark)[data-skin='b'] [role='option'] [data-avatar] {
+  color: hsl(var(--av-h) 45% 24%);
+  background: hsl(var(--av-h) 40% 84%);
+}
+html:root[data-skin='b'] [role='option'] [data-unread-dot] {
+  display: block !important;
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 10px;
+  height: 10px;
+  box-sizing: border-box;
+  border: 2px solid var(--background);
+  background: var(--unread);
+  transition: opacity 120ms ease;
+}
+html:root[data-skin='b'] [role='option'] [role='checkbox'] {
+  display: flex !important;
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.8);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease,
+    width 120ms ease,
+    height 120ms ease,
+    background-color 120ms ease;
+}
+/* Reveal the checkbox, hide avatar + unread dot. Hover only counts over the avatar itself
+   (not the whole row). */
+html:root[data-skin='b'] [role='option'] [data-lead]:hover [role='checkbox'],
+html:root[data-skin='b'] [data-kbd='true'] [role='option'][data-focused='true'] [role='checkbox'],
+html:root[data-skin='b'] [role='option'] [role='checkbox']:focus-visible,
+html:root[data-skin='b'] [role='listbox'][data-selection-mode='true'] [role='checkbox'] {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+html:root[data-skin='b'] [role='option'] [data-lead]:hover [data-avatar],
+html:root[data-skin='b'] [data-kbd='true'] [role='option'][data-focused='true'] [data-avatar],
+html:root[data-skin='b'] [role='option']:has([role='checkbox']:focus-visible) [data-avatar],
+html:root[data-skin='b'] [role='listbox'][data-selection-mode='true'] [data-avatar] {
+  opacity: 0;
+  transform: scale(0.8);
+}
+html:root[data-skin='b'] [role='option'] [data-lead]:hover [data-unread-dot],
+html:root[data-skin='b'] [data-kbd='true'] [role='option'][data-focused='true'] [data-unread-dot],
+html:root[data-skin='b'] [role='listbox'][data-selection-mode='true'] [data-unread-dot] {
+  opacity: 0;
+}
+/* Checked: round checkmark filling the avatar circle. */
+html:root[data-skin='b']
+  [role='option'][aria-selected='true']
+  [role='checkbox'][aria-checked='true'] {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border-color: transparent;
+  background: var(--on-selection, #fff);
+  color: var(--selection, var(--accent));
+}
+html:root[data-skin='b']
+  [role='option'][aria-selected='true']
+  [role='checkbox'][aria-checked='true']
+  svg {
+  width: 17px;
+  height: 17px;
+}
+/* Star: right of the time, only when starred or on hover / focus. Space is always reserved. */
+html:root[data-skin='b'] [role='option'] [data-star] {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-left: 2px;
+  margin-right: -4px;
+  padding: 0;
+  border-radius: 999px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+html:root[data-skin='b'] [role='option']:hover [data-star],
+html:root[data-skin='b'] [data-kbd='true'] [role='option'][data-focused='true'] [data-star],
+html:root[data-skin='b'] [role='option'] [data-star]:focus-visible,
+html:root[data-skin='b'] [role='option'] [data-star][aria-pressed='true'] {
+  opacity: 1;
+  pointer-events: auto;
+}
+html:root[data-skin='b'] [role='option'] [data-star]:hover {
+  background: var(--hover);
+}
+html:root[data-skin='b'] [role='option'] [data-star] svg {
+  width: 16px;
+  height: 16px;
+}
+@media (prefers-reduced-motion: reduce) {
+  html:root[data-skin='b'] [role='option'] [data-avatar],
+  html:root[data-skin='b'] [role='option'] [data-unread-dot],
+  html:root[data-skin='b'] [role='option'] [role='checkbox'],
+  html:root[data-skin='b'] [role='option'] [data-star] {
+    transition: none;
+  }
+}
+html:root[data-skin='b'] [role='option'] .fill-star,
+html:root[data-skin='b']
+  [role='listbox']:focus-within
+  [role='option'][aria-selected='true']
+  .fill-star {
+  fill: var(--gm-star);
+  color: var(--gm-star);
+}
+html:root[data-skin='b'] [role='option'][aria-selected='true'] {
+  background: var(--selection);
+  box-shadow: inset 0 0 0 1px var(--sel-ring);
+}
+html:root[data-skin='b'] [role='listbox']:not(:focus-within) [role='option'][aria-selected='true'] {
+  background: var(--selection-inactive);
+  box-shadow: none;
+}
+html:root[data-skin='b'] [role='listbox']:focus-within [role='option'][aria-selected='true'] {
+  --unread: var(--on-selection);
+  --star: var(--gm-star);
+}
+html:root[data-skin='b'] [role='option'] [data-sender] {
+  font-size: 14px;
+}
+html:root[data-skin='b'] [role='option'][data-unread='true'] [data-sender] {
+  font-weight: 700;
+}
+html:root[data-skin='b'] [role='option'][data-unread='false'] [data-sender] {
+  font-weight: 400;
+  color: var(--muted);
+}
+html:root[data-skin='b'] [role='option'][aria-selected='true'][data-unread='false'] [data-sender] {
+  color: inherit;
+}
+html:root[data-skin='b'] [role='option'] [data-line2] {
+  display: flex;
+  align-items: baseline;
+  margin-top: 1px;
+}
+html:root[data-skin='b'] [role='option'] [data-subject] {
+  flex: 0 1 auto;
+  max-width: 52%;
+  font-weight: 400;
+}
+html:root[data-skin='b'] [role='option'][data-unread='true'] [data-subject] {
+  font-weight: 600;
+}
+html:root[data-skin='b'] [role='option'] [data-snippet-row] {
+  flex: 1 1 0;
+  min-width: 0;
+}
+html:root[data-skin='b'] [role='option'] [data-snippet]::before {
+  content: '–';
+  margin: 0 6px;
+}
+/* Gmail label chips: solid label colour, white text, one per row. */
+html:root[data-skin='b'] [role='option'] [data-snippet-row] > span[style] {
+  background: color-mix(in srgb, var(--chip) 80%, var(--chip-base)) !important;
+  color: #fff !important;
+  font-weight: 600;
+  font-size: 10px;
+  line-height: 15px;
+  border-radius: 4px;
+  padding-inline: 5px;
+  max-width: 74px;
+}
+html:root[data-skin='b'] [role='option'] [data-snippet-row] > span[style] ~ span[style] {
+  display: none;
+}
+
+/* Reader toolbar: round icon buttons with a hover circle */
+html:root[data-skin='b'] [role='toolbar'] {
+  gap: 4px;
+}
+html:root[data-skin='b'] [role='toolbar'] button {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  padding: 0;
+}
+html:root[data-skin='b'] [role='toolbar'] button:hover:not(:disabled) {
+  background: var(--fill-2);
+}
+html:root[data-skin='b'] [role='toolbar'] button svg {
+  width: 18px;
+  height: 18px;
+}
+html:root[data-skin='b'] [data-pane='reader'] header.selectable {
+  padding: 8px 28px 14px;
+}
+html:root[data-skin='b'] [data-pane='reader'] h2 {
+  font-size: 22px;
+  letter-spacing: -0.01em;
+}
+html:root[data-skin='b'] [data-pane='reader'] article {
+  margin: 0 14px 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card-bg);
+  overflow: hidden;
+}
+html:root[data-skin='b'] [data-pane='reader'] article:last-child {
+  border-bottom: 1px solid var(--border);
+}
+html:root[data-skin='b'] [data-pane='reader'] header ~ div {
+  border-top: 0;
+}
+html:root[data-skin='b'] [data-pane='reader'] article > button {
+  padding-block: 12px;
+}
+html:root[data-skin='b'] ul[aria-label='Attachments'] li {
+  border-radius: 10px;
+  background: var(--fill-0);
+}
+
+/* ---- Misc ---- */
+/* Generous hit area: the visible circle is small, so an invisible extension (part of the button,
+   and of its hover zone) turns near-misses into a toggle instead of a row click that would replace
+   the selection. Only active while the checkbox is revealed (it is pointer-events: none otherwise). */
+html:root[data-skin='b'] [role='option'] [role='checkbox']::before {
+  content: '';
+  position: absolute;
+  inset: -16px -10px;
+  border-radius: 14px;
+}
+
+/* Mail tints the source-list icons with the system accent colour. */
+html:root[data-skin='b'] nav [data-mailbox-icon] {
+  color: var(--accent);
+}
