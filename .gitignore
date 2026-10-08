@@ -5,8 +5,8 @@ coverage/
 *.tsbuildinfo
 
 # Desktop hosts (Phase 2)
-hosts/tauri/src-tauri/target/
-hosts/tauri/src-tauri/gen/
+src-tauri/target/
+src-tauri/gen/
 *.app
 *.dmg
 

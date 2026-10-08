@@ -3,10 +3,10 @@ import type { PlatformService } from './PlatformService';
 
 /**
  * Tauri v2 host adapter. Uses the `window.__TAURI__` globals injected when
- * `app.withGlobalTauri = true` (hosts/tauri/src-tauri/tauri.conf.json), so the
+ * `app.withGlobalTauri = true` (src-tauri/tauri.conf.json), so the
  * frontend takes no `@tauri-apps/*` dependency.
  *
- * Rust side (hosts/tauri/src-tauri/src/lib.rs) provides:
+ * Rust side (src-tauri/src/lib.rs) provides:
  *   - command `notify { title, body }`   -> notification plugin
  *   - command `set_badge { count }`      -> window.set_badge_count
  *   - `plugin:opener|open_url { url }`   -> opener plugin, ACL-scoped to http/https/mailto

@@ -1,0 +1,8 @@
+dist
+src-tauri
+package-lock.json
+zusteller-plan.md
+docs/reviews
+tests-visual
+test-results
+playwright-report

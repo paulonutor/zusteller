@@ -23,6 +23,7 @@ export default tseslint.config(
       'screenshots',
       'test-results',
       'playwright-report',
+      'src-tauri',
     ],
   },
   js.configs.recommended,

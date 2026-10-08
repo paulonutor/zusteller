@@ -5,7 +5,7 @@
 import { chromium } from 'playwright';
 import fs from 'node:fs';
 
-const base = process.argv[2] ?? 'http://localhost:5173';
+const base = process.argv[2] ?? 'http://localhost:47831';
 const out = process.argv[3] ?? 'capture-states';
 fs.mkdirSync(out, { recursive: true });
 

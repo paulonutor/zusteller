@@ -5,9 +5,9 @@
   "identifier": "de.onutor.zusteller",
   "build": {
     "devUrl": "http://localhost:47831",
-    "frontendDist": "../../../frontend/dist",
-    "beforeDevCommand": "npm --prefix ../../frontend run dev -- --port 47831 --strictPort",
-    "beforeBuildCommand": "npm --prefix ../../frontend run build"
+    "frontendDist": "../dist",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
   },
   "app": {
     "withGlobalTauri": true,

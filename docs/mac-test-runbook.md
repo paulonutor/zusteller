@@ -19,16 +19,16 @@ Note macOS version, chip, and tool versions in your results.
 
 ## 2. Run commands
 
-Tauri (from repo root):
+Tauri (from the repo root):
 
 ```bash
-cd hosts/tauri && npm install
+npm install
 npx tauri icon src-tauri/icons/icon.png   # once, generates icns
-npm run dev            # vibrancy (default)
-npm run dev:opaque     # opaque variant (comparison / fallback)
+npm run tauri dev            # vibrancy (default)
+npm run tauri:dev:opaque     # opaque variant (comparison / fallback)
 ```
 
-Release builds (needed for notifications, Dock badge, sizes): `cd hosts/tauri && npm run build` (bundle in
+Release builds (needed for notifications, Dock badge, sizes): `npm run tauri build` (bundle in
 `src-tauri/target/release/bundle/macos/zusteller.app`, or under your cargo `target-dir` if `build.target-dir` is set).
 
 Accent panel: the page must be opened with `?debug=accent`. In the browser use `http://localhost:47831/?debug=accent` (reference
@@ -87,6 +87,7 @@ These snippets are unverified: if one fails, record the error text.
 ## 4. Screenshots to take
 
 Same window size per host and variant (vibrancy/opaque). Save outside the repo (never commit screenshots):
+
 1. Light, active: whole window with a thread open (sidebar material + gutters).
 2. Dark, active, same view.
 3. Light and dark with the window inactive (gray selection).
@@ -100,7 +101,7 @@ Same window size per host and variant (vibrancy/opaque). Save outside the repo (
 ## 5. Prompt for a local Claude Code session with computer use
 
 ```text
-You are testing the zusteller desktop hosts on this Mac. Read AGENTS.md, docs/host-decision.md, hosts/tauri/README.md
+You are testing the zusteller desktop hosts on this Mac. Read AGENTS.md, docs/host-decision.md, docs/tauri-host.md
 and docs/mac-test-runbook.md first. Do not change source code, push, or commit screenshots.
 1. Verify prerequisites from the runbook (brew, go >= 1.25, task, rust, Xcode CLT, node); install missing ones with brew/rustup
    and tell me what you installed.

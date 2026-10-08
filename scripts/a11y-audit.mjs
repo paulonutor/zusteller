@@ -6,7 +6,7 @@
 import { chromium } from 'playwright';
 import AxeBuilder from '@axe-core/playwright';
 
-const base = process.argv[2] ?? 'http://localhost:5173';
+const base = process.argv[2] ?? 'http://localhost:47831';
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21aa', 'best-practice'];
 const executablePath =
   process.env.CHROMIUM_PATH || (process.env.PW_CHROMIUM_FALLBACK ?? '/opt/pw-browsers/chromium');

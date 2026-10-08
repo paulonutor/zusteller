@@ -76,15 +76,15 @@ RAM_TAURI="n/a"
 measure_tauri() {
   need cargo "install Rust: https://rustup.rs"
   need npm "brew install node"
-  local dir="$ROOT/hosts/tauri" app bin
-  app="$dir/src-tauri/target/release/bundle/macos/zusteller.app"
+  local app bin target
+  target="$(cd "$ROOT/src-tauri" && cargo metadata --format-version 1 --no-deps | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')"
+  app="$target/release/bundle/macos/zusteller.app"
   if [[ "${SKIP_BUILD:-0}" != 1 ]]; then
     log "Tauri: npm install + build (release)"
-    (cd "$ROOT/frontend" && npm install > /dev/null)
-    (cd "$dir" && npm install > /dev/null)
+    (cd "$ROOT" && npm install > /dev/null)
     local t0
     t0="$(now)"
-    (cd "$dir" && npm run build >&2)
+    (cd "$ROOT" && npm run tauri build >&2)
     BUILD_T_TAURI="$(secs_since "$t0")s"
   fi
   [[ -d "$app" ]] || {

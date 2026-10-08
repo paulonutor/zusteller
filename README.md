@@ -7,15 +7,14 @@ A three-pane reader (browse, search, filter, select, archive, trash, restore, st
 in-memory mock, in the browser or in a native macOS window with vibrancy. No Gmail, OAuth, compose or sending yet.
 
 ```bash
-cd frontend
 npm install
-npm run dev        # http://localhost:5173  (?latency=0, ?offline=1, ?skin=a|b|c|default, ?theme=dark)
+npm run dev        # http://localhost:47831  (?latency=0, ?offline=1, ?skin=a|b|c|default, ?theme=dark)
 npm run typecheck && npm run lint && npm test
 npm run build
 ```
 
-Desktop host (macOS): `hosts/tauri/README.md` (`npm run dev` in `hosts/tauri`). It loads the same `frontend/`; vibrancy is on by default,
-`dev:opaque` gives a plain window.
+Desktop app (macOS): `npm run tauri dev` (needs Rust; see `docs/tauri-host.md`). `src-tauri/` wraps this same frontend and follows the
+`create-tauri-app` layout; vibrancy is on by default, `npm run tauri:dev:opaque` gives a plain window.
 
 See `AGENTS.md` for contributor/agent rules, `docs/architecture.md` for the design, `docs/host-decision.md` for why Tauri,
 and `zusteller-plan.md` for the roadmap.

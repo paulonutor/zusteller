@@ -1,22 +1,22 @@
-name: hosts
+name: tauri
 
 on:
   push:
     paths:
-      - 'hosts/**'
-      - 'frontend/src/platform/**'
+      - 'src-tauri/**'
+      - 'src/platform/**'
       - '.github/workflows/hosts.yml'
   pull_request:
     paths:
-      - 'hosts/**'
-      - 'frontend/src/platform/**'
+      - 'src-tauri/**'
+      - 'src/platform/**'
       - '.github/workflows/hosts.yml'
 
 permissions:
   contents: read
 
 concurrency:
-  group: hosts-${{ github.ref }}
+  group: tauri-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: hosts/tauri/src-tauri
+        working-directory: src-tauri
     steps:
       - uses: actions/checkout@v4
       - name: Install webkit2gtk deps
@@ -35,34 +35,34 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: hosts/tauri/src-tauri
-      # tauri-build validates that frontendDist (frontend/dist) exists
+          workspaces: src-tauri
+      # tauri-build validates that frontendDist (dist) exists
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: package-lock.json
       - run: npm ci && npm run build
-        working-directory: frontend
+        working-directory: .
       - run: cargo check --locked
 
-  # The macOS code paths (cgo darwin, private APIs, cfg(macos) Rust) are what the hosts exist for.
+  # The macOS code paths (private APIs, cfg(macos) Rust) are what the host exists for.
   tauri-macos:
     runs-on: macos-latest
     defaults:
       run:
-        working-directory: hosts/tauri/src-tauri
+        working-directory: src-tauri
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: hosts/tauri/src-tauri
+          workspaces: src-tauri
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: package-lock.json
       - run: npm ci && npm run build
-        working-directory: frontend
+        working-directory: .
       - run: cargo check --locked

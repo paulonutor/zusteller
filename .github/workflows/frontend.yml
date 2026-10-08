@@ -14,16 +14,13 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: package-lock.json
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
@@ -32,16 +29,13 @@ jobs:
 
   visual:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: package-lock.json
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run test:visual
@@ -50,6 +44,6 @@ jobs:
         with:
           name: visual-diffs
           path: |
-            frontend/test-results
-            frontend/playwright-report
+            test-results
+            playwright-report
           retention-days: 14
