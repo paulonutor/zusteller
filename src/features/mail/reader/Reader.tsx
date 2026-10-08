@@ -29,7 +29,7 @@ function Toolbar({
   labels,
   perform,
 }: Pick<Props, 'selected' | 'view' | 'labels' | 'perform'>) {
-  const { actions, labelItems, none, hasLabels } = useThreadActions(
+  const { actions, labelItems, none, hasLabels, canLabel } = useThreadActions(
     selected,
     view,
     labels,
@@ -43,6 +43,7 @@ function Toolbar({
       <ActionBar
         actions={actions}
         labelItems={labelItems}
+        showLabels={canLabel}
         labelsDisabled={none || !hasLabels}
         ids={selected.map((t) => t.id)}
         perform={perform}

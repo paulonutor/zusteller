@@ -4,7 +4,6 @@ import {
   MailOpen,
   RotateCcw,
   ShieldAlert,
-  ShieldCheck,
   Star,
   Tag,
   Trash2,
@@ -25,19 +24,28 @@ const ICONS: Record<MailActionId, LucideIcon> = {
   star: Star,
   unstar: Star,
   markJunk: ShieldAlert,
-  notJunk: ShieldCheck,
+  notJunk: RotateCcw,
 };
 
 type Props = {
   actions: ActionDescriptor[];
   labelItems: MenuItemSpec[];
+  /** Hidden where labelling makes no sense (Junk). */
+  showLabels: boolean;
   labelsDisabled: boolean;
   ids: ID[];
   perform: Perform;
 };
 
 /** Toolbar rendering of the shared actions. */
-export function ActionBar({ actions, labelItems, labelsDisabled, ids, perform }: Props) {
+export function ActionBar({
+  actions,
+  labelItems,
+  showLabels,
+  labelsDisabled,
+  ids,
+  perform,
+}: Props) {
   return (
     <div
       role="toolbar"
@@ -58,14 +66,16 @@ export function ActionBar({ actions, labelItems, labelsDisabled, ids, perform }:
           </Button>
         );
       })}
-      <DropdownMenu
-        items={labelItems}
-        trigger={
-          <Button aria-label="Labels" title="Labels (apply or remove)" disabled={labelsDisabled}>
-            <Tag size={15} />
-          </Button>
-        }
-      />
+      {showLabels && (
+        <DropdownMenu
+          items={labelItems}
+          trigger={
+            <Button aria-label="Labels" title="Labels (apply or remove)" disabled={labelsDisabled}>
+              <Tag size={15} />
+            </Button>
+          }
+        />
+      )}
     </div>
   );
 }
