@@ -61,6 +61,7 @@ const EMPTY: Record<string, string> = {
   inbox: 'Your inbox is empty.',
   starred: 'No starred conversations.',
   sent: 'No sent mail.',
+  junk: 'No junk mail.',
   trash: 'Trash is empty.',
   all: 'No mail.',
 };
@@ -163,6 +164,8 @@ export function MailApp() {
         action === 'archive' ||
         action === 'trash' ||
         action === 'restore' ||
+        action === 'markJunk' ||
+        action === 'notJunk' ||
         // Moving to a label takes rows out of the Inbox view only.
         (action === 'moveToLabel' && view.kind === 'mailbox' && view.mailbox === 'inbox');
       const next = removes ? nextAfterRemoval(ids, new Set(targetIds)) : null;
@@ -189,7 +192,7 @@ export function MailApp() {
     return f ? [f] : [];
   };
   const onShortcut = useCallback(
-    (k: MailActionId | 'toggleStar' | 'find') => {
+    (k: MailActionId | 'toggleStar' | 'toggleJunk' | 'find') => {
       if (k === 'find') {
         searchRef.current?.focus();
         return;
@@ -198,7 +201,11 @@ export function MailApp() {
       if (!targets.length) return;
       const available = resolveActions(targets, view);
       const id =
-        k === 'toggleStar' ? available.find((a) => a.id === 'star' || a.id === 'unstar')?.id : k;
+        k === 'toggleStar'
+          ? available.find((a) => a.id === 'star' || a.id === 'unstar')?.id
+          : k === 'toggleJunk'
+            ? available.find((a) => a.id === 'markJunk' || a.id === 'notJunk')?.id
+            : k;
       const desc = available.find((a) => a.id === id);
       if (desc?.enabled)
         void perform(
@@ -216,7 +223,9 @@ export function MailApp() {
   });
   useEffect(
     () =>
-      platform.subscribeMenuActions((a) => onShortcutRef.current(a === 'star' ? 'toggleStar' : a)),
+      platform.subscribeMenuActions((a) =>
+        onShortcutRef.current(a === 'star' ? 'toggleStar' : a === 'junk' ? 'toggleJunk' : a),
+      ),
     [platform],
   );
   useGlobalShortcuts({ onAction: onShortcut, onSearch: () => searchRef.current?.focus() });

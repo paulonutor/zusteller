@@ -21,7 +21,13 @@ const ids = (a: ReturnType<typeof resolveActions>) => a.filter((x) => x.enabled)
 describe('resolveActions', () => {
   const inbox = { kind: 'mailbox', mailbox: 'inbox' } as const;
   it('offers archive/trash/read/star for inbox threads', () => {
-    expect(ids(resolveActions([t()], inbox))).toEqual(['archive', 'trash', 'markRead', 'star']);
+    expect(ids(resolveActions([t()], inbox))).toEqual([
+      'archive',
+      'trash',
+      'markRead',
+      'star',
+      'markJunk',
+    ]);
   });
   it('flips to unread/unstar when all are read/starred', () => {
     expect(ids(resolveActions([t({ isRead: true, isStarred: true })], inbox))).toEqual([
@@ -29,6 +35,7 @@ describe('resolveActions', () => {
       'trash',
       'markUnread',
       'unstar',
+      'markJunk',
     ]);
   });
   it('mixed selection offers the "set" direction', () => {
@@ -37,11 +44,42 @@ describe('resolveActions', () => {
   });
   it('trash view swaps archive/trash for restore', () => {
     const a = resolveActions([t({ labelIds: ['TRASH'] })], { kind: 'mailbox', mailbox: 'trash' });
-    expect(a.map((x) => x.id)).toEqual(['restore', 'markRead', 'star']);
+    expect(a.map((x) => x.id)).toEqual(['restore', 'markRead', 'star', 'markJunk']);
   });
   it('archive is disabled when nothing is in the inbox; all disabled when empty', () => {
     expect(ids(resolveActions([t({ labelIds: [] })], inbox))).not.toContain('archive');
     expect(ids(resolveActions([], inbox))).toEqual([]);
+  });
+});
+
+describe('resolveActions: Junk', () => {
+  const inbox = { kind: 'mailbox', mailbox: 'inbox' } as const;
+  const junkView = { kind: 'mailbox', mailbox: 'junk' } as const;
+  const junk = (over: Partial<ThreadSummary> = {}) => t({ labelIds: ['SPAM'], ...over });
+
+  it('offers Mark as Junk (shortcut !) in the inbox, label and all-mail views', () => {
+    const a = resolveActions([t()], inbox).find((x) => x.id === 'markJunk');
+    expect(a).toMatchObject({ label: 'Mark as Junk', shortcut: '!', enabled: true });
+    expect(resolveActions([t()], { kind: 'label', labelId: 'L1' }).map((x) => x.id)).toContain(
+      'markJunk',
+    );
+  });
+  it('junk view swaps archive/mark-as-junk for Not Junk and keeps trash, read and star', () => {
+    const a = resolveActions([junk()], junkView);
+    expect(a.map((x) => x.id)).toEqual(['notJunk', 'trash', 'markRead', 'star']);
+    expect(a.find((x) => x.id === 'notJunk')).toMatchObject({ label: 'Not Junk', shortcut: '!' });
+  });
+  it('Mark as Junk is disabled when everything selected is already junk', () => {
+    const a = resolveActions([junk()], inbox).find((x) => x.id === 'markJunk');
+    expect(a?.enabled).toBe(false);
+    const mixed = resolveActions([junk(), t()], inbox).find((x) => x.id === 'markJunk');
+    expect(mixed?.enabled).toBe(true);
+  });
+  it('Not Junk is disabled when nothing selected is junk; everything disabled when empty', () => {
+    expect(
+      resolveActions([t({ labelIds: [] })], junkView).find((x) => x.id === 'notJunk')?.enabled,
+    ).toBe(false);
+    expect(ids(resolveActions([], junkView))).toEqual([]);
   });
 });
 

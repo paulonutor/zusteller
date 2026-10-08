@@ -114,6 +114,7 @@ function ThreadBody({
     .map((id) => labels.find((l) => l.id === id))
     .filter((l): l is Label => !!l && l.type === 'user');
   const trashed = thread.labelIds.includes(SYSTEM_LABEL.trash);
+  const junk = thread.labelIds.includes(SYSTEM_LABEL.junk) && !trashed;
 
   const toggle = (id: ID) =>
     setOpen((s) => {
@@ -131,6 +132,7 @@ function ThreadBody({
             {thread.messageCount} {thread.messageCount === 1 ? 'message' : 'messages'}
           </span>
           {trashed && <span className="rounded bg-hover px-1.5">In Trash</span>}
+          {junk && <span className="rounded bg-hover px-1.5">In Junk</span>}
           {chips.map((l) => (
             <LabelChip key={l.id} label={l} className="max-w-64" />
           ))}
@@ -158,6 +160,7 @@ function ThreadBody({
             message={m}
             expanded={open.has(m.id)}
             collapsible={thread.messages.length > 1}
+            junk={junk}
             onToggle={() => toggle(m.id)}
             onOpenLink={onOpenLink}
           />

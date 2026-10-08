@@ -14,6 +14,7 @@ describe('menu action tables', () => {
     expect(fromTauriItemId('mail.archive')).toBe('archive');
     expect(fromTauriItemId('mail.star')).toBe('star');
     expect(fromTauriItemId('mail.find')).toBe('find');
+    expect(fromTauriItemId('mail.junk')).toBe('junk');
     expect(fromTauriItemId('app.quit')).toBeUndefined();
     expect(fromTauriItemId('constructor')).toBeUndefined();
   });

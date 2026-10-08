@@ -7,7 +7,15 @@ import type { MailView } from './view';
  * `useMailActions().run`, so behaviour cannot drift between entry points.
  */
 export type MailActionId =
-  'archive' | 'trash' | 'restore' | 'markRead' | 'markUnread' | 'star' | 'unstar';
+  | 'archive'
+  | 'trash'
+  | 'restore'
+  | 'markRead'
+  | 'markUnread'
+  | 'star'
+  | 'unstar'
+  | 'markJunk'
+  | 'notJunk';
 
 /** Everything `useMailActions().run` can execute; the resolver only offers the `MailActionId`s. */
 export type PerformAction = MailActionId | 'addLabel' | 'removeLabel' | 'moveToLabel';
@@ -26,11 +34,21 @@ const has = (t: ThreadSummary, id: ID) => t.labelIds.includes(id);
 export function resolveActions(threads: ThreadSummary[], view: MailView): ActionDescriptor[] {
   const some = threads.length > 0;
   const inTrashView = view.kind === 'mailbox' && view.mailbox === 'trash';
+  const inJunkView = view.kind === 'mailbox' && view.mailbox === 'junk';
   const allRead = some && threads.every((t) => t.isRead);
   const allStarred = some && threads.every((t) => t.isStarred);
   const list: ActionDescriptor[] = [];
 
-  if (inTrashView) {
+  if (inJunkView) {
+    // Junk threads are not in the Inbox, so there is nothing to archive: offer the way out instead.
+    list.push({
+      id: 'notJunk',
+      label: 'Not Junk',
+      shortcut: '!',
+      enabled: threads.some((t) => has(t, SYSTEM_LABEL.junk)),
+    });
+    list.push({ id: 'trash', label: 'Move to Trash', shortcut: '⌫', enabled: some });
+  } else if (inTrashView) {
     list.push({ id: 'restore', label: 'Move to Inbox', shortcut: '⇧Z', enabled: some });
   } else {
     list.push({
@@ -51,6 +69,14 @@ export function resolveActions(threads: ThreadSummary[], view: MailView): Action
       ? { id: 'unstar', label: 'Remove Star', shortcut: 'S', enabled: some }
       : { id: 'star', label: 'Add Star', shortcut: 'S', enabled: some },
   );
+  if (!inJunkView) {
+    list.push({
+      id: 'markJunk',
+      label: 'Mark as Junk',
+      shortcut: '!',
+      enabled: threads.some((t) => !has(t, SYSTEM_LABEL.junk)),
+    });
+  }
   return list;
 }
 

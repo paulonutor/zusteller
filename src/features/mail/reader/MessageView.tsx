@@ -16,6 +16,8 @@ type Props = {
   expanded: boolean;
   /** False for a single-message thread: plain message, no toggle, always expanded. */
   collapsible?: boolean;
+  /** Message is in Junk: remote images are never loaded automatically, only on request. */
+  junk?: boolean;
   onToggle: () => void;
   onOpenLink: (url: string) => void;
 };
@@ -24,6 +26,7 @@ export function MessageView({
   message: m,
   expanded: expandedProp,
   collapsible = true,
+  junk = false,
   onToggle,
   onOpenLink,
 }: Props) {
@@ -115,13 +118,16 @@ export function MessageView({
             <>
               {blocked && !showRemote && (
                 <div className="mb-3 flex items-center gap-2 rounded-md bg-hover px-3 py-1.5 text-[12px] text-muted">
-                  <ImageOff size={14} /> Remote content is blocked to protect your privacy.
+                  <ImageOff size={14} />
+                  {junk
+                    ? 'This message is in Junk. Images are not loaded automatically.'
+                    : 'Remote content is blocked to protect your privacy.'}
                   <button
                     type="button"
                     className="ml-auto text-[color-mix(in_srgb,var(--accent)_75%,var(--foreground))] hover:underline"
                     onClick={() => setShowRemote(true)}
                   >
-                    Load remote images
+                    {junk ? 'Load images' : 'Load remote images'}
                   </button>
                 </div>
               )}

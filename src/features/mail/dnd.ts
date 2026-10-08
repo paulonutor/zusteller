@@ -155,11 +155,14 @@ export function planThreadDrop(
   }
   switch (target.mailbox) {
     case 'inbox':
+      // restore = "Move to Inbox": also takes threads out of Trash and Junk.
       return threads.some((t) => !has(t, SYSTEM_LABEL.inbox)) ? { action: 'restore' } : null;
     case 'all':
       return threads.some((t) => has(t, SYSTEM_LABEL.inbox)) ? { action: 'archive' } : null;
     case 'trash':
       return threads.some((t) => !has(t, SYSTEM_LABEL.trash)) ? { action: 'trash' } : null;
+    case 'junk':
+      return threads.some((t) => !has(t, SYSTEM_LABEL.junk)) ? { action: 'markJunk' } : null;
     case 'starred':
       return threads.some((t) => !t.isStarred) ? { action: 'star' } : null;
     default:

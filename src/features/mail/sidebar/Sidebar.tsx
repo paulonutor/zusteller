@@ -5,6 +5,7 @@ import {
   Monitor,
   Moon,
   Send,
+  ShieldAlert,
   Star,
   Sun,
   Trash2,
@@ -21,6 +22,7 @@ const ICONS: Record<SystemMailbox, LucideIcon> = {
   inbox: Inbox,
   starred: Star,
   sent: Send,
+  junk: ShieldAlert,
   trash: Trash2,
   all: Archive,
 };
@@ -155,8 +157,8 @@ export function Sidebar({
                     />
                   }
                   label={m.name}
-                  // Only the Inbox shows a count, like Mail/Gmail; others would be noise.
-                  count={m.id === 'inbox' ? counts?.mailboxes.inbox : undefined}
+                  // Only Inbox and Junk show an unread count; the others would be noise.
+                  count={m.id === 'inbox' || m.id === 'junk' ? counts?.mailboxes[m.id] : undefined}
                 />
               </Item>
             );

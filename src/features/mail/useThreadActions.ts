@@ -4,6 +4,9 @@ import type { MenuItemSpec } from '@/components/ui/Menu';
 import { labelStates, resolveActions, type ActionDescriptor, type PerformAction } from './actions';
 import type { MailView } from './view';
 
+/** Actions that move a conversation between mailboxes: the first group of the context menu. */
+const PRIMARY = new Set<string>(['archive', 'trash', 'restore', 'notJunk']);
+
 export type Perform = (action: PerformAction, ids: ID[], opts?: { labelId?: ID }) => void;
 
 /**
@@ -42,13 +45,9 @@ export function buildThreadActions(
     });
 
     const contextItems: MenuItemSpec[] = [
-      ...actions
-        .filter((a) => a.id === 'archive' || a.id === 'trash' || a.id === 'restore')
-        .map(toItem),
+      ...actions.filter((a) => PRIMARY.has(a.id)).map(toItem),
       { kind: 'separator' },
-      ...actions
-        .filter((a) => a.id !== 'archive' && a.id !== 'trash' && a.id !== 'restore')
-        .map(toItem),
+      ...actions.filter((a) => !PRIMARY.has(a.id)).map(toItem),
       { kind: 'separator' },
       {
         kind: 'sub',

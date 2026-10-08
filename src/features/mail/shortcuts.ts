@@ -4,7 +4,7 @@ import type { MailActionId } from './actions';
 /** Map a keydown to an action, or null. Kept pure for testing. Plain keys only: no ⌘ combos that macOS owns. */
 export function actionForKey(
   e: Pick<KeyboardEvent, 'key' | 'shiftKey' | 'metaKey' | 'ctrlKey' | 'altKey'>,
-): MailActionId | 'toggleStar' | null {
+): MailActionId | 'toggleStar' | 'toggleJunk' | null {
   if (e.metaKey || e.ctrlKey || e.altKey) return null;
   // Compare lowercase plus an explicit shiftKey: CapsLock changes `key` but not `shiftKey`.
   const key = e.key.toLowerCase();
@@ -21,6 +21,9 @@ export function actionForKey(
       return e.shiftKey ? 'markRead' : null;
     case 'u':
       return e.shiftKey ? 'markUnread' : null;
+    case '!':
+      // Gmail's key: Mark as Junk, or Not Junk while looking at Junk. Resolved in MailApp like `s`.
+      return 'toggleJunk';
     case 's':
       return e.shiftKey ? null : 'toggleStar';
     default:
