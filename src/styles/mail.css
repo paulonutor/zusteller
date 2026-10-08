@@ -664,3 +664,9 @@ html:root [data-row-slot][data-state='enter'] [role='option']:not([aria-selected
 html:root [data-list-scroller]:focus-visible {
   outline: none;
 }
+
+/* Rows used to share a collapsed 1px margin; inside slots margins can't collapse, so keep only the
+   top one (same row pitch as before). Windowed lists wrap rows themselves and are unaffected. */
+html:root [data-row-clip] > [role='option'] {
+  margin-bottom: 0;
+}
