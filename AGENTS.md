@@ -48,6 +48,7 @@ Before every push: typecheck, lint, tests and build must all pass. Look at scree
 ## Visual skin
 
 Skin **B2** is the default in light and dark ("Gmail-in-glass": Tahoe-style floating panes, title + search together, All/Unread/Starred tabs).
+Rows show a sender avatar (initials); it turns into the selection checkbox on hover/keyboard focus, and every row shows checkboxes once the user multi-selects. Star shows only when starred or on hover.
 `?skin=a|b|c|default` switches skins (A and C are dark-only); `?theme=dark` forces dark. Styles live in `frontend/src/styles/skins.css`.
 
 ## Layout
