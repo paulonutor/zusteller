@@ -1,21 +1,36 @@
-import {
-  Archive,
-  Mail,
-  MailOpen,
-  RotateCcw,
-  ShieldAlert,
-  Star,
-  Tag,
-  Trash2,
-  type LucideIcon,
-} from 'lucide-react';
+import type { ComponentType } from 'react';
+import { Archive, Mail, MailOpen, RotateCcw, ShieldAlert, Star, Tag, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { DropdownMenu, type MenuItemSpec } from '@/components/ui/Menu';
 import type { ActionDescriptor, MailActionId } from './actions';
 import type { Perform } from './useThreadActions';
 import type { ID } from '@/domain/mail';
 
-const ICONS: Record<MailActionId, LucideIcon> = {
+type IconComponent = ComponentType<{ size?: number; className?: string }>;
+
+/** "Mark as Junk" shield with a strike through it: the same glyph, negated. */
+function NotJunkIcon({ size = 15, className }: { size?: number; className?: string }) {
+  return (
+    <span className="relative inline-flex">
+      <ShieldAlert size={size} className={className} />
+      <svg
+        aria-hidden
+        viewBox="0 0 24 24"
+        width={size}
+        height={size}
+        className="absolute inset-0"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+      >
+        <path d="M3 3 L21 21" />
+      </svg>
+    </span>
+  );
+}
+
+const ICONS: Record<MailActionId, IconComponent> = {
   archive: Archive,
   trash: Trash2,
   restore: RotateCcw,
@@ -24,7 +39,7 @@ const ICONS: Record<MailActionId, LucideIcon> = {
   star: Star,
   unstar: Star,
   markJunk: ShieldAlert,
-  notJunk: RotateCcw,
+  notJunk: NotJunkIcon,
   deleteForever: Trash2,
 };
 
@@ -55,18 +70,6 @@ export function ActionBar({
     >
       {actions.map((a) => {
         const Icon = ICONS[a.id];
-        if (a.text)
-          return (
-            <Button
-              key={a.id}
-              title={a.shortcut ? `${a.label} (${a.shortcut})` : a.label}
-              disabled={!a.enabled}
-              onClick={() => perform(a.id, ids)}
-              className="mr-1.5 whitespace-nowrap px-2 font-medium"
-            >
-              {a.label}
-            </Button>
-          );
         return (
           <Button
             key={a.id}

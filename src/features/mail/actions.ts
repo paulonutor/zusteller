@@ -26,8 +26,6 @@ export type ActionDescriptor = {
   label: string;
   /** Display string, e.g. "E". Matching is done in shortcuts.ts. */
   shortcut?: string;
-  /** Render as a text button in the toolbar instead of an icon. */
-  text?: boolean;
   destructive?: boolean;
   enabled: boolean;
 };
@@ -49,7 +47,6 @@ export function resolveActions(threads: ThreadSummary[], view: MailView): Action
       id: 'notJunk',
       label: 'Not Junk',
       shortcut: '!',
-      text: true,
       enabled: threads.some((t) => has(t, SYSTEM_LABEL.junk)),
     });
     list.push({

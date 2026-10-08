@@ -169,6 +169,19 @@ export function MailApp() {
         action === 'deleteForever' ||
         // Moving to a label takes rows out of the Inbox view only.
         (action === 'moveToLabel' && view.kind === 'mailbox' && view.mailbox === 'inbox');
+      if (action === 'deleteForever') {
+        const n = targetIds.length;
+        const ok = await platform.confirm({
+          title:
+            n === 1
+              ? 'Delete this conversation permanently?'
+              : `Delete ${n} conversations permanently?`,
+          message: "This can't be undone.",
+          confirmLabel: 'Delete',
+          destructive: true,
+        });
+        if (!ok) return;
+      }
       const next = removes ? nextAfterRemoval(ids, new Set(targetIds)) : null;
       const ok = await run(action, targetIds, opts);
       if (ok && removes) {
@@ -190,7 +203,7 @@ export function MailApp() {
         });
       }
     },
-    [run, ids, view],
+    [run, ids, view, platform],
   );
 
   // Targets for shortcuts: the selection, else the keyboard cursor.

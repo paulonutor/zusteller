@@ -27,6 +27,26 @@ describe('tauri platform', () => {
     expect(isTauriHost()).toBe(true);
   });
 
+  it('confirm asks the native dialog and returns its boolean answer', async () => {
+    const { invoke } = stub();
+    const p = createTauriPlatformService();
+    const opts = {
+      title: 'Delete?',
+      message: 'No undo.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    };
+    invoke
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(undefined);
+    expect(await p.confirm(opts)).toBe(true);
+    expect(invoke).toHaveBeenCalledWith('confirm', opts);
+    expect(await p.confirm({ ...opts, destructive: undefined })).toBe(false);
+    expect(invoke).toHaveBeenLastCalledWith('confirm', { ...opts, destructive: false });
+    expect(await p.confirm(opts)).toBe(false); // anything but `true` is a cancel
+  });
+
   it('maps calls to Rust commands', async () => {
     const { invoke } = stub();
     const p = createTauriPlatformService();

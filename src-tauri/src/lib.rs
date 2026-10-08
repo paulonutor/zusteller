@@ -6,6 +6,7 @@ use tauri::{
     },
     AppHandle, Emitter, Manager, Runtime, Window,
 };
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_notification::NotificationExt;
 
 /// Event the frontend listens to. Payload is the menu item id (see MENU_* below).
@@ -154,6 +155,31 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .build()
 }
 
+/// Native confirmation sheet (NSAlert). Resolves to true when the user picks the confirm button.
+/// Async so the blocking dialog never runs on the main thread.
+#[tauri::command]
+async fn confirm(
+    app: AppHandle,
+    title: String,
+    message: String,
+    confirm_label: String,
+    destructive: bool,
+) -> bool {
+    app.dialog()
+        .message(message)
+        .title(title)
+        .kind(if destructive {
+            MessageDialogKind::Warning
+        } else {
+            MessageDialogKind::Info
+        })
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            confirm_label,
+            "Cancel".to_string(),
+        ))
+        .blocking_show()
+}
+
 /// Show a native notification. Requests permission on first use.
 #[tauri::command]
 fn notify(app: AppHandle, title: String, body: Option<String>) -> Result<(), String> {
@@ -234,12 +260,14 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             notify,
             set_badge,
             set_window_theme,
             accent_color,
-            show_context_menu
+            show_context_menu,
+            confirm
         ])
         .setup(|app| {
             // No cheap in-process callback for accent changes: check once a second, emit on change.

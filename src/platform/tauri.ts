@@ -10,6 +10,7 @@ import type { NativeMenuItem, PlatformService } from './PlatformService';
  *   - command `notify { title, body }`   -> notification plugin
  *   - command `set_badge { count }`      -> window.set_badge_count
  *   - `plugin:opener|open_url { url }`   -> opener plugin, ACL-scoped to http/https/mailto
+ *   - command `confirm { title, message, confirmLabel, destructive }` -> native dialog, resolves to boolean
  *   - command `show_context_menu { items }` -> native popup; the pick comes back as event
  *     `zusteller://context-menu` (payload = item id; nothing on dismissal)
  *   - event  `zusteller://menu`          -> native menu clicks, payload = item id
@@ -78,6 +79,15 @@ export function createTauriPlatformService(): Omit<PlatformService, 'subscribeMe
         cancelled = true;
         off?.();
       };
+    },
+    async confirm({ title, message, confirmLabel, destructive }) {
+      const ok = await requireTauri().core.invoke('confirm', {
+        title,
+        message,
+        confirmLabel,
+        destructive: destructive ?? false,
+      });
+      return ok === true;
     },
     async showContextMenu(items: NativeMenuItem[], onSelect) {
       const t = requireTauri();

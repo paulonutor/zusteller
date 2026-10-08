@@ -57,6 +57,7 @@ beforeEach(() => {
           showNotification: vi.fn().mockResolvedValue(undefined),
           setBadge: vi.fn().mockResolvedValue(undefined),
           openExternal: vi.fn().mockResolvedValue(undefined),
+          confirm: () => Promise.resolve(true),
           subscribeMenuActions: () => () => undefined,
         },
       }}

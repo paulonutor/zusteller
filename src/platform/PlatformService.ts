@@ -12,7 +12,19 @@ export type NativeMenuItem =
   | { kind: 'separator' }
   | { kind: 'sub'; label: string; disabled?: boolean; items: NativeMenuItem[] };
 
+export type ConfirmOptions = {
+  title: string;
+  /** Secondary text; say what happens and whether it can be undone. */
+  message: string;
+  /** Label of the confirming button, a verb ("Delete"), never "OK". */
+  confirmLabel: string;
+  /** Warning styling for irreversible actions. */
+  destructive?: boolean;
+};
+
 export interface PlatformService {
+  /** Ask the user to confirm. Native sheet on desktop hosts, `window.confirm` in the browser. Resolves false on cancel. */
+  confirm(options: ConfirmOptions): Promise<boolean>;
   showNotification(notification: { title: string; body?: string }): Promise<void>;
   setBadge(count?: number): Promise<void>;
   openExternal(url: string): Promise<void>;
