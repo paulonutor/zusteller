@@ -39,17 +39,19 @@ describe('wails platform adapter', () => {
     expect(isWailsHost()).toBe(true);
   });
 
-  it('forwards the three capabilities to the Go service', async () => {
+  it('forwards the capabilities to the Go service', async () => {
     const { ByName } = stubRuntime();
     const p = createWailsPlatformService();
     await p.showNotification({ title: 'Hi' });
     await p.setBadge(4);
     await p.setBadge();
+    await p.setWindowTheme?.('dark');
     await p.openExternal('https://example.com/x');
     expect(ByName.mock.calls).toEqual([
       [`${SVC}.ShowNotification`, 'Hi', ''],
       [`${SVC}.SetBadge`, 4],
       [`${SVC}.SetBadge`, 0],
+      [`${SVC}.SetWindowTheme`, 'dark'],
       [`${SVC}.OpenExternal`, 'https://example.com/x'],
     ]);
   });

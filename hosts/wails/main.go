@@ -76,7 +76,7 @@ func main() {
 	}
 
 	dockSvc := dock.New()
-	hostPlatform := &platform.Service{Dock: dockAdapter{dockSvc}}
+	hostPlatform := &platform.Service{Dock: dockAdapter{dockSvc}, Appearance: newAppearance()}
 	services := []application.Service{
 		application.NewService(&lifecycle{"dock", dockSvc.ServiceStartup, dockSvc.ServiceShutdown}),
 		application.NewService(hostPlatform),

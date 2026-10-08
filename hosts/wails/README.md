@@ -22,10 +22,11 @@ task dev                                      # terminal 2
 |---|---|
 | `task dev:vite` then `task dev` (2 terminals) | Vite on :47832 + Wails window proxying to it |
 | `task build` | `vite build` into `appdist/`, then `go build -tags production` -> `bin/zusteller` |
+| `task bundle` | `task build`, then wrap the binary in `bin/zusteller.app` (see below) |
 | `task test` / `task vet` | Go tests (OS-independent) / `go vet` |
 
 macOS: needs Xcode CLT (cgo). Linux (only for compile checks): `libgtk-3-dev libwebkit2gtk-4.1-dev`; Taskfile adds `-tags gtk3`
-because beta.28 defaults to GTK4. `.app` bundling/signing is not set up (needs the `wails3` CLI or manual `Info.plist`).
+because beta.28 defaults to GTK4. Signing/notarisation is not set up; `task bundle` makes an ad-hoc-signed `.app` (id `de.onutor.zusteller.wails`, distinct from Tauri's) so the app runs as its own macOS application: needed for notifications and for computer-use/UI automation (a bare `go run` binary is attributed to the launching terminal or app).
 
 ## What is here
 
@@ -82,12 +83,12 @@ NOT verified (needs a Mac):
 - Sidebar-only material is not offered by Wails; the backdrop is window-wide.
 - JS bindings are called by string name (no generated bindings, to avoid a dependency); renaming the Go type/package breaks them.
 
-## Known limitation: native appearance vs. app theme
+## Native appearance vs. app theme
 
-The native window material follows the window's NSAppearance, not the page theme. Tauri pins it to the app theme at runtime
-(`setWindowTheme` -> `set_window_theme`). Wails v3 beta.28 only accepts `Mac.Appearance` when the window is created, so there is
-no runtime switch (the adapter deliberately does not implement `setWindowTheme`). Since vibrancy is now the default, a system/app theme
-mismatch makes the material and text colours disagree in Wails; pin it with `ZUSTELLER_APPEARANCE=dark|light` or match the OS theme.
+The native window material follows the window's NSAppearance, not the page theme. Like Tauri, the host pins it to the app theme at
+runtime: `setWindowTheme` -> `Service.SetWindowTheme` -> `NSApp.appearance` (`appearance_darwin.go`, cgo, main thread). Wails beta.28
+itself only accepts `Mac.Appearance` at window creation, hence the small cgo shim. `ZUSTELLER_APPEARANCE=dark|light` still pins the
+initial window appearance; the in-app theme takes over once the page loads.
 
 ## Vibrancy (default, macOS)
 

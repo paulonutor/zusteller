@@ -49,6 +49,17 @@ tasks:
     cmds:
       - go build {{.PROD_TAGS}} -ldflags="-s -w" -o bin/zusteller .
 
+  bundle:
+    desc: Wrap the production binary in bin/zusteller.app (ad-hoc signed; own bundle id, needed for notifications and UI automation)
+    deps: [build]
+    cmds:
+      - rm -rf bin/zusteller.app
+      - mkdir -p bin/zusteller.app/Contents/MacOS
+      - cp bin/zusteller bin/zusteller.app/Contents/MacOS/zusteller
+      - cp Info.plist bin/zusteller.app/Contents/Info.plist
+      - codesign --force --sign - bin/zusteller.app
+    platforms: [darwin]
+
   test:
     desc: Pure-Go tests (run on any OS, no GTK needed)
     cmds: [go test ./internal/...]

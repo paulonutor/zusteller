@@ -78,6 +78,7 @@ export function createWailsPlatformService(): Omit<PlatformService, 'subscribeMe
   return {
     showNotification: ({ title, body }) => call('ShowNotification', title, body ?? ''),
     setBadge: (count) => call('SetBadge', count ?? 0),
+    setWindowTheme: (theme) => call('SetWindowTheme', theme),
     async openExternal(url) {
       // Defence in depth; the Go side enforces the same allow-list.
       const parsed = new URL(url);

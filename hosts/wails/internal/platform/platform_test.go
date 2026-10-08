@@ -6,7 +6,10 @@ type fakes struct {
 	badge, opened []string
 	removed       int
 	notified      [][3]string
+	themes        []string
 }
+
+func (f *fakes) SetAppearance(t string) error { f.themes = append(f.themes, t); return nil }
 
 func (f *fakes) SetBadge(l string) error { f.badge = append(f.badge, l); return nil }
 func (f *fakes) RemoveBadge() error      { f.removed++; return nil }
@@ -54,5 +57,26 @@ func TestNotificationWithoutNotifier(t *testing.T) {
 	s := &Service{}
 	if err := s.ShowNotification("Hi", "there"); err == nil {
 		t.Fatal("expected error without a notifier")
+	}
+}
+
+func TestSetWindowTheme(t *testing.T) {
+	f := &fakes{}
+	s := &Service{Appearance: f}
+	for _, ok := range []string{"light", "dark", "system"} {
+		if err := s.SetWindowTheme(ok); err != nil {
+			t.Errorf("%s should be allowed: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{"", "purple", "Dark"} {
+		if err := s.SetWindowTheme(bad); err == nil {
+			t.Errorf("%q should be refused", bad)
+		}
+	}
+	if len(f.themes) != 3 {
+		t.Fatalf("themes %v", f.themes)
+	}
+	if err := (&Service{}).SetWindowTheme("dark"); err == nil {
+		t.Fatal("expected error without an Appearance")
 	}
 }

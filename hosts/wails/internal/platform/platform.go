@@ -28,11 +28,17 @@ type Opener interface {
 	OpenURL(url string) error
 }
 
+// Appearance pins the native window appearance at runtime ("light" | "dark"; "system" follows the OS).
+type Appearance interface {
+	SetAppearance(theme string) error
+}
+
 // Service is bound to the frontend. Only methods PlatformService needs.
 type Service struct {
-	Dock     Dock
-	Notifier Notifier
-	Opener   Opener
+	Dock       Dock
+	Notifier   Notifier
+	Opener     Opener
+	Appearance Appearance
 
 	nextID atomic.Int64
 }
@@ -81,4 +87,18 @@ func (s *Service) ShowNotification(title, body string) error {
 		return errors.New("notifications unavailable: not running from a bundled app")
 	}
 	return s.Notifier.Notify(fmt.Sprintf("zusteller-%d", s.nextID.Add(1)), title, body)
+}
+
+// SetWindowTheme pins the native window appearance ("light", "dark" or "system") so the native
+// material stays in step with the app theme.
+func (s *Service) SetWindowTheme(theme string) error {
+	switch theme {
+	case "light", "dark", "system":
+	default:
+		return fmt.Errorf("unknown window theme %q", theme)
+	}
+	if s.Appearance == nil {
+		return errors.New("window theme unavailable on this platform")
+	}
+	return s.Appearance.SetAppearance(theme)
 }
