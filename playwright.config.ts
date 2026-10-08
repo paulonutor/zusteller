@@ -25,7 +25,15 @@ export default defineConfig({
     locale: 'en-US',
     timezoneId: 'UTC',
     reducedMotion: 'reduce',
-    launchOptions: executablePath ? { executablePath } : {},
+    // Same glyph rasterising on every machine: no hinting, no subpixel/LCD text.
+    launchOptions: {
+      ...(executablePath ? { executablePath } : {}),
+      args: [
+        '--font-render-hinting=none',
+        '--disable-lcd-text',
+        '--disable-font-subpixel-positioning',
+      ],
+    },
   },
   projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
   webServer: {
