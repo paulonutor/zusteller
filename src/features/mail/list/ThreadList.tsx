@@ -1,11 +1,10 @@
 import { dragRegionProps } from '@/platform/hostChrome';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { defaultRangeExtractor, useVirtualizer, type Range } from '@tanstack/react-virtual';
-import { AlertCircle, Inbox, MailOpen, RefreshCw, Search, Star, X } from 'lucide-react';
+import { AlertCircle, Inbox, ListFilter as FilterIcon, RefreshCw, Search, X } from 'lucide-react';
 import type { ID, Label, ThreadSummary } from '@/domain/mail';
 import { Button } from '@/components/ui/Button';
-import { Checkbox } from '@/components/ui/Checkbox';
-import type { MenuItemSpec } from '@/components/ui/Menu';
+import { DropdownMenu, type MenuItemSpec } from '@/components/ui/Menu';
 import { cn } from '@/lib/cn';
 import type { Selection } from '../selection';
 import { ThreadRow } from './ThreadRow';
@@ -18,10 +17,10 @@ const DEFAULT_ROW_H = 68;
 
 export type ListFilter = 'all' | 'unread' | 'starred';
 
-const TABS: { id: ListFilter; label: string; icon: typeof Inbox }[] = [
-  { id: 'all', label: 'All', icon: Inbox },
-  { id: 'unread', label: 'Unread', icon: MailOpen },
-  { id: 'starred', label: 'Starred', icon: Star },
+const FILTERS: { id: ListFilter; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'unread', label: 'Unread' },
+  { id: 'starred', label: 'Starred' },
 ];
 
 type Props = {
@@ -116,7 +115,6 @@ export function ThreadList(p: Props) {
   const [hasFocus, setHasFocus] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
   const labelsById = new Map(p.labels.map((l) => [l.id, l]));
-  const allSelected = p.items.length > 0 && p.selection.selected.size === p.items.length;
   const someSelected = p.selection.selected.size > 0;
   // 'Selection mode': avatars become checkboxes once the user explicitly multi-selects.
   // A plain click that opens one thread leaves it off.
@@ -211,20 +209,6 @@ export function ThreadList(p: Props) {
     }
   };
 
-  const onTabKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
-    const keys: Record<string, (i: number) => number> = {
-      ArrowRight: (i) => (i + 1) % TABS.length,
-      ArrowLeft: (i) => (i + TABS.length - 1) % TABS.length,
-      Home: () => 0,
-      End: () => TABS.length - 1,
-    };
-    const next = keys[e.key];
-    if (!next) return;
-    e.preventDefault();
-    const i = TABS.findIndex((t) => `tab-${t.id}` === e.currentTarget.id);
-    document.getElementById(`tab-${TABS[next(i)]!.id}`)?.focus();
-  };
-
   const renderRow = (t: ThreadSummary, index?: number) => (
     <ThreadRow
       key={t.id}
@@ -255,12 +239,18 @@ export function ThreadList(p: Props) {
     <section aria-label={p.title} className="flex h-full min-w-0 flex-col bg-background">
       <header
         {...dragRegionProps}
-        className="drag-region flex h-[52px] shrink-0 items-center gap-3 px-3"
+        className="drag-region flex h-[52px] shrink-0 items-center gap-2 border-b border-border px-3"
       >
         <div className="min-w-0 shrink-0">
           <h1 className="text-[15px] font-semibold leading-tight">{p.title}</h1>
-          <p className="text-[11px] leading-tight text-muted">
-            {p.unreadCount ? `${p.unreadCount} unread` : 'No unread'}
+          <p className="text-[11px] leading-tight text-muted" aria-live="polite">
+            {selectionMode
+              ? `${p.selection.selected.size} selected`
+              : p.searchText
+                ? 'Search results'
+                : p.unreadCount
+                  ? `${p.unreadCount} unread`
+                  : 'No unread'}
           </p>
         </div>
         <label className="no-drag relative ml-auto min-w-0 flex-1">
@@ -294,57 +284,30 @@ export function ThreadList(p: Props) {
             </button>
           )}
         </label>
-      </header>
-
-      <div
-        role="tablist"
-        aria-label="Filter conversations"
-        data-skin-only
-        className="no-drag shrink-0"
-      >
-        {TABS.map(({ id, label, icon: Icon }) => {
-          const n = id === 'all' ? 0 : p.filterCounts[id];
-          return (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              id={`tab-${id}`}
-              aria-selected={p.filter === id}
-              aria-controls="thread-list"
-              // Roving tabindex: one tab stop; arrows move focus, Enter/Space activate (manual
-              // activation, so browsing the tabs doesn't clear the selection on every step).
-              tabIndex={p.filter === id ? 0 : -1}
-              onKeyDown={onTabKeyDown}
-              onClick={() => p.onFilterChange(id)}
-              className="inline-flex items-center"
+        <DropdownMenu
+          trigger={
+            <Button
+              aria-label={`Filter: ${FILTERS.find((f) => f.id === p.filter)!.label}`}
+              title="Filter"
+              active={p.filter !== 'all'}
             >
-              <Icon size={15} aria-hidden />
-              <span>{label}</span>
-              {n > 0 && <span data-count>{n}</span>}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="flex h-8 shrink-0 items-center gap-2 border-y border-border px-3">
-        <Checkbox
-          tabIndex={0}
-          label={selectionMode && allSelected ? 'Deselect all' : 'Select all'}
-          checked={selectionMode ? (allSelected ? true : 'mixed') : false}
-          onChange={() => (selectionMode ? p.onClear() : p.onSelectAll())}
+              <FilterIcon size={15} />
+            </Button>
+          }
+          items={FILTERS.map(({ id, label }) => {
+            const n = id === 'all' ? 0 : p.filterCounts[id];
+            return {
+              kind: 'check',
+              label: n > 0 ? `${label} (${n})` : label,
+              state: p.filter === id ? 'all' : 'none',
+              onSelect: () => p.onFilterChange(id),
+            } satisfies MenuItemSpec;
+          })}
         />
-        <Button size="sm" aria-label="Refresh" title="Refresh" onClick={p.onRefresh}>
-          <RefreshCw size={13} className={cn(p.isFetching && 'animate-spin')} />
+        <Button aria-label="Refresh" title="Refresh" onClick={p.onRefresh}>
+          <RefreshCw size={14} className={cn(p.isFetching && 'animate-spin')} />
         </Button>
-        <span className="ml-auto text-[12px] text-muted" aria-live="polite">
-          {selectionMode
-            ? `${p.selection.selected.size} selected`
-            : p.searchText
-              ? 'Search results'
-              : 'Newest first'}
-        </span>
-      </div>
+      </header>
 
       <div
         ref={scroller}

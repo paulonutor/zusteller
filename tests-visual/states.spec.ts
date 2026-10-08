@@ -90,11 +90,9 @@ for (const scheme of ['light', 'dark'] as const) {
 
     test('filter tab Unread', async ({ page }) => {
       await load(page);
-      await page.getByRole('tab', { name: /unread/i }).click();
-      await expect(page.getByRole('tab', { name: /unread/i })).toHaveAttribute(
-        'aria-selected',
-        'true',
-      );
+      await page.getByRole('button', { name: /^Filter/ }).click();
+      await page.getByRole('menuitem', { name: /unread/i }).click();
+      await expect(page.getByRole('button', { name: 'Filter: Unread' })).toBeVisible();
       await page.mouse.move(640, 795);
       await shot(page, 'tab-unread');
     });

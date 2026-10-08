@@ -26,8 +26,9 @@ async function openFirstThread(page) {
 }
 
 async function clickTab(page, name) {
-  const tab = page.getByRole('tab', { name });
-  if (await tab.isVisible().catch(() => false)) await tab.click();
+  await page.getByRole('button', { name: /^Filter/ }).click();
+  const item = page.getByRole('menuitem', { name });
+  if (await item.isVisible().catch(() => false)) await item.click();
   await page.waitForTimeout(300);
 }
 

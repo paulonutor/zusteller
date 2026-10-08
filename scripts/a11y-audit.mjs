@@ -147,7 +147,8 @@ function states() {
       'filter tab unread',
       '',
       async (page) => {
-        await page.getByRole('tab', { name: /Unread/ }).click();
+        await page.getByRole('button', { name: /^Filter/ }).click();
+        await page.getByRole('menuitem', { name: /Unread/ }).click();
       },
     ],
     [

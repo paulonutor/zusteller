@@ -108,17 +108,9 @@ describe('list header selection state', () => {
 
     await user.click(screen.getAllByRole('option')[1]!);
     expect(screen.queryByText(/\d+ selected/)).not.toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: 'Select all' })).toHaveAttribute(
-      'aria-checked',
-      'false',
-    );
 
     screen.getByRole('listbox').focus();
     await user.keyboard('{Control>}a{/Control}');
     expect(await screen.findByText(/\d+ selected/)).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: 'Deselect all' })).toHaveAttribute(
-      'aria-checked',
-      'true',
-    );
   });
 });

@@ -176,62 +176,6 @@ html:root[data-skin='b'] [data-pane='list'] header label button {
   right: 12px;
 }
 
-/* Category tabs */
-html:root[data-skin='b'] [role='tablist'][data-skin-only] {
-  display: flex;
-  padding: 0 8px;
-  border-bottom: 1px solid var(--border);
-}
-html:root[data-skin='b'] [role='tab'] {
-  flex: 1;
-  justify-content: center;
-  gap: 8px;
-  height: 44px;
-  font-size: 13.5px;
-  font-weight: 500;
-  color: var(--muted);
-  border-bottom: 3px solid transparent;
-  border-radius: 8px 8px 0 0;
-  transition:
-    background 0.12s,
-    color 0.12s;
-}
-html:root[data-skin='b'] [role='tab']:hover {
-  background: var(--hover);
-  color: var(--foreground);
-}
-html:root[data-skin='b'] [role='tab'][aria-selected='true']:hover {
-  background: transparent; /* accent text on the hover tint is < 4.5:1 */
-}
-html:root[data-skin='b'] [role='tab'][aria-selected='true'] {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
-}
-html:root[data-skin='b'] [role='tab'] [data-count] {
-  font-size: 11.5px;
-  font-weight: 600;
-  line-height: 18px;
-  min-width: 20px;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: var(--fill-1);
-  color: var(--muted);
-}
-html:root[data-skin='b'] [role='tab'][aria-selected='true'] [data-count] {
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
-  color: color-mix(in srgb, var(--accent) 70%, var(--foreground));
-}
-
-/* Gmail-like list toolbar */
-html:root[data-skin='b']
-  [data-pane='list']
-  > section
-  > div:not([data-list-scroller]):not([role='tablist']) {
-  border: 0;
-  height: 44px;
-  padding-inline: 14px;
-  gap: 10px;
-}
 html:root[data-skin='b'] [data-pane='list'] :is([role='checkbox'], [data-row-check]) {
   width: 18px;
   height: 18px;
@@ -248,15 +192,6 @@ html:root[data-skin='b'] [data-pane='list'] [data-row-check][data-checked='true'
 html:root[data-skin='b'] [data-pane='list'] :is([role='checkbox'], [data-row-check]) svg {
   width: 13px;
   height: 13px;
-}
-html:root[data-skin='b'] [data-pane='list'] > section > div > button[aria-label='Refresh'] {
-  width: 34px;
-  height: 34px;
-  border-radius: 999px;
-}
-html:root[data-skin='b'] [data-pane='list'] > section > div > button[aria-label='Refresh'] svg {
-  width: 17px;
-  height: 17px;
 }
 
 /* Rows: avatar that morphs into a checkbox, two lines, soft tinted selection */

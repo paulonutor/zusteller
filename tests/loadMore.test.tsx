@@ -43,7 +43,8 @@ describe('load more', () => {
     const user = userEvent.setup();
     render(<App services={{ mail, platform }} />);
     await waitFor(() => expect(screen.queryAllByRole('option').length).toBeGreaterThan(0));
-    await user.click(screen.getByRole('tab', { name: /Starred/ }));
+    await user.click(screen.getByRole('button', { name: /^Filter/ }));
+    await user.click(await screen.findByRole('menuitem', { name: /Starred/ }));
     await sleep(600);
     const settled = spy.mock.calls.length;
     await sleep(600);

@@ -120,18 +120,19 @@ describe('keyboard-only walkthrough', () => {
     await tabTo(user, (e) => e.getAttribute('type') === 'search');
     await user.keyboard('{Tab}'); // not trapped by the search box (nothing typed => no clear button)
 
-    // Filter tabs: roving tabindex, arrows move focus, Enter activates.
-    const tabs = screen.getAllByRole('tab');
-    expect(tabs.map((t) => t.tabIndex)).toEqual([0, -1, -1]);
-    tabs[0]!.focus();
-    await user.keyboard('{ArrowRight}');
-    expect(tabs[1]).toHaveFocus();
-    await user.keyboard('{End}');
-    expect(tabs[2]).toHaveFocus();
-    await user.keyboard('{Home}{Enter}');
-    expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
-    await user.tab(); // leaves the tablist (one stop), lands on select-all
-    expect(screen.getByRole('checkbox', { name: 'Select all' })).toHaveFocus();
+    // Filter menu: a single button after search; arrows + Enter pick an item.
+    const filterBtn = screen.getByRole('button', { name: /^Filter/ });
+    await tabTo(user, (e) => e === filterBtn);
+    await user.keyboard('{Enter}');
+    await screen.findByRole('menu');
+    await user.keyboard('{ArrowDown}{Enter}');
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: /^Filter: (Unread|Starred)$/ }),
+      ).toBeInTheDocument(),
+    );
+    await user.click(screen.getByRole('button', { name: /^Filter/ }));
+    await user.click(await screen.findByRole('menuitem', { name: 'All' }));
 
     // List: arrow to a row, star with S, open with Enter.
     const list = screen.getByRole('listbox');
