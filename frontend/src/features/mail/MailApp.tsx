@@ -157,7 +157,15 @@ export function MailApp() {
       const next = removes ? nextAfterRemoval(ids, new Set(targetIds)) : null;
       const ok = await run(action, targetIds, opts);
       if (ok && removes) {
-        setSelection({ selected: new Set(), focusedId: next, anchorId: next });
+        const acted = new Set(targetIds);
+        // Only move the selection if it still refers to the acted-on rows; if the user has
+        // since selected something else, leave their newer selection alone.
+        setSelection((s) => {
+          const stillSame =
+            [...s.selected].every((id) => acted.has(id)) &&
+            (s.focusedId === null || acted.has(s.focusedId));
+          return stillSame ? { selected: new Set(), focusedId: next, anchorId: next } : s;
+        });
       }
     },
     [run, ids],

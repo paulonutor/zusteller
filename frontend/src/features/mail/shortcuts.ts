@@ -6,21 +6,23 @@ export function actionForKey(
   e: Pick<KeyboardEvent, 'key' | 'shiftKey' | 'metaKey' | 'ctrlKey' | 'altKey'>,
 ): MailActionId | 'toggleStar' | null {
   if (e.metaKey || e.ctrlKey || e.altKey) return null;
-  switch (e.key) {
+  // Compare lowercase plus an explicit shiftKey: CapsLock changes `key` but not `shiftKey`.
+  const key = e.key.toLowerCase();
+  switch (key) {
     case 'e':
-      return 'archive';
+      return e.shiftKey ? null : 'archive';
     case '#':
-    case 'Backspace':
-    case 'Delete':
+    case 'backspace':
+    case 'delete':
       return 'trash';
-    case 'Z':
-      return 'restore';
-    case 'I':
-      return 'markRead';
-    case 'U':
-      return 'markUnread';
+    case 'z':
+      return e.shiftKey ? 'restore' : null;
+    case 'i':
+      return e.shiftKey ? 'markRead' : null;
+    case 'u':
+      return e.shiftKey ? 'markUnread' : null;
     case 's':
-      return 'toggleStar';
+      return e.shiftKey ? null : 'toggleStar';
     default:
       return null;
   }
@@ -55,7 +57,8 @@ export function useGlobalShortcuts(handlers: {
       const a = actionForKey(e);
       if (a) {
         e.preventDefault();
-        onAction(a);
+        // A held key must not repeat a (destructive or toggling) action.
+        if (!e.repeat) onAction(a);
       }
     };
     window.addEventListener('keydown', onKey);
