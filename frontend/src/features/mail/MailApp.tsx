@@ -22,6 +22,7 @@ import {
 import { useGlobalShortcuts } from './shortcuts';
 import { buildThreadActions, type Perform } from './useThreadActions';
 import { useMailActions } from './useMailActions';
+import { prepareExternalUrl } from './links';
 import { toQuery, type MailView } from './view';
 
 const LAYOUT_KEY = 'zusteller.layout';
@@ -231,7 +232,7 @@ export function MailApp() {
   };
 
   const openLink = useCallback(
-    (url: string) => void platform.openExternal(url).catch(() => undefined),
+    (url: string) => void platform.openExternal(prepareExternalUrl(url)).catch(() => undefined),
     [platform],
   );
 
