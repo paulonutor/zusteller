@@ -15,6 +15,7 @@ import type { Account, ID, Label, MailboxCounts, SystemMailbox } from '@/domain/
 import { MAILBOXES, userLabels } from '@/domain/mail';
 import { useTheme, type ThemePreference } from '@/app/theme';
 import { cn } from '@/lib/cn';
+import { dropTargetKey } from '../dropAnimation';
 import { beginLabelDrag, endDrag, useDropZone, type DropTarget } from '../dnd';
 import { viewKey, type MailView } from '../view';
 
@@ -64,6 +65,7 @@ function Item({
   return (
     <li
       {...zone.props}
+      data-drop-target={dropTargetKey(target)}
       data-drop={zone.state === 'idle' ? undefined : zone.state}
       draggable={label && !active ? true : undefined}
       onDragStart={label && !active ? (e) => beginLabelDrag(e, label) : undefined}

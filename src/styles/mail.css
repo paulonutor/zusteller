@@ -587,7 +587,7 @@ html:root nav [data-mailbox-icon] {
   color: var(--accent);
 }
 
-/* A row that left the list collapses out instead of vanishing (see useExitingRows, 220ms). */
+/* A row that left the list collapses out instead of vanishing (useListMotion, 150ms). */
 @keyframes row-exit {
   from {
     max-height: var(--row-h, 68px);
@@ -597,11 +597,40 @@ html:root nav [data-mailbox-icon] {
   to {
     max-height: 0;
     opacity: 0;
-    transform: translateX(-12px);
+    transform: translateX(-16px);
   }
 }
 html:root [data-row-exit] {
   overflow: hidden;
   pointer-events: none;
-  animation: row-exit 220ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: row-exit 150ms cubic-bezier(0.3, 0, 0.8, 0.4) forwards;
+}
+
+/* New mail slides in from above and its row flashes the accent colour once (useListMotion). */
+@keyframes row-enter {
+  from {
+    max-height: 0;
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    max-height: var(--row-h, 68px);
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes row-flash {
+  from {
+    background-color: color-mix(in srgb, var(--accent, #0a84ff) 22%, transparent);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+html:root [data-row-enter] {
+  overflow: hidden;
+  animation: row-enter 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+html:root [data-row-enter] > [role='option']:not([aria-selected='true']) {
+  animation: row-flash 1.4s ease-out both;
 }

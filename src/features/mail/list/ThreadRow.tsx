@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { Paperclip, Star } from 'lucide-react';
-import type { ID, Label, ThreadSummary } from '@/domain/mail';
+import { SYSTEM_LABEL, type ID, type Label, type ThreadSummary } from '@/domain/mail';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { ContextMenu, type MenuItemSpec } from '@/components/ui/Menu';
 import { cn } from '@/lib/cn';
@@ -54,6 +54,7 @@ export const ThreadRow = memo(function ThreadRow(p: Props) {
     .map((id) => p.labelsById.get(id))
     .filter((l): l is Label => !!l && l.type === 'user');
   const lead = leadSender(t, p.accountEmail);
+  const inTrash = t.labelIds.includes(SYSTEM_LABEL.trash);
 
   // A sidebar label dragged onto the row. Refused when the row already has it (unless it is part
   // of a selection, where other rows may still lack it).
@@ -141,18 +142,20 @@ export const ThreadRow = memo(function ThreadRow(p: Props) {
               {formatListDate(t.lastMessageAt)}
             </span>
             {/* Pointer-only (see checkbox above). Keyboard: S; also toolbar and context menu. */}
-            <span
-              data-star
-              data-starred={t.isStarred}
-              aria-hidden="true"
-              onClick={(e) => {
-                e.stopPropagation();
-                p.onToggleStar();
-              }}
-              className="no-drag -mr-1 inline-flex rounded p-0.5 text-faint hover:text-muted"
-            >
-              <Star size={15} className={cn(t.isStarred && 'fill-star text-star')} />
-            </span>
+            {!inTrash && (
+              <span
+                data-star
+                data-starred={t.isStarred}
+                aria-hidden="true"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  p.onToggleStar();
+                }}
+                className="no-drag -mr-1 inline-flex rounded p-0.5 text-faint hover:text-muted"
+              >
+                <Star size={15} className={cn(t.isStarred && 'fill-star text-star')} />
+              </span>
+            )}
           </div>
           <div data-line2 className="min-w-0">
             <div

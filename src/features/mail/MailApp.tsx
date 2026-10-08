@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MAILBOXES, type ID, type ThreadSummary } from '@/domain/mail';
 import { useServices } from '@/app/services';
 import { Resizer } from '@/components/ui/Resizer';
+import { flyRowsToTarget } from './dropAnimation';
 import { resolveActions, type MailActionId } from './actions';
 import { WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -67,7 +68,7 @@ const EMPTY: Record<string, string> = {
 };
 
 export function MailApp() {
-  const { platform } = useServices();
+  const { platform, mail } = useServices();
   const toast = useToast();
   const accounts = useAccounts();
   const account = accounts.data?.[0];
@@ -120,7 +121,9 @@ export function MailApp() {
     [loaded],
   );
   const ids = useMemo(() => items.map((t) => t.id), [items]);
-  const { run } = useMailActions(accountId);
+  const { run, refresh } = useMailActions(accountId);
+  // New mail announced by the provider: refetch lists and counts (the list animates the arrivals).
+  useEffect(() => mail.subscribe?.(() => void refresh()), [mail, refresh]);
 
   // Persist layout (best effort).
   useEffect(() => {
@@ -279,6 +282,7 @@ export function MailApp() {
   const dropThreads = (target: DropTarget, dragged: ID[], copy: boolean) => {
     const plan = planThreadDrop(target, byId(dragged), copy);
     if (!plan) return;
+    flyRowsToTarget(dragged, target);
     void perform(plan.action, dragged, { labelId: plan.labelId });
     if (target.kind === 'label') {
       const name = labels.find((l) => l.id === target.labelId)?.name ?? 'label';

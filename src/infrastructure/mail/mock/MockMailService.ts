@@ -88,6 +88,38 @@ export class MockMailService implements MailService {
   setLatency(latency: MockLatency) {
     this.latency = latency;
   }
+  private listeners = new Set<() => void>();
+  subscribe(listener: () => void) {
+    this.listeners.add(listener);
+    return () => void this.listeners.delete(listener);
+  }
+  /** Deliver one new unread Inbox thread (demo / tests) and notify subscribers. */
+  simulateIncoming(
+    subject = 'New message',
+    from = { name: 'Max Müller', email: 'max@example.com' },
+  ) {
+    const account = this.accounts[0]!;
+    const n = this.messages.size + 1;
+    const threadId = `incoming-${Date.now()}-${n}`;
+    this.messages.set(threadId, [
+      {
+        id: `${threadId}-m1`,
+        threadId,
+        accountId: account.id,
+        from,
+        to: [{ name: account.displayName, email: account.email }],
+        subject,
+        sentAt: new Date().toISOString(),
+        plainText: 'This message arrived while you were looking at the list.',
+        isRead: false,
+        isStarred: false,
+        labelIds: [SYSTEM_LABEL.inbox],
+        attachments: [],
+      },
+    ]);
+    this.listeners.forEach((l) => l());
+    return threadId;
+  }
   setOffline(offline: boolean) {
     this.offline = offline;
   }

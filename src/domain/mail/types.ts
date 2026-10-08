@@ -85,6 +85,11 @@ export interface MailService {
   notJunk(accountId: ID, threadIds: ID[]): Promise<void>;
   /** Permanently removes threads that are in Junk or Trash. Rejects (`invalid`) for any other thread. */
   deleteForever(accountId: ID, threadIds: ID[]): Promise<void>;
+  /**
+   * Optional push/poll hook: `listener` runs when mail changed outside this app's own actions
+   * (new mail). Returns an unsubscribe function. The UI refetches its lists when it fires.
+   */
+  subscribe?(listener: () => void): () => void;
   addLabel(accountId: ID, threadIds: ID[], labelId: ID): Promise<void>;
   removeLabel(accountId: ID, threadIds: ID[], labelId: ID): Promise<void>;
 }

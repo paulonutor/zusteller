@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { DropdownMenu, type MenuItemSpec } from '@/components/ui/Menu';
 import type { Selection } from '../selection';
 import { ThreadRow } from './ThreadRow';
-import { useExitingRows } from './useExitingRows';
+import { useListMotion } from './useListMotion';
 
 /** Lists longer than this are windowed; shorter ones render every row as before. */
 export const VIRTUALIZE_THRESHOLD = 100;
@@ -208,7 +208,7 @@ export function ThreadList(p: Props) {
     }
   };
 
-  const entries = useExitingRows(
+  const entries = useListMotion(
     p.items,
     `${p.filter}|${p.title}|${p.searchText}`,
     !virtual && !p.isLoading,
@@ -396,6 +396,10 @@ export function ThreadList(p: Props) {
               entries.map((e) =>
                 e.exiting ? (
                   <div key={e.thread.id} data-row-exit aria-hidden="true" inert>
+                    {renderRow(e.thread)}
+                  </div>
+                ) : e.entering ? (
+                  <div key={e.thread.id} data-row-enter>
                     {renderRow(e.thread)}
                   </div>
                 ) : (
