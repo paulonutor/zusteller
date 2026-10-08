@@ -14,11 +14,20 @@ const SafeHtmlFrame = lazy(() =>
 type Props = {
   message: Message;
   expanded: boolean;
+  /** False for a single-message thread: plain message, no toggle, always expanded. */
+  collapsible?: boolean;
   onToggle: () => void;
   onOpenLink: (url: string) => void;
 };
 
-export function MessageView({ message: m, expanded, onToggle, onOpenLink }: Props) {
+export function MessageView({
+  message: m,
+  expanded: expandedProp,
+  collapsible = true,
+  onToggle,
+  onOpenLink,
+}: Props) {
+  const expanded = collapsible ? expandedProp : true;
   const { resolved } = useTheme();
   const [showRemote, setShowRemote] = useState(false);
   const [blocked, setBlocked] = useState(false);
@@ -26,37 +35,48 @@ export function MessageView({ message: m, expanded, onToggle, onOpenLink }: Prop
 
   const preview = (m.plainText ?? '').replace(/\s+/g, ' ').slice(0, 120);
 
+  const summary = (
+    <>
+      {collapsible &&
+        (expanded ? (
+          <ChevronDown size={14} className="shrink-0 text-muted" />
+        ) : (
+          <ChevronRight size={14} className="shrink-0 text-muted" />
+        ))}
+      <span className="shrink-0 text-[13.5px] font-semibold">{displayName(m.from)}</span>
+      {!expanded && (
+        <span className="min-w-0 flex-1 truncate text-[12.5px] text-muted">{preview}</span>
+      )}
+      {expanded && <span className="flex-1" />}
+      {m.isStarred && (
+        <Star size={13} className="shrink-0 fill-star text-star" aria-label="Starred" />
+      )}
+      {m.attachments.length > 0 && (
+        <Paperclip size={13} className="shrink-0 text-muted" aria-label="Has attachments" />
+      )}
+      <time dateTime={m.sentAt} className="shrink-0 text-[12px] text-muted">
+        {formatFullDate(m.sentAt)}
+      </time>
+    </>
+  );
+
   return (
     <article
       aria-label={`Message from ${displayName(m.from)}`}
       className="border-b border-border last:border-b-0"
     >
-      <button
-        type="button"
-        aria-expanded={expanded}
-        onClick={onToggle}
-        className="flex w-full items-center gap-2 px-5 py-2.5 text-left hover:bg-hover"
-      >
-        {expanded ? (
-          <ChevronDown size={14} className="shrink-0 text-muted" />
-        ) : (
-          <ChevronRight size={14} className="shrink-0 text-muted" />
-        )}
-        <span className="shrink-0 text-[13.5px] font-semibold">{displayName(m.from)}</span>
-        {!expanded && (
-          <span className="min-w-0 flex-1 truncate text-[12.5px] text-muted">{preview}</span>
-        )}
-        {expanded && <span className="flex-1" />}
-        {m.isStarred && (
-          <Star size={13} className="shrink-0 fill-star text-star" aria-label="Starred" />
-        )}
-        {m.attachments.length > 0 && (
-          <Paperclip size={13} className="shrink-0 text-muted" aria-label="Has attachments" />
-        )}
-        <time dateTime={m.sentAt} className="shrink-0 text-[12px] text-muted">
-          {formatFullDate(m.sentAt)}
-        </time>
-      </button>
+      {collapsible ? (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={onToggle}
+          className="flex w-full items-center gap-2 px-5 py-2.5 text-left hover:bg-hover"
+        >
+          {summary}
+        </button>
+      ) : (
+        <div className="flex w-full items-center gap-2 px-5 py-2.5">{summary}</div>
+      )}
 
       {expanded && (
         <div className="selectable px-5 pb-5 pl-[38px]">

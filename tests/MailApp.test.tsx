@@ -104,6 +104,40 @@ describe('browsing', () => {
   });
 });
 
+describe('single-message threads', () => {
+  it('renders a plain, always-expanded message with no collapse affordance', async () => {
+    const user = setup();
+    await waitForRows();
+    await user.click(rowFor('Zusteller beta feedback'));
+    const reader = screen.getByRole('region', { name: 'Conversation' });
+    const article = await within(reader).findByRole('article');
+    expect(within(reader).getAllByRole('article')).toHaveLength(1);
+    // The header is static text, not a toggle (the only expandable control is the recipient Details).
+    expect(article.firstElementChild?.tagName).toBe('DIV');
+    expect(article.querySelectorAll('button[aria-expanded]')).toHaveLength(1);
+    expect(within(article).getByRole('button', { name: /Details/ })).toBeTruthy();
+    // Body, recipients and attachments are visible without any interaction.
+    expect(within(article).getByText(/I went through the latest build/)).toBeTruthy();
+    expect(within(article).getByText(/^To /)).toBeTruthy();
+    expect(within(article).getByRole('list', { name: 'Attachments' })).toBeTruthy();
+    expect(within(reader).queryByRole('button', { name: /expand all|collapse all/i })).toBeNull();
+    expect(within(reader).getByText('1 message')).toBeTruthy();
+  });
+
+  it('keeps collapse/expand for multi-message threads (latest open, older collapsed)', async () => {
+    const user = setup();
+    await waitForRows();
+    await user.click(rowFor('Lunch Thursday'));
+    const articles = await screen.findAllByRole('article');
+    expect(articles.length).toBeGreaterThan(1);
+    const toggles = articles.map((a) => a.querySelector('button[aria-expanded]'));
+    expect(toggles.every(Boolean)).toBe(true);
+    expect(toggles.at(-1)).toHaveAttribute('aria-expanded', 'true');
+    expect(toggles[0]).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: 'Expand all' })).toBeTruthy();
+  });
+});
+
 describe('actions', () => {
   it('stars from the row and shows it in Starred', async () => {
     const user = setup();
