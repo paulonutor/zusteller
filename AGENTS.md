@@ -13,19 +13,34 @@ The product/engineering plan lives in `zusteller-plan.md` (original spec) and `d
 
 ## Current state
 
-Phase 1 (shared mock mail reader) is implemented in `frontend/`. Phase 2 (Wails/Tauri hosts), 3 (Gmail), 4 (compose/send)
-and 5 (Apple on-device AI) are **not started** — do not implement them without an explicit request.
-V1 explicitly excludes: OAuth, network calls, compose/reply/forward/drafts/send, AI, background sync.
+- **Phase 1** (shared mock mail reader) is implemented in `frontend/`.
+- **Phase 2** hosts exist: `hosts/wails` (Go, Wails v3 beta.28) and `hosts/tauri` (Rust, Tauri 2.12), wired through `src/platform`
+  (menus, notifications, badge, external links, window theme). Vibrancy is the default in both; opaque variants exist. Written and
+  checked on Linux only (CI compiles them); **nothing native is verified on a Mac**. Decision rule: if Wails vibrancy doesn't work, commit to Tauri.
+- **Phase 3** (Gmail), **4** (compose/send) and **5** (Apple on-device AI) are **not started** — do not implement them without an explicit request.
+- V1 explicitly excludes: OAuth, network calls, compose/reply/forward/drafts/send, AI, background sync.
 
-## Commands (run from `frontend/`)
+## Commands
+
+Frontend (run from `frontend/`):
 
 | Task | Command |
 |---|---|
 | Install | `npm install` |
-| Dev server (browser mode) | `npm run dev` → http://localhost:5173 (`?latency=0`, `?offline=1` flags) |
-| Typecheck / lint / test | `npm run typecheck` · `npm run lint` · `npm test` |
-| Production build | `npm run build` |
+| Dev server (browser mode) | `npm run dev` → http://localhost:5173 (`?latency=0`, `?offline=1`, `?skin=`, `?theme=dark`, `?debug=accent`) |
+| Typecheck / lint / test | `npm run typecheck` · `npm run lint` · `npm test` (also `npm run test:watch`, `npm run format`) |
+| Production build | `npm run build` (typecheck + vite) |
 | Screenshots (needs dev server) | `CHROMIUM_PATH=/opt/pw-browsers/chromium node scripts/screenshots.mjs http://localhost:5173 screenshots` |
+
+Hosts (macOS; details in each `hosts/*/README.md`):
+
+| Task | Command |
+|---|---|
+| Wails (from `hosts/wails/`; Go ≥ 1.25 + Task) | `task dev:vite` then `task dev` · `task dev:glass` · `task dev:opaque` · `task build` · `task test` · `task vet` |
+| Tauri (from `hosts/tauri/`) | `npm install`, then `npm run dev` · `dev:opaque` · `build` · `build:opaque` · `check` (cargo check) |
+
+CI (`.github/workflows/`): `frontend.yml` runs typecheck, lint, test and build on every push/PR; `hosts.yml` runs Wails vet/build/test and
+Tauri `cargo check` when `hosts/**` or `frontend/src/platform/**` change.
 
 Before every push: typecheck, lint, tests and build must all pass. Look at screenshots for any visual change.
 
@@ -35,7 +50,8 @@ Before every push: typecheck, lint, tests and build must all pass. Look at scree
 2. React feature code **must not import** `@tauri-apps/*`, Wails bindings, provider SDKs or native APIs. ESLint enforces this
    (`no-restricted-imports`); features also may not import `@/infrastructure/*` — they use `MailService` from context.
 3. Host/native behaviour goes behind typed adapters (`src/platform`, `src/infrastructure/mail/*`). Don't add placeholder
-   methods that look functional.
+   methods that look functional. Host-only capabilities are optional on `PlatformService` (e.g. `setWindowTheme`);
+   native menu items map to actions in `platform/menuActions.ts` and run through the same handler as shortcuts.
 4. `MockMailService` → `GmailMailService` must be a one-line swap in `src/app/createServices.ts`; no feature component may change.
 5. Toolbar, context menu and keyboard shortcuts share **one** action layer (`features/mail/actions.ts` +
    `useMailActions.ts` + `useThreadActions.ts`). Don't duplicate mutation logic in components.
@@ -48,21 +64,31 @@ Before every push: typecheck, lint, tests and build must all pass. Look at scree
 ## Visual skin
 
 Skin **B2** is the default in light and dark ("Gmail-in-glass": Tahoe-style floating panes, title + search together, All/Unread/Starred tabs).
-Rows show a sender avatar (initials); it turns into the selection checkbox only when hovering the avatar itself (or on keyboard focus), and every row shows checkboxes once the user multi-selects. Star shows only when starred or on hover.
-`?skin=a|b|c|default` switches skins (A and C are dark-only); `?theme=dark` forces dark. Styles live in `frontend/src/styles/skins.css`.
+`?skin=a|b|c|default` switches skins (A and C are opt-in, dark-only); `?theme=dark` forces dark. Styles live in `frontend/src/styles/skins.css`.
+
+- Rows show a sender avatar (initials); it turns into the round selection checkbox only when hovering the avatar itself (enlarged hit
+  area) or on keyboard focus, and every row shows checkboxes once the user multi-selects. Star shows only when starred or on hover.
+- Selection uses the macOS accent (`-apple-system-control-accent`, else `AccentColor`, else fixed blue; `@supports`-guarded) while list
+  and window are active, gray otherwise (`data-window-inactive`). Text on the accent is always white. Debug with `?debug=accent`.
+- Filter tabs are client-side over loaded rows; selected rows stay visible.
+- Native hosts: `?vibrancy=1` → `data-vibrancy` makes backdrop/gutters/sidebar transparent; `data-host` insets headers for traffic lights.
 
 ## Layout
 
 ```
 frontend/src/
-  app/            composition root, providers (services, theme, toast)
+  app/            composition root (createServices), providers (services, theme, toast), skin.ts
   components/ui/  small shadcn-style primitives (Button, Menu, Checkbox, Resizer)
-  domain/mail/    provider-neutral types, MailService contract, query keys
-  features/mail/  sidebar/ list/ reader/ (+ safe-html/), actions, selection, shortcuts
+  domain/mail/    provider-neutral types, MailService contract (incl. getMailboxCounts), semantics, query keys
+  features/mail/  sidebar/ list/ reader/ (+ safe-html/, lazy-loaded), actions, selection, shortcuts
   infrastructure/mail/mock/  stateful MockMailService + deterministic seed
-  platform/       PlatformService + browser implementation
+  platform/       PlatformService, browser/wails/tauri adapters, menuActions, hostChrome, accentDebug
+  styles/         index.css (tokens), skins.css (skins, accent, vibrancy)
 frontend/tests/   integration tests (full app against the mock)
-docs/             architecture.md (host-comparison.md arrives with Phase 2)
+frontend/scripts/ screenshots.mjs
+hosts/wails/      Go host (Taskfile.yml, internal/platform)     hosts/tauri/  Rust host (src-tauri)
+.github/workflows/ frontend.yml, hosts.yml
+docs/             architecture.md, host-comparison.md, previews/
 ```
 
 ## Conventions
@@ -89,5 +115,6 @@ Board: **Zusteller** — https://trello.com/b/LJT3FtfE/zusteller (lists: Ideas �
   no merge commits (`git merge --ff-only`, or rebase onto `origin/main` first).
 - Commit identity: author/committer **Paul Onutor <paul@onutor.de>** (`git config user.name/user.email` in the repo).
   Keep the `Co-Authored-By: Claude ... <noreply@anthropic.com>` trailer; do **not** add a `Claude-Session:` line.
+  Check `git log --format='%an <%ae>'` before pushing; no other author identity.
 - History is only rewritten when Paul explicitly asks (it needs a force-push; take a backup tag first).
 - Small, descriptive commits. Never commit `node_modules`, `dist`, screenshots or secrets.

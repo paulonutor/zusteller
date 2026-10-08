@@ -1,12 +1,12 @@
-# zusteller architecture (Phase 1)
+# zusteller architecture (Phase 1 reader + Phase 2 hosts)
 
 ```
 React UI (features/mail) ──► MailService (domain contract) ◄── MockMailService   (Phase 1)
         │                                                  ◄── GmailMailService  (Phase 3, future)
-        └────────────────► PlatformService ◄── browser impl ◄── Wails / Tauri impls (Phase 2, future)
+        └────────────────► PlatformService ◄── browser impl ◄── Wails / Tauri adapters (Phase 2, wired)
 ```
 
-`src/app/createServices.ts` is the only place a concrete provider or host is chosen.
+`src/app/createServices.ts` is the only place a concrete mail provider is chosen; `src/platform/index.ts` is the only place the host is detected.
 
 ## Domain contract
 
@@ -33,6 +33,9 @@ System mailboxes (`SystemMailbox`) and user labels stay distinct in the UI. Inte
 
 `MockMailService` takes `latency` (ms or `{min,max}` with a seeded PRNG), `setOffline()`, and `failNext(method?, n)` for
 deterministic failure tests. Dev URL flags: `?latency=0`, `?offline=1`.
+Other mock features: deterministic seed (`createSeedData`, fixed `SEED_NOW`) with accounts, labels, multi-message threads, HTML and
+plain-text bodies and attachments (metadata); stateful mutations; keyset-paged `getThreads`; search; `getMailboxCounts` that
+reflects mutations.
 
 ## UI architecture
 
@@ -46,10 +49,40 @@ deterministic failure tests. Dev URL flags: `?latency=0`, `?offline=1`.
 - **Selection** (`selection.ts`, pure): click opens one; ⌘-click toggles; ⇧-click ranges; arrows move the cursor, ⇧+arrows
   extend; Space toggles; Enter opens; ⌘A selects all loaded; Esc clears. One selected row = open in the reader.
   Opening a conversation marks it read once.
-- **Shortcuts**: `E` archive · `⌫`/`#` trash · `⇧Z` move to Inbox · `⇧I`/`⇧U` read/unread · `S` star · `/` or `⌘F` search.
-  Plain keys only so they never collide with macOS ⌘ shortcuts; ignored while typing or while a menu is open.
+- **Filter tabs** (All / Unread / Starred): client-side over the *loaded* rows only (not a server query). Selected rows stay
+  visible even if they no longer match, so opening an unread thread doesn't make it vanish. Tab counts are over loaded rows.
+- **Shortcuts** (`shortcuts.ts`): `E` archive · `⌫`/`Del`/`#` trash · `⇧Z` move to Inbox · `⇧I`/`⇧U` read/unread · `S` star toggle ·
+  `/` or `⌘F` search. Plain keys only so they never collide with macOS ⌘ shortcuts; ignored while typing or while a menu is open.
 - **Layout**: sidebar (180–320, default 220) · list (300–640, default 410) · reader (flex, min 320). Drag or arrow-key resize.
-  A 52 px drag-region header on each pane leaves room for native traffic lights in Phase 2.
+  A 52 px drag-region header on each pane leaves room for native traffic lights (see Platform layer).
+
+### Rows and selection look (skin B2)
+
+- Each row shows a sender **avatar** (initials, hue from the address). It becomes the round checkbox only while the pointer is over the
+  avatar itself (enlarged hit area around it) or on keyboard focus; once anything is multi-selected, every row shows checkboxes
+  (selection mode). Star appears only when starred or on hover.
+- Selected rows use the macOS accent colour while the list **and** window are active, and gray otherwise (`data-window-inactive`),
+  like native lists.
+- **Accent handling** (`styles/skins.css`): default tokens are a fixed blue. `@supports (color: AccentColor)` switches `--sel-accent` /
+  `--accent` to `AccentColor`; `@supports (color: -apple-system-control-accent)` overrides that with WebKit's own dynamic system colour
+  (what `NSColor.controlAccentColor` returns). Text on the accent is always white (`--sel-accent-text`, `--accent-fg`), because
+  `AccentColorText` resolves to black on bright accents. `trackWindowFocus` bumps `--accent-tick` on focus so the colour re-resolves
+  after a System Settings change. `?debug=accent` (`platform/accentDebug.ts`) shows what the webview resolves for each keyword.
+
+## Platform layer (`src/platform`)
+
+| File | Role |
+|---|---|
+| `PlatformService.ts` | Interface: `showNotification`, `setBadge`, `openExternal`, `subscribeMenuActions(handler)` returning an unsubscribe, optional `setWindowTheme('system'/'light'/'dark')` |
+| `browser.ts` | Browser implementation (`subscribeMenuActions` is a no-op, no `setWindowTheme`) |
+| `wails.ts` / `tauri.ts` | Host adapters (`isWailsHost` / `isTauriHost`). Tauri implements `setWindowTheme`; Wails does not (appearance is fixed at window creation) |
+| `index.ts` | `createPlatformService()`: Wails, then Tauri, else browser; adapts host menu events to `subscribeMenuActions` |
+| `menuActions.ts` | Host-neutral `MenuAction` (`archive trash markRead markUnread star find`); maps Wails payloads (`archive`) and Tauri item ids (`mail.archive`). `MailApp` feeds them to the same handler as keyboard shortcuts (`star` = toggle, `find` = focus search); actions not enabled for the selection are ignored |
+| `hostChrome.ts` | `applyHostChrome()` sets `data-host="tauri\|wails"` and, if the host opened `?vibrancy=1`, `data-vibrancy` on `<html>`; `trackWindowFocus()` mirrors focus into `data-window-inactive`; `dragRegionProps` (`data-tauri-drag-region`) marks draggable headers (Wails uses the `--wails-draggable` CSS property) |
+| `accentDebug.ts` | `?debug=accent` diagnostic panel |
+
+`ThemeProvider` calls `platform.setWindowTheme?.()` so the native material follows the in-app theme ("System" follows the OS).
+`main.tsx` runs `applyHostChrome`, `trackWindowFocus` and `showAccentDebug` at startup.
 
 ## Safe rendering
 
@@ -60,13 +93,25 @@ the parent sizes the frame and intercepts link clicks. Attachments are metadata-
 
 ## Hosts & skins
 
-- **Adapters**: `frontend/src/platform/` holds `PlatformService` (notification, badge, openExternal), the browser implementation,
-  and the host adapters `wails.ts` / `tauri.ts`. They are written and unit-tested but not yet wired into `platform/index.ts`.
-- **Hosts**: `hosts/wails` (Go, Wails v3 beta.28) and `hosts/tauri` (Rust, Tauri 2) are thin shells around the shared `frontend/`.
-  No UI code is copied. Native menu items are routed to the same action layer as toolbar and shortcuts.
-- **Skins**: dark mode defaults to skin B2 ("Gmail-in-glass"); `?skin=a|b|c|default` switches (`src/styles/skins.css`).
-- Wails vs Tauri findings and the Mac measurement checklist: `docs/host-comparison.md`.
+- **Hosts**: `hosts/wails` (Go, Wails v3 beta.28) and `hosts/tauri` (Rust, Tauri 2.12) are thin shells around the shared `frontend/`;
+  no UI code is copied. Native menu items reach the same action layer as toolbar and shortcuts (see Platform layer). Setup, commands
+  and verification status are in each host's `README.md`; Wails vs Tauri findings in `docs/host-comparison.md`.
+  Nothing native has been verified on a Mac yet.
+- **Vibrancy is the default in both hosts**: transparent window with a macOS sidebar material; the host opens the page with
+  `?vibrancy=1`, which sets `data-vibrancy` so `skins.css` makes backdrop, gutters and sidebar transparent (list/reader stay opaque).
+  Tauri needs `macOSPrivateApi`; Wails needs `-tags private_mac_apis` (both private APIs). Opaque variants: Tauri
+  `npm run dev:opaque` / `build:opaque`; Wails `task dev:opaque` / `ZUSTELLER_VIBRANCY=0`.
+- **Skins** (`src/styles/skins.css`, `src/app/skin.ts`): **B2 ("Gmail-in-glass")** is the default in light and dark. A and C are opt-in and
+  dark-only: `?skin=a|b|c|default` (`default` = plain tokens). `?theme=dark` forces dark for one page load.
+
+## Build and CI
+
+- Reader HTML is code-split: `SafeHtmlFrame` (with DOMPurify) is `lazy()`-loaded from `MessageView` behind `Suspense`. Vite
+  `manualChunks` splits `react`, `tanstack` and `radix` vendor chunks. `base: './'` so hosts can load the build from disk.
+- `.github/workflows/frontend.yml` (every push/PR): `npm ci`, typecheck, lint, test, build in `frontend/`.
+- `.github/workflows/hosts.yml` (when `hosts/**` or `frontend/src/platform/**` change): Wails `go vet` / `go build -tags gtk3` /
+  `go test ./internal/...`; Tauri `cargo check --locked` after a frontend build. Linux only, so darwin code is not compiled in CI.
 
 ## Deliberately not built (later phases)
 
-Wails/Tauri hosts and native vibrancy (Phase 2), Gmail/OAuth/cache (3), compose/reply/send (4), on-device AI (5).
+Gmail/OAuth/cache (3), compose/reply/send (4), on-device AI (5), app packaging/signing/notarisation, Liquid Glass in Tauri.
