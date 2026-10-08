@@ -13,14 +13,14 @@ brew install go go-task                       # Go >= 1.25 and Task
 (cd ../../frontend && npm install)            # shared frontend deps
 task dev:vite                                 # terminal 1
 task dev                                      # terminal 2
-# without Task: FRONTEND_DEVSERVER_URL=http://localhost:5173 go run .
+# without Task: FRONTEND_DEVSERVER_URL=http://localhost:47832 go run .
 ```
 
 ## Commands (needs Go >= 1.25 and [Task](https://taskfile.dev); no `wails3` CLI)
 
 | Task | |
 |---|---|
-| `task dev:vite` then `task dev` (2 terminals) | Vite on :5173 + Wails window proxying to it |
+| `task dev:vite` then `task dev` (2 terminals) | Vite on :47832 + Wails window proxying to it |
 | `task build` | `vite build` into `appdist/`, then `go build -tags production` -> `bin/zusteller` |
 | `task test` / `task vet` | Go tests (OS-independent) / `go vet` |
 

@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "de.onutor.zusteller",
   "build": {
-    "devUrl": "http://localhost:5173",
+    "devUrl": "http://localhost:47831",
     "frontendDist": "../../../frontend/dist",
-    "beforeDevCommand": "npm --prefix ../../frontend run dev",
+    "beforeDevCommand": "npm --prefix ../../frontend run dev -- --port 47831 --strictPort",
     "beforeBuildCommand": "npm --prefix ../../frontend run build"
   },
   "app": {

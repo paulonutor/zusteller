@@ -19,22 +19,22 @@ tasks:
   dev:vite:
     desc: Terminal 1 - Vite dev server for ../../frontend
     dir: ../../frontend
-    cmds: [npm run dev -- --port 5173 --strictPort]
+    cmds: [npm run dev -- --port 47832 --strictPort]
 
   dev:
     desc: Terminal 2 - Wails window with native vibrancy (default; needs the private_mac_apis tag on macOS)
     cmds:
-      - FRONTEND_DEVSERVER_URL=http://localhost:5173 go run {{.VIBRANCY_TAGS}} .
+      - FRONTEND_DEVSERVER_URL=http://localhost:47832 go run {{.VIBRANCY_TAGS}} .
 
   dev:glass:
     desc: Like dev, with Liquid Glass (macOS 15+). ZUSTELLER_APPEARANCE=dark|light optional
     cmds:
-      - ZUSTELLER_BACKDROP=glass FRONTEND_DEVSERVER_URL=http://localhost:5173 go run {{.VIBRANCY_TAGS}} .
+      - ZUSTELLER_BACKDROP=glass FRONTEND_DEVSERVER_URL=http://localhost:47832 go run {{.VIBRANCY_TAGS}} .
 
   dev:opaque:
     desc: Opaque window, public APIs only (no private_mac_apis tag)
     cmds:
-      - ZUSTELLER_VIBRANCY=0 FRONTEND_DEVSERVER_URL=http://localhost:5173 go run {{.DEV_TAGS}} .
+      - ZUSTELLER_VIBRANCY=0 FRONTEND_DEVSERVER_URL=http://localhost:47832 go run {{.DEV_TAGS}} .
 
   build:frontend:
     desc: Build ../../frontend into ./appdist (embedded; build artifact only)
