@@ -5,6 +5,7 @@ import { SYSTEM_LABEL } from '@/domain/mail';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { ContextMenu, type MenuItemSpec } from '@/components/ui/Menu';
 import { cn } from '@/lib/cn';
+import { beginThreadDrag, endDrag, useDropZone } from '../dnd';
 import { avatarHue, displayName, formatListDate, initials, labelChipStyle } from '../format';
 
 type Props = {
@@ -19,6 +20,9 @@ type Props = {
   onToggleStar: () => void;
   buildContextItems: () => MenuItemSpec[];
   onContextOpen: () => void;
+  /** Ids a drag from this row carries: the whole selection if the row is part of it. */
+  dragIds: () => ID[];
+  onDropLabel: (labelId: ID) => void;
   /** Set when the list is windowed: total rows (-1 = unknown) and 1-based position. */
   setSize?: number;
   posInSet?: number;
@@ -51,6 +55,14 @@ export const ThreadRow = memo(function ThreadRow(p: Props) {
   const lead = leadSender(t, p.accountEmail);
   const inTrash = t.labelIds.includes(SYSTEM_LABEL.trash);
 
+  // A sidebar label dragged onto the row. Refused when the row already has it (unless it is part
+  // of a selection, where other rows may still lack it).
+  const labelDrop = useDropZone('label', {
+    canDrop: (s) => p.selected || !t.labelIds.includes(s.labelId),
+    onDrop: (s) => p.onDropLabel(s.labelId),
+    effect: () => 'copy',
+  });
+
   return (
     <ContextMenu items={p.buildContextItems} onOpenChange={(o) => o && p.onContextOpen()}>
       <div
@@ -62,7 +74,13 @@ export const ThreadRow = memo(function ThreadRow(p: Props) {
         data-unread={!t.isRead}
         data-focused={p.focused && p.listHasFocus}
         onClick={p.onClick}
+        draggable
+        onDragStart={(e) => beginThreadDrag(e, p.dragIds())}
+        onDragEnd={endDrag}
+        {...labelDrop.props}
+        data-drop={labelDrop.state === 'idle' ? undefined : labelDrop.state}
         className={cn(
+          'data-[drop=over]:bg-accent/20 data-[drop=over]:outline-2 data-[drop=over]:-outline-offset-2 data-[drop=over]:outline-accent',
           'group relative flex h-[68px] cursor-default gap-2 border-b border-border/70 px-2.5 py-2',
           p.selected
             ? p.listHasFocus

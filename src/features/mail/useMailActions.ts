@@ -3,12 +3,12 @@ import { useQueryClient, type InfiniteData, type QueryClient } from '@tanstack/r
 import { mailKeys, type ID, type Page, type ThreadSummary } from '@/domain/mail';
 import { useServices } from '@/app/services';
 import { useToast } from '@/app/toast';
-import type { MailActionId } from './actions';
+import type { PerformAction } from './actions';
 
 type ListData = InfiniteData<Page<ThreadSummary>, string | undefined>;
 type Patch = (t: ThreadSummary) => ThreadSummary;
 
-const VERBS: Record<MailActionId | 'addLabel' | 'removeLabel', string> = {
+const VERBS: Record<PerformAction, string> = {
   archive: 'archive',
   trash: 'move to Trash',
   restore: 'restore',
@@ -18,6 +18,7 @@ const VERBS: Record<MailActionId | 'addLabel' | 'removeLabel', string> = {
   unstar: 'update star',
   addLabel: 'add label',
   removeLabel: 'remove label',
+  moveToLabel: 'move to label',
 };
 
 /** Optimistically patch flags in every cached list. Only used for trivial, semantics-free flags. */
@@ -52,11 +53,7 @@ export function useMailActions(accountId: ID | undefined) {
   const toast = useToast();
 
   const run = useCallback(
-    async (
-      action: MailActionId | 'addLabel' | 'removeLabel',
-      threadIds: ID[],
-      opts: RunOptions = {},
-    ) => {
+    async (action: PerformAction, threadIds: ID[], opts: RunOptions = {}) => {
       if (!accountId || threadIds.length === 0) return false;
       const ids = new Set(threadIds);
       let rollback: (() => void) | undefined;
@@ -87,6 +84,11 @@ export function useMailActions(accountId: ID | undefined) {
             break;
           case 'addLabel':
             await mail.addLabel(accountId, threadIds, opts.labelId!);
+            break;
+          case 'moveToLabel':
+            // Gmail's "move to": file under the label and take it out of the Inbox.
+            await mail.addLabel(accountId, threadIds, opts.labelId!);
+            await mail.archive(accountId, threadIds);
             break;
           case 'removeLabel':
             await mail.removeLabel(accountId, threadIds, opts.labelId!);

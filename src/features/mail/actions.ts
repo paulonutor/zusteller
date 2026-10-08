@@ -9,6 +9,9 @@ import type { MailView } from './view';
 export type MailActionId =
   'archive' | 'trash' | 'restore' | 'markRead' | 'markUnread' | 'star' | 'unstar';
 
+/** Everything `useMailActions().run` can execute; the resolver only offers the `MailActionId`s. */
+export type PerformAction = MailActionId | 'addLabel' | 'removeLabel' | 'moveToLabel';
+
 export type ActionDescriptor = {
   id: MailActionId;
   label: string;

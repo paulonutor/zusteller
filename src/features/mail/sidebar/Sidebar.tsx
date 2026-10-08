@@ -10,10 +10,11 @@ import {
   Trash2,
   type LucideIcon,
 } from 'lucide-react';
-import type { Account, Label, MailboxCounts, SystemMailbox } from '@/domain/mail';
+import type { Account, ID, Label, MailboxCounts, SystemMailbox } from '@/domain/mail';
 import { MAILBOXES, userLabels } from '@/domain/mail';
 import { useTheme, type ThemePreference } from '@/app/theme';
 import { cn } from '@/lib/cn';
+import { beginLabelDrag, endDrag, useDropZone, type DropTarget } from '../dnd';
 import { viewKey, type MailView } from '../view';
 
 const ICONS: Record<SystemMailbox, LucideIcon> = {
@@ -30,7 +31,47 @@ type Props = {
   counts: MailboxCounts | undefined;
   view: MailView;
   onSelectView: (v: MailView) => void;
+  /** Drag & drop of conversations onto mailboxes and labels. */
+  canDropThreads: (target: DropTarget, ids: ID[]) => boolean;
+  onDropThreads: (target: DropTarget, ids: ID[], copy: boolean) => void;
 };
+
+/** A sidebar entry that accepts dragged conversations and, for labels, can itself be dragged. */
+function Item({
+  target,
+  active,
+  label,
+  canDropThreads,
+  onDropThreads,
+  children,
+}: {
+  target: DropTarget;
+  /** The view being shown: dropping onto it (or dragging it onto its own rows) is meaningless. */
+  active: boolean;
+  label?: Label;
+  canDropThreads: Props['canDropThreads'];
+  onDropThreads: Props['onDropThreads'];
+  children: React.ReactNode;
+}) {
+  const zone = useDropZone('threads', {
+    canDrop: (s) => !active && canDropThreads(target, s.ids),
+    onDrop: (s, { copy }) => onDropThreads(target, s.ids, copy),
+    // Option only means something for labels (add without leaving the Inbox).
+    effect: (e) => (target.kind === 'label' && e.altKey ? 'copy' : 'move'),
+  });
+  return (
+    <li
+      {...zone.props}
+      data-drop={zone.state === 'idle' ? undefined : zone.state}
+      draggable={label && !active ? true : undefined}
+      onDragStart={label && !active ? (e) => beginLabelDrag(e, label) : undefined}
+      onDragEnd={label && !active ? endDrag : undefined}
+      className="rounded-md data-[drop=invalid]:opacity-40 data-[drop=over]:bg-accent/20 data-[drop=over]:ring-2 data-[drop=over]:ring-inset data-[drop=over]:ring-accent"
+    >
+      {children}
+    </li>
+  );
+}
 
 function Row({
   active,
@@ -70,7 +111,16 @@ function Row({
   );
 }
 
-export function Sidebar({ account, labels, counts, view, onSelectView }: Props) {
+export function Sidebar({
+  account,
+  labels,
+  counts,
+  view,
+  onSelectView,
+  canDropThreads,
+  onDropThreads,
+}: Props) {
+  const dnd = { canDropThreads, onDropThreads };
   const active = viewKey(view);
   return (
     <nav aria-label="Mailboxes" className="flex h-full flex-col bg-sidebar">
@@ -88,7 +138,12 @@ export function Sidebar({ account, labels, counts, view, onSelectView }: Props) 
             const Icon = ICONS[m.id];
             const isActive = active === viewKey({ kind: 'mailbox', mailbox: m.id });
             return (
-              <li key={m.id}>
+              <Item
+                key={m.id}
+                target={{ kind: 'mailbox', mailbox: m.id }}
+                active={isActive}
+                {...dnd}
+              >
                 <Row
                   active={isActive}
                   onClick={() => onSelectView({ kind: 'mailbox', mailbox: m.id })}
@@ -103,7 +158,7 @@ export function Sidebar({ account, labels, counts, view, onSelectView }: Props) 
                   // Only the Inbox shows a count, like Mail/Gmail; others would be noise.
                   count={m.id === 'inbox' ? counts?.mailboxes.inbox : undefined}
                 />
-              </li>
+              </Item>
             );
           })}
         </ul>
@@ -112,17 +167,26 @@ export function Sidebar({ account, labels, counts, view, onSelectView }: Props) 
           Labels
         </h2>
         <ul className="space-y-px">
-          {userLabels(labels).map((l) => (
-            <li key={l.id}>
-              <Row
-                active={active === viewKey({ kind: 'label', labelId: l.id })}
-                onClick={() => onSelectView({ kind: 'label', labelId: l.id })}
-                icon={<span className="size-2.5 rounded-full" style={{ background: l.color }} />}
-                label={l.name}
-                count={counts?.labels[l.id]}
-              />
-            </li>
-          ))}
+          {userLabels(labels).map((l) => {
+            const isActive = active === viewKey({ kind: 'label', labelId: l.id });
+            return (
+              <Item
+                key={l.id}
+                target={{ kind: 'label', labelId: l.id }}
+                active={isActive}
+                label={l}
+                {...dnd}
+              >
+                <Row
+                  active={isActive}
+                  onClick={() => onSelectView({ kind: 'label', labelId: l.id })}
+                  icon={<span className="size-2.5 rounded-full" style={{ background: l.color }} />}
+                  label={l.name}
+                  count={counts?.labels[l.id]}
+                />
+              </Item>
+            );
+          })}
         </ul>
       </div>
 

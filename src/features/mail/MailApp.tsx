@@ -24,6 +24,8 @@ import {
 import { useGlobalShortcuts } from './shortcuts';
 import { buildThreadActions, type Perform } from './useThreadActions';
 import { useMailActions } from './useMailActions';
+import { planThreadDrop, type DropTarget } from './dnd';
+import { useToast } from '@/app/toast';
 import { prepareExternalUrl } from './links';
 import { toQuery, type MailView } from './view';
 
@@ -65,6 +67,7 @@ const EMPTY: Record<string, string> = {
 
 export function MailApp() {
   const { platform } = useServices();
+  const toast = useToast();
   const accounts = useAccounts();
   const account = accounts.data?.[0];
   const accountId = account?.id;
@@ -156,7 +159,12 @@ export function MailApp() {
 
   const perform: Perform = useCallback(
     async (action, targetIds, opts) => {
-      const removes = action === 'archive' || action === 'trash' || action === 'restore';
+      const removes =
+        action === 'archive' ||
+        action === 'trash' ||
+        action === 'restore' ||
+        // Moving to a label takes rows out of the Inbox view only.
+        (action === 'moveToLabel' && view.kind === 'mailbox' && view.mailbox === 'inbox');
       const next = removes ? nextAfterRemoval(ids, new Set(targetIds)) : null;
       const ok = await run(action, targetIds, opts);
       if (ok && removes) {
@@ -171,7 +179,7 @@ export function MailApp() {
         });
       }
     },
-    [run, ids],
+    [run, ids, view],
   );
 
   // Targets for shortcuts: the selection, else the keyboard cursor.
@@ -233,6 +241,26 @@ export function MailApp() {
     return buildThreadActions(targets, view, labels, perform).contextItems;
   };
 
+  // Drag & drop. Validity and the plan come from one pure function so the highlight and the drop
+  // can't disagree; the mutation goes through the same `perform` as toolbar and shortcuts.
+  const byId = (dragged: ID[]) => items.filter((t) => dragged.includes(t.id));
+  const canDropThreads = (target: DropTarget, dragged: ID[]) =>
+    planThreadDrop(target, byId(dragged), false) !== null;
+  const dropThreads = (target: DropTarget, dragged: ID[], copy: boolean) => {
+    const plan = planThreadDrop(target, byId(dragged), copy);
+    if (!plan) return;
+    void perform(plan.action, dragged, { labelId: plan.labelId });
+    if (target.kind === 'label') {
+      const name = labels.find((l) => l.id === target.labelId)?.name ?? 'label';
+      const n = `${dragged.length} conversation${dragged.length === 1 ? '' : 's'}`;
+      toast.show(copy ? `Added “${name}” to ${n}` : `Moved ${n} to “${name}”`);
+    }
+  };
+  const dropLabel = (rowId: ID, labelId: ID) => {
+    const targets = selection.selected.has(rowId) ? [...selection.selected] : [rowId];
+    void perform('addLabel', targets, { labelId });
+  };
+
   const openLink = useCallback(
     (url: string) => void platform.openExternal(prepareExternalUrl(url)).catch(() => undefined),
     [platform],
@@ -267,6 +295,8 @@ export function MailApp() {
           counts={counts.data}
           view={view}
           onSelectView={setView}
+          canDropThreads={canDropThreads}
+          onDropThreads={dropThreads}
         />
       </div>
       <Resizer
@@ -317,6 +347,7 @@ export function MailApp() {
           onSelectAll={() => setSelection((s) => selectAll(ids, s))}
           onClear={() => setSelection((s) => ({ ...s, selected: new Set(), anchorId: null }))}
           buildContextItems={buildContextItems}
+          onDropLabel={dropLabel}
           onContextOpen={(id) =>
             setSelection((s) => (s.selected.has(id) ? s : clickRow(s, ids, id, {})))
           }

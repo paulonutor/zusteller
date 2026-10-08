@@ -52,6 +52,7 @@ type Props = {
   onClear: () => void;
   buildContextItems: (id: ID) => MenuItemSpec[];
   onContextOpen: (id: ID) => void;
+  onDropLabel: (rowId: ID, labelId: ID) => void;
 };
 
 function Skeleton() {
@@ -229,6 +230,8 @@ export function ThreadList(p: Props) {
       onToggleStar={() => p.onToggleStar(t)}
       buildContextItems={() => p.buildContextItems(t.id)}
       onContextOpen={() => p.onContextOpen(t.id)}
+      dragIds={() => (p.selection.selected.has(t.id) ? [...p.selection.selected] : [t.id])}
+      onDropLabel={(labelId) => p.onDropLabel(t.id, labelId)}
     />
   );
 

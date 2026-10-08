@@ -1,14 +1,10 @@
 import { useMemo } from 'react';
 import type { ID, Label, ThreadSummary } from '@/domain/mail';
 import type { MenuItemSpec } from '@/components/ui/Menu';
-import { labelStates, resolveActions, type ActionDescriptor, type MailActionId } from './actions';
+import { labelStates, resolveActions, type ActionDescriptor, type PerformAction } from './actions';
 import type { MailView } from './view';
 
-export type Perform = (
-  action: MailActionId | 'addLabel' | 'removeLabel',
-  ids: ID[],
-  opts?: { labelId?: ID },
-) => void;
+export type Perform = (action: PerformAction, ids: ID[], opts?: { labelId?: ID }) => void;
 
 /**
  * Derives everything a menu or toolbar needs for a set of threads from the one
