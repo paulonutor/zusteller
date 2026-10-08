@@ -118,15 +118,26 @@ describe('Junk mailbox', () => {
     await waitFor(() => expect(rowFor('Your parcel could not be delivered')).toBeTruthy());
   });
 
-  it('the toolbar in Junk offers Not Junk and Move to Trash, but not Archive or Mark as Junk', async () => {
+  it('the toolbar in Junk offers Not Junk and Delete Permanently, but not Trash, Archive, Star, Labels or Mark as Junk', async () => {
     const { user } = setup();
     await openJunk(user);
     await user.click(rowFor(PHARMA));
     const bar = await screen.findByRole('toolbar', { name: 'Conversation actions' });
     expect(within(bar).getByRole('button', { name: 'Not Junk' })).toBeEnabled();
-    expect(within(bar).getByRole('button', { name: 'Move to Trash' })).toBeEnabled();
-    expect(within(bar).queryByRole('button', { name: 'Archive' })).toBeNull();
+    expect(within(bar).getByRole('button', { name: 'Delete Permanently' })).toBeEnabled();
+    expect(within(bar).getByRole('button', { name: 'Not Junk' })).toHaveTextContent('Not Junk');
+    for (const name of ['Move to Trash', 'Add Star', 'Labels', 'Archive'])
+      expect(within(bar).queryByRole('button', { name })).toBeNull();
     expect(within(bar).queryByRole('button', { name: 'Mark as Junk' })).toBeNull();
+  });
+
+  it('Delete Permanently removes the junk thread for good', async () => {
+    const { user } = setup();
+    await openJunk(user);
+    await user.click(rowFor(PHARMA));
+    await user.click(await screen.findByRole('button', { name: 'Delete Permanently' }));
+    await waitFor(() => expect(rows().some((r) => r.textContent?.includes(PHARMA))).toBe(false));
+    expect((await mail.getThreads({ accountId: 'acct-1', mailbox: 'junk' })).items).toHaveLength(2);
   });
 
   it('context menu offers Mark as Junk in the Inbox and Not Junk in Junk', async () => {

@@ -25,6 +25,7 @@ const ICONS: Record<MailActionId, LucideIcon> = {
   unstar: Star,
   markJunk: ShieldAlert,
   notJunk: RotateCcw,
+  deleteForever: Trash2,
 };
 
 type Props = {
@@ -54,6 +55,18 @@ export function ActionBar({
     >
       {actions.map((a) => {
         const Icon = ICONS[a.id];
+        if (a.text)
+          return (
+            <Button
+              key={a.id}
+              title={a.shortcut ? `${a.label} (${a.shortcut})` : a.label}
+              disabled={!a.enabled}
+              onClick={() => perform(a.id, ids)}
+              className="mr-1.5 whitespace-nowrap px-2 font-medium"
+            >
+              {a.label}
+            </Button>
+          );
         return (
           <Button
             key={a.id}
@@ -62,7 +75,16 @@ export function ActionBar({
             disabled={!a.enabled}
             onClick={() => perform(a.id, ids)}
           >
-            <Icon size={15} className={a.id === 'unstar' ? 'fill-star text-star' : undefined} />
+            <Icon
+              size={15}
+              className={
+                a.id === 'unstar'
+                  ? 'fill-star text-star'
+                  : a.destructive
+                    ? 'text-danger'
+                    : undefined
+              }
+            />
           </Button>
         );
       })}

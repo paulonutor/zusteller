@@ -262,6 +262,18 @@ describe('simulation', () => {
 });
 
 describe('junk', () => {
+  it('deleteForever removes junk/trashed threads for good and rejects anything else atomically', async () => {
+    await svc.markJunk(A, ['t1']);
+    await expect(svc.deleteForever(A, ['t1', 't2'])).rejects.toMatchObject({ code: 'invalid' });
+    expect(await ids({ accountId: A, mailbox: 'junk' })).toEqual(['t1']); // nothing was deleted
+    await svc.deleteForever(A, ['t1']);
+    expect(await ids({ accountId: A, mailbox: 'junk' })).toEqual([]);
+    await expect(svc.getThread(A, 't1')).rejects.toMatchObject({ code: 'not_found' });
+    await svc.trash(A, ['t2']);
+    await svc.deleteForever(A, ['t2']);
+    expect(await ids({ accountId: A, mailbox: 'trash' })).not.toContain('t2');
+  });
+
   it('markJunk moves a thread out of Inbox/All/Starred/Sent/labels into Junk, keeping its labels', async () => {
     await svc.markJunk(A, ['t2', 't1']);
     expect(await ids({ accountId: A, mailbox: 'junk' })).toEqual(['t2', 't1']);

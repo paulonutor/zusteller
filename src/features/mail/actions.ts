@@ -15,7 +15,8 @@ export type MailActionId =
   | 'star'
   | 'unstar'
   | 'markJunk'
-  | 'notJunk';
+  | 'notJunk'
+  | 'deleteForever';
 
 /** Everything `useMailActions().run` can execute; the resolver only offers the `MailActionId`s. */
 export type PerformAction = MailActionId | 'addLabel' | 'removeLabel' | 'moveToLabel';
@@ -25,6 +26,9 @@ export type ActionDescriptor = {
   label: string;
   /** Display string, e.g. "E". Matching is done in shortcuts.ts. */
   shortcut?: string;
+  /** Render as a text button in the toolbar instead of an icon. */
+  text?: boolean;
+  destructive?: boolean;
   enabled: boolean;
 };
 
@@ -45,9 +49,15 @@ export function resolveActions(threads: ThreadSummary[], view: MailView): Action
       id: 'notJunk',
       label: 'Not Junk',
       shortcut: '!',
+      text: true,
       enabled: threads.some((t) => has(t, SYSTEM_LABEL.junk)),
     });
-    list.push({ id: 'trash', label: 'Move to Trash', shortcut: '⌫', enabled: some });
+    list.push({
+      id: 'deleteForever',
+      label: 'Delete Permanently',
+      destructive: true,
+      enabled: some,
+    });
   } else if (inTrashView) {
     list.push({ id: 'restore', label: 'Move to Inbox', shortcut: '⇧Z', enabled: some });
   } else {
