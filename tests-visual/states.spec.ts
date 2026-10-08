@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { expect, pinFrameFont, test } from './fixtures';
 
 // Mirrors the key states of scripts/capture-states.mjs for the default skin, light + dark.
 // Dates are frozen to the mock seed's "now" so relative timestamps never change.
@@ -25,6 +26,7 @@ async function waitForHtmlBody(page: Page) {
       frame.evaluate((f) => (f as HTMLIFrameElement).contentDocument?.body?.children.length ?? 0),
     )
     .toBeGreaterThan(0);
+  await pinFrameFont(page);
 }
 
 async function selectRows(page: Page, indices: number[]) {
