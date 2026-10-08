@@ -178,7 +178,14 @@ export function MailApp() {
           const stillSame =
             [...s.selected].every((id) => acted.has(id)) &&
             (s.focusedId === null || acted.has(s.focusedId));
-          return stillSame ? { selected: new Set(), focusedId: next, anchorId: next } : s;
+          if (!stillSame) return s;
+          // Removing the open conversation opens the next one; bulk removals just move the cursor.
+          const wasOpen = s.selected.size === 1;
+          return {
+            selected: wasOpen && next ? new Set([next]) : new Set(),
+            focusedId: next,
+            anchorId: next,
+          };
         });
       }
     },
