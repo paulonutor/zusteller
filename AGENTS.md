@@ -30,6 +30,7 @@ Frontend (run from `frontend/`):
 | Dev server (browser mode) | `npm run dev` → http://localhost:5173 (`?latency=0`, `?offline=1`, `?skin=`, `?theme=dark`, `?debug=accent`) |
 | Typecheck / lint / test | `npm run typecheck` · `npm run lint` · `npm test` (also `npm run test:watch`, `npm run format`) |
 | Production build | `npm run build` (typecheck + vite) |
+| Accessibility audit (needs dev server) | `npm run a11y` (axe via Playwright over many states, light/dark, host+vibrancy, `?seed=big`; `CHROMIUM_PATH=...`, `A11Y_VERBOSE=1`; non-zero exit on violations; known design-token findings are listed, not failing). Structure/ARIA also asserted in `tests/a11y.test.tsx` |
 | Screenshots (needs dev server) | `CHROMIUM_PATH=/opt/pw-browsers/chromium node scripts/screenshots.mjs http://localhost:5173 screenshots` |
 
 Hosts (macOS; details in each `hosts/*/README.md`):
@@ -95,6 +96,9 @@ docs/             architecture.md, host-comparison.md, previews/
 
 - TypeScript strict; prettier (single quotes, width 100). Tailwind v4 tokens live in `src/styles/index.css`; use semantic
   colour classes (`bg-sidebar`, `text-muted`), never hard-coded hex in components.
+- Accessibility: a listbox option must not contain nested controls. The row avatar-checkbox and star are pointer-only
+  (`aria-hidden`, not focusable); keyboard/AT use Space, `S`, the toolbar and the context menu. Filter tabs and the
+  appearance radiogroup use roving tabindex. Re-run `npm run a11y` after UI/skin changes.
 - Keyboard shortcuts are plain keys only (no ⌘-combos that macOS owns), ignored while typing. See `shortcuts.ts`.
 - Tests must be deterministic: latency `0`, failures injected through `failNext()`/`setOffline()`, never random.
 - Test with real behaviour (Testing Library queries by role/name), not implementation details.
