@@ -445,8 +445,9 @@ html:not(.__)[data-skin='b'] [role='option'] [role='checkbox'] {
   position: absolute;
   inset: 0;
   margin: auto;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
   opacity: 0;
   pointer-events: none;
   transform: scale(0.8);
@@ -458,7 +459,7 @@ html:not(.__)[data-skin='b'] [role='option'] [role='checkbox'] {
     background-color 120ms ease;
 }
 /* Reveal the checkbox, hide avatar + unread dot. Hover only counts over the avatar itself
-   (not the whole row), with a short intent delay so sweeping the pointer past doesn't flicker. */
+   (not the whole row). */
 html:not(.__)[data-skin='b'] [role='option'] [data-lead]:hover [role='checkbox'],
 html:not(.__)[data-skin='b']
   [data-kbd='true']
@@ -485,9 +486,8 @@ html:not(.__)[data-skin='b']
 html:not(.__)[data-skin='b'] [role='listbox'][data-selection-mode='true'] [data-unread-dot] {
   opacity: 0;
 }
-/* Checked in selection mode: a check inside the avatar circle. */
+/* Checked: round checkmark filling the avatar circle. */
 html:not(.__)[data-skin='b']
-  [role='listbox'][data-selection-mode='true']
   [role='option'][aria-selected='true']
   [role='checkbox'][aria-checked='true'] {
   width: 32px;
@@ -498,7 +498,6 @@ html:not(.__)[data-skin='b']
   color: var(--selection, var(--accent));
 }
 html:not(.__)[data-skin='b']
-  [role='listbox'][data-selection-mode='true']
   [role='option'][aria-selected='true']
   [role='checkbox'][aria-checked='true']
   svg {
@@ -792,8 +791,8 @@ html.dark[data-skin='c'] [data-pane='reader'] article > button {
 /* ---- Native host chrome (Tauri/Wails overlay titlebar) ---------------------------------- */
 /* Traffic lights float over the top-left of the sidebar: push its header content below them. */
 :root[data-host] [data-pane='sidebar'] > nav > .drag-region {
-  height: 84px !important;
-  padding-top: 42px !important;
+  height: 94px !important;
+  padding-top: 54px !important;
   align-items: flex-end;
 }
 /* Wails marks draggable areas with this custom property (inherited, so opt buttons out). */
@@ -830,17 +829,4 @@ html:not([data-window-inactive])[data-skin='b']
   background: var(--on-selection);
   border-color: var(--on-selection);
   color: var(--selection);
-}
-
-html:not(.__)[data-skin='b'] [role='option'] [data-lead]:hover [role='checkbox'],
-html:not(.__)[data-skin='b'] [role='option'] [data-lead]:hover [data-avatar],
-html:not(.__)[data-skin='b'] [role='option'] [data-lead]:hover [data-unread-dot] {
-  transition-delay: 140ms;
-}
-@media (prefers-reduced-motion: reduce) {
-  html:not(.__)[data-skin='b'] [role='option'] [data-lead]:hover [role='checkbox'],
-  html:not(.__)[data-skin='b'] [role='option'] [data-lead]:hover [data-avatar],
-  html:not(.__)[data-skin='b'] [role='option'] [data-lead]:hover [data-unread-dot] {
-    transition-delay: 0s;
-  }
 }

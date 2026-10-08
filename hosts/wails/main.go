@@ -101,8 +101,8 @@ func main() {
 		BackgroundColour: application.NewRGBA(0, 0, 0, 0),
 		Mac: application.MacWindow{
 			Backdrop: application.MacBackdropTranslucent,
-			// Hidden titlebar, full-size content, genuine inset traffic lights.
-			TitleBar: application.MacTitleBarHiddenInset,
+			// Hidden titlebar, full-size content, genuine traffic lights, inset further (Unified toolbar style).
+			TitleBar: application.MacTitleBarHiddenInsetUnified,
 		},
 	})
 
