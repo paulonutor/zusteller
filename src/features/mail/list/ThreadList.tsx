@@ -1,11 +1,10 @@
 import { dragRegionProps } from '@/platform/hostChrome';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { defaultRangeExtractor, useVirtualizer, type Range } from '@tanstack/react-virtual';
-import { AlertCircle, Inbox, ListFilter as FilterIcon, RefreshCw, Search, X } from 'lucide-react';
+import { AlertCircle, Inbox, ListFilter as FilterIcon, Search, X } from 'lucide-react';
 import type { ID, Label, ThreadSummary } from '@/domain/mail';
 import { Button } from '@/components/ui/Button';
 import { DropdownMenu, type MenuItemSpec } from '@/components/ui/Menu';
-import { cn } from '@/lib/cn';
 import type { Selection } from '../selection';
 import { ThreadRow } from './ThreadRow';
 
@@ -34,7 +33,6 @@ type Props = {
   accountEmail: string | undefined;
   selection: Selection;
   isLoading: boolean;
-  isFetching: boolean;
   error: Error | null;
   hasMore: boolean;
   isFetchingMore: boolean;
@@ -44,7 +42,6 @@ type Props = {
   onSearchChange: (v: string) => void;
   onFetchMore: () => void;
   onRetry: () => void;
-  onRefresh: () => void;
   onClickRow: (id: ID, mods: { meta: boolean; shift: boolean }) => void;
   onToggleRow: (id: ID) => void;
   onToggleStar: (t: ThreadSummary) => void;
@@ -304,9 +301,6 @@ export function ThreadList(p: Props) {
             } satisfies MenuItemSpec;
           })}
         />
-        <Button aria-label="Refresh" title="Refresh" onClick={p.onRefresh}>
-          <RefreshCw size={14} className={cn(p.isFetching && 'animate-spin')} />
-        </Button>
       </header>
 
       <div

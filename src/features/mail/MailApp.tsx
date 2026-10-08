@@ -116,7 +116,7 @@ export function MailApp() {
     [loaded],
   );
   const ids = useMemo(() => items.map((t) => t.id), [items]);
-  const { run, refresh } = useMailActions(accountId);
+  const { run } = useMailActions(accountId);
 
   // Persist layout (best effort).
   useEffect(() => {
@@ -285,7 +285,6 @@ export function MailApp() {
           accountEmail={account?.email}
           selection={selection}
           isLoading={!query || (list.isPending && !list.data)}
-          isFetching={list.isFetching}
           error={list.error}
           hasMore={!!list.hasNextPage}
           isFetchingMore={list.isFetchingNextPage}
@@ -307,7 +306,6 @@ export function MailApp() {
           onSearchChange={setSearchText}
           onFetchMore={() => void list.fetchNextPage()}
           onRetry={() => void list.refetch()}
-          onRefresh={() => void refresh()}
           onClickRow={(id, mods) => setSelection((s) => clickRow(s, ids, id, mods))}
           onToggleRow={(id) => setSelection((s) => toggleRow(s, id))}
           onToggleStar={(t) => void perform(t.isStarred ? 'unstar' : 'star', [t.id])}
