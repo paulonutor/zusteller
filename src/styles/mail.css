@@ -1,6 +1,143 @@
-/* ================= B: Gmail-in-glass (default; light + dark) ================= */
+/*
+ * App chrome. Load order matters (later rules win ties):
+ *   mail.css  base layout + the "Gmail-in-glass" look: floating panes, tabs, avatar rows, chips
+ *   host.css  native host chrome (Tauri), system accent, inactive window, vibrancy
+ * Colours come from the tokens in index.css; mail.css overrides them per theme.
+ */
+
+/* ---------- base layout ---------- */
+html:root {
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', system-ui, 'Segoe UI', sans-serif;
+  --on-selection: #ffffff;
+  --on-selection-dim: rgb(255 255 255 / 0.72);
+  --window: var(--background);
+  --pane-radius: 0px;
+  --row-radius: 0px;
+  --row-gap: 0px;
+  --row-h: 68px;
+  --toolbar-bg: var(--background);
+  --toolbar-line: var(--border);
+  --sidebar-blur: none;
+  --pane-shadow: none;
+  --row-line: var(--border);
+}
+html:root body {
+  background: var(--window);
+}
+html:root [data-shell] {
+  background: var(--window);
+}
+html:root [data-pane] {
+  border-radius: var(--pane-radius);
+  overflow: hidden;
+  box-shadow: var(--pane-shadow);
+}
+html:root [data-pane='sidebar'] > nav {
+  background: var(--sidebar);
+  -webkit-backdrop-filter: var(--sidebar-blur);
+  backdrop-filter: var(--sidebar-blur);
+}
+/* Toolbars (list header + reader toolbar). */
+html:root [data-pane='list'] > section > header,
+html:root [data-pane='reader'] > section > .drag-region {
+  background: var(--toolbar-bg);
+  border-bottom: 1px solid var(--toolbar-line);
+}
+html:root [data-pane='list'] > section > div:not([data-list-scroller]) {
+  border-color: var(--row-line);
+}
+/* Rows */
+html:root [role='option'] {
+  height: var(--row-h);
+  border-radius: var(--row-radius);
+  border-bottom-color: var(--row-line);
+}
+/* Selected row text: readable on the (dark/blue) selection fill. */
+html:root [role='listbox']:focus-within [role='option'][aria-selected='true'] {
+  color: var(--on-selection);
+  --muted: var(--on-selection-dim);
+  --faint: var(--on-selection-dim);
+  --unread: var(--on-selection);
+  --star: var(--on-selection);
+}
+html:root [role='option'] [class~='text-foreground/90'] {
+  color: inherit;
+}
+html:root [role='listbox']:focus-within [role='option'][aria-selected='true'] .fill-star {
+  fill: var(--on-selection);
+}
+html:root [role='option'][aria-selected='true'] {
+  outline: none;
+}
+
+/* Drag images (built off-screen by features/mail/dnd.ts). */
+.drag-chip {
+  position: fixed;
+  top: -200px;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  color: var(--foreground);
+  font:
+    500 13px/1.2 -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  white-space: nowrap;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
+}
+.drag-chip-dot {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: 9999px;
+}
+/* A lifted copy of the row; the padding leaves room for the tilted cards behind it. */
+.drag-stack {
+  position: fixed;
+  top: -600px;
+  left: 0;
+  color: var(--foreground);
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+.drag-card {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-raised) !important;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.25);
+}
+.drag-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  box-sizing: border-box;
+  border-radius: 9999px;
+  background: var(--accent);
+  color: #fff;
+  font:
+    600 12px/24px -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  text-align: center;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
+}
+
+/* ================= Gmail-in-glass: floating panes, tabs, avatar rows ================= */
 /* Tokens: dark palette first, then the light counterpart (gray selection). */
-html.dark[data-skin='b'] {
+html.dark {
   --window: #0f0f11;
   --background: #1d1d20;
   --foreground: #f3f3f6;
@@ -39,7 +176,7 @@ html.dark[data-skin='b'] {
   --chip-base: #1d1d20;
 }
 /* ---- B light: macOS-light counterpart (same structure, light palette, gray selection) ---- */
-html:not(.dark)[data-skin='b'] {
+html:not(.dark) {
   --window: #e9e9ec;
   --background: #ffffff;
   --foreground: #1d1d1f;
@@ -78,45 +215,45 @@ html:not(.dark)[data-skin='b'] {
   --chip-base: #6e6e73;
 }
 
-html:root[data-skin='b'] [data-shell] {
+html:root [data-shell] {
   padding: 8px;
   gap: 0;
 }
-html:root[data-skin='b'] [role='separator'] {
+html:root [role='separator'] {
   width: 8px;
   background: transparent;
 }
-html:root[data-skin='b'] [role='separator'] > span {
+html:root [role='separator'] > span {
   inset-inline: 0;
   left: 0;
   width: 100%;
 }
-html:root[data-skin='b'] [data-pane='sidebar'] {
+html:root [data-pane='sidebar'] {
   background: var(--sidebar-bg);
 }
-html:root[data-skin='b'] [data-pane='sidebar'] > nav {
+html:root [data-pane='sidebar'] > nav {
   box-shadow: inset 0 1px 0 var(--sidebar-edge);
 }
-html:root[data-skin='b'] [data-pane='sidebar'] > nav > .drag-region {
+html:root [data-pane='sidebar'] > nav > .drag-region {
   height: 48px;
 }
-html:root[data-skin='b'] nav button {
+html:root nav button {
   height: 30px;
   border-radius: 9px;
   padding-inline: 10px;
 }
-html:root[data-skin='b'] nav button[aria-current='page'] .tabular-nums {
+html:root nav button[aria-current='page'] .tabular-nums {
   color: var(--foreground); /* muted on the selected-item tint is < 4.5:1 */
 }
-html:root[data-skin='b'] nav ul {
+html:root nav ul {
   row-gap: 2px;
   display: grid;
 }
-html:root[data-skin='b'] nav button[aria-current='page'] {
+html:root nav button[aria-current='page'] {
   background: var(--nav-sel);
   box-shadow: var(--nav-sel-shadow);
 }
-html:root[data-skin='b'] nav h2 {
+html:root nav h2 {
   text-transform: none;
   font-size: 12px;
   letter-spacing: 0;
@@ -124,26 +261,26 @@ html:root[data-skin='b'] nav h2 {
   color: var(--muted);
   padding: 20px 10px 6px;
 }
-html:root[data-skin='b'] [data-pane='reader'] > section > .drag-region {
+html:root [data-pane='reader'] > section > .drag-region {
   background: transparent;
   height: 56px;
 }
 
 /* ---- Layout: search bar on top, category tabs, soft-tinted rows ---- */
-html:root[data-skin='b'] [data-pane='list'] > section > header {
+html:root [data-pane='list'] > section > header {
   background: transparent;
   height: 64px;
   padding: 10px 12px 6px;
   gap: 12px;
 }
-html:root[data-skin='b'] [data-pane='list'] > section > header > div {
+html:root [data-pane='list'] > section > header > div {
   padding-left: 4px;
 }
-html:root[data-skin='b'] [data-pane='list'] > section > header h1 {
+html:root [data-pane='list'] > section > header h1 {
   font-size: 17px;
   font-weight: 700;
 }
-html:root[data-skin='b'] [data-pane='list'] input[type='search'] {
+html:root [data-pane='list'] input[type='search'] {
   height: 38px;
   padding-left: 40px;
   padding-right: 36px;
@@ -154,65 +291,65 @@ html:root[data-skin='b'] [data-pane='list'] input[type='search'] {
     background 0.15s,
     box-shadow 0.15s;
 }
-html:root[data-skin='b'] [data-pane='list'] input[type='search']:hover {
+html:root [data-pane='list'] input[type='search']:hover {
   background: var(--fill-2);
 }
-html:root[data-skin='b'] [data-pane='list'] input[type='search']:focus {
+html:root [data-pane='list'] input[type='search']:focus {
   background: var(--search-focus-bg);
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--accent) 70%, transparent),
     0 4px 14px var(--focus-shadow);
 }
-html:root[data-skin='b'] [data-pane='list'] header label > svg {
+html:root [data-pane='list'] header label > svg {
   left: 16px;
   width: 19px;
   height: 19px;
 }
-html:root[data-skin='b'] [data-pane='list'] header label button svg {
+html:root [data-pane='list'] header label button svg {
   width: 16px;
   height: 16px;
 }
-html:root[data-skin='b'] [data-pane='list'] header label button {
+html:root [data-pane='list'] header label button {
   right: 12px;
 }
 
-html:root[data-skin='b'] [data-pane='list'] :is([role='checkbox'], [data-row-check]) {
+html:root [data-pane='list'] :is([role='checkbox'], [data-row-check]) {
   width: 18px;
   height: 18px;
   border-width: 2px;
   border-radius: 4px;
   background: transparent;
 }
-html:root[data-skin='b'] [data-pane='list'] [role='checkbox'][aria-checked='true'],
-html:root[data-skin='b'] [data-pane='list'] [role='checkbox'][aria-checked='mixed'],
-html:root[data-skin='b'] [data-pane='list'] [data-row-check][data-checked='true'] {
+html:root [data-pane='list'] [role='checkbox'][aria-checked='true'],
+html:root [data-pane='list'] [role='checkbox'][aria-checked='mixed'],
+html:root [data-pane='list'] [data-row-check][data-checked='true'] {
   background: var(--accent);
   border-color: var(--accent);
 }
-html:root[data-skin='b'] [data-pane='list'] :is([role='checkbox'], [data-row-check]) svg {
+html:root [data-pane='list'] :is([role='checkbox'], [data-row-check]) svg {
   width: 13px;
   height: 13px;
 }
 
 /* Rows: avatar that morphs into a checkbox, two lines, soft tinted selection */
-html:root[data-skin='b'] [role='listbox'] {
+html:root [role='listbox'] {
   padding: 2px 0 8px;
 }
-html:root[data-skin='b'] [role='option'] {
+html:root [role='option'] {
   margin: 1px 8px;
   padding: 0 12px 0 6px;
   align-items: center;
   border-radius: 12px;
   gap: 8px;
 }
-html:root[data-skin='b'] [role='option'] [data-lead] {
+html:root [role='option'] [data-lead] {
   width: 32px;
   height: 32px;
   padding-top: 0;
 }
 /* Avatar -> checkbox: the avatar is the resting state; the checkbox takes its place
    on hover / keyboard focus, and everywhere once the list is in selection mode. */
-html:root[data-skin='b'] [role='option'] [data-avatar] {
+html:root [role='option'] [data-avatar] {
   display: grid;
   place-items: center;
   width: 32px;
@@ -227,11 +364,11 @@ html:root[data-skin='b'] [role='option'] [data-avatar] {
     opacity 120ms ease,
     transform 120ms ease;
 }
-html:root:not(.dark)[data-skin='b'] [role='option'] [data-avatar] {
+html:root:not(.dark) [role='option'] [data-avatar] {
   color: hsl(var(--av-h) 45% 24%);
   background: hsl(var(--av-h) 40% 84%);
 }
-html:root[data-skin='b'] [role='option'] [data-unread-dot] {
+html:root [role='option'] [data-unread-dot] {
   display: block !important;
   position: absolute;
   top: -1px;
@@ -243,7 +380,7 @@ html:root[data-skin='b'] [role='option'] [data-unread-dot] {
   background: var(--unread);
   transition: opacity 120ms ease;
 }
-html:root[data-skin='b'] [role='option'] [data-row-check] {
+html:root [role='option'] [data-row-check] {
   display: flex !important;
   position: absolute;
   inset: 0;
@@ -263,28 +400,26 @@ html:root[data-skin='b'] [role='option'] [data-row-check] {
 }
 /* Reveal the checkbox, hide avatar + unread dot. Hover only counts over the avatar itself
    (not the whole row). */
-html:root[data-skin='b'] [role='option'] [data-lead]:hover [data-row-check],
-html:root[data-skin='b'] [data-kbd='true'] [role='option'][data-focused='true'] [data-row-check],
-html:root[data-skin='b'] [role='listbox'][data-selection-mode='true'] [data-row-check] {
+html:root [role='option'] [data-lead]:hover [data-row-check],
+html:root [data-kbd='true'] [role='option'][data-focused='true'] [data-row-check],
+html:root [role='listbox'][data-selection-mode='true'] [data-row-check] {
   opacity: 1;
   pointer-events: auto;
   transform: none;
 }
-html:root[data-skin='b'] [role='option'] [data-lead]:hover [data-avatar],
-html:root[data-skin='b'] [data-kbd='true'] [role='option'][data-focused='true'] [data-avatar],
-html:root[data-skin='b'] [role='listbox'][data-selection-mode='true'] [data-avatar] {
+html:root [role='option'] [data-lead]:hover [data-avatar],
+html:root [data-kbd='true'] [role='option'][data-focused='true'] [data-avatar],
+html:root [role='listbox'][data-selection-mode='true'] [data-avatar] {
   opacity: 0;
   transform: scale(0.8);
 }
-html:root[data-skin='b'] [role='option'] [data-lead]:hover [data-unread-dot],
-html:root[data-skin='b'] [data-kbd='true'] [role='option'][data-focused='true'] [data-unread-dot],
-html:root[data-skin='b'] [role='listbox'][data-selection-mode='true'] [data-unread-dot] {
+html:root [role='option'] [data-lead]:hover [data-unread-dot],
+html:root [data-kbd='true'] [role='option'][data-focused='true'] [data-unread-dot],
+html:root [role='listbox'][data-selection-mode='true'] [data-unread-dot] {
   opacity: 0;
 }
 /* Checked: round checkmark filling the avatar circle. */
-html:root[data-skin='b']
-  [role='option'][aria-selected='true']
-  [data-row-check][data-checked='true'] {
+html:root [role='option'][aria-selected='true'] [data-row-check][data-checked='true'] {
   width: 32px;
   height: 32px;
   border-radius: 999px;
@@ -292,15 +427,12 @@ html:root[data-skin='b']
   background: var(--on-selection, #fff);
   color: var(--selection, var(--accent));
 }
-html:root[data-skin='b']
-  [role='option'][aria-selected='true']
-  [data-row-check][data-checked='true']
-  svg {
+html:root [role='option'][aria-selected='true'] [data-row-check][data-checked='true'] svg {
   width: 17px;
   height: 17px;
 }
 /* Star: right of the time, only when starred or on hover / focus. Space is always reserved. */
-html:root[data-skin='b'] [role='option'] [data-star] {
+html:root [role='option'] [data-star] {
   display: grid;
   place-items: center;
   width: 22px;
@@ -313,76 +445,73 @@ html:root[data-skin='b'] [role='option'] [data-star] {
   pointer-events: none;
   transition: opacity 120ms ease;
 }
-html:root[data-skin='b'] [role='option']:hover [data-star],
-html:root[data-skin='b'] [data-kbd='true'] [role='option'][data-focused='true'] [data-star],
-html:root[data-skin='b'] [role='option'] [data-star][data-starred='true'] {
+html:root [role='option']:hover [data-star],
+html:root [data-kbd='true'] [role='option'][data-focused='true'] [data-star],
+html:root [role='option'] [data-star][data-starred='true'] {
   opacity: 1;
   pointer-events: auto;
 }
-html:root[data-skin='b'] [role='option'] [data-star]:hover {
+html:root [role='option'] [data-star]:hover {
   background: var(--hover);
 }
-html:root[data-skin='b'] [role='option'] [data-star] svg {
+html:root [role='option'] [data-star] svg {
   width: 16px;
   height: 16px;
 }
 @media (prefers-reduced-motion: reduce) {
-  html:root[data-skin='b'] [role='option'] [data-avatar],
-  html:root[data-skin='b'] [role='option'] [data-unread-dot],
-  html:root[data-skin='b'] [role='option'] [data-row-check],
-  html:root[data-skin='b'] [role='option'] [data-star] {
+  html:root [role='option'] [data-avatar],
+  html:root [role='option'] [data-unread-dot],
+  html:root [role='option'] [data-row-check],
+  html:root [role='option'] [data-star] {
     transition: none;
   }
 }
-html:root[data-skin='b'] [role='option'] .fill-star,
-html:root[data-skin='b']
-  [role='listbox']:focus-within
-  [role='option'][aria-selected='true']
-  .fill-star {
+html:root [role='option'] .fill-star,
+html:root [role='listbox']:focus-within [role='option'][aria-selected='true'] .fill-star {
   fill: var(--gm-star);
   color: var(--gm-star);
 }
-html:root[data-skin='b'] [role='option'][aria-selected='true'] {
+html:root [role='option'][aria-selected='true'] {
   background: var(--selection);
   box-shadow: inset 0 0 0 1px var(--sel-ring);
 }
-html:root[data-skin='b'] [role='listbox']:not(:focus-within) [role='option'][aria-selected='true'] {
+html:root [role='listbox']:not(:focus-within) [role='option'][aria-selected='true'] {
   background: var(--selection-inactive);
   box-shadow: none;
 }
-html:root[data-skin='b'] [role='listbox']:focus-within [role='option'][aria-selected='true'] {
+html:root [role='listbox']:focus-within [role='option'][aria-selected='true'] {
   --unread: var(--on-selection);
   --star: var(--gm-star);
 }
-html:root[data-skin='b'] [role='option'] [data-sender] {
+html:root [role='option'] [data-sender] {
   font-size: 14px;
 }
-html:root[data-skin='b'] [role='option'][data-unread='true'] [data-sender] {
+html:root [role='option'][data-unread='true'] [data-sender] {
   font-weight: 700;
 }
-html:root[data-skin='b'] [role='option'][data-unread='false'] [data-sender] {
+html:root [role='option'][data-unread='false'] [data-sender] {
   font-weight: 400;
   color: var(--muted);
 }
-html:root[data-skin='b'] [role='option'][aria-selected='true'][data-unread='false'] [data-sender] {
+html:root [role='option'][aria-selected='true'][data-unread='false'] [data-sender] {
   color: inherit;
 }
 /* Three rows: sender + date, subject, snippet + labels. */
-html:root[data-skin='b'] [role='option'] [data-line2] {
+html:root [role='option'] [data-line2] {
   margin-top: 1px;
 }
-html:root[data-skin='b'] [role='option'] [data-subject] {
+html:root [role='option'] [data-subject] {
   font-weight: 400;
 }
-html:root[data-skin='b'] [role='option'][data-unread='true'] [data-subject] {
+html:root [role='option'][data-unread='true'] [data-subject] {
   font-weight: 600;
 }
-html:root[data-skin='b'] [role='option'] [data-snippet-row] {
+html:root [role='option'] [data-snippet-row] {
   min-width: 0;
   margin-top: 1px;
 }
 /* Gmail label chips: solid label colour, white text. Same chip in the list, popover and reader. */
-html:root[data-skin='b'] [data-label-chip] {
+html:root [data-label-chip] {
   background: color-mix(in srgb, var(--chip) 80%, var(--chip-base)) !important;
   color: #fff !important;
   font-weight: 600;
@@ -391,53 +520,53 @@ html:root[data-skin='b'] [data-label-chip] {
   border-radius: 4px;
   padding-inline: 5px;
 }
-html:root[data-skin='b'] [role='option'] [data-label-overflow] {
+html:root [role='option'] [data-label-overflow] {
   font-size: 10px;
   line-height: 15px;
   padding-inline: 5px;
 }
 
 /* Reader toolbar: round icon buttons with a hover circle */
-html:root[data-skin='b'] [role='toolbar'] {
+html:root [role='toolbar'] {
   gap: 4px;
 }
-html:root[data-skin='b'] [role='toolbar'] button {
+html:root [role='toolbar'] button {
   width: 38px;
   height: 38px;
   border-radius: 999px;
   padding: 0;
 }
-html:root[data-skin='b'] [role='toolbar'] button:hover:not(:disabled) {
+html:root [role='toolbar'] button:hover:not(:disabled) {
   background: var(--fill-2);
 }
-html:root[data-skin='b'] [role='toolbar'] button svg {
+html:root [role='toolbar'] button svg {
   width: 18px;
   height: 18px;
 }
-html:root[data-skin='b'] [data-pane='reader'] header.selectable {
+html:root [data-pane='reader'] header.selectable {
   padding: 8px 28px 14px;
 }
-html:root[data-skin='b'] [data-pane='reader'] h2 {
+html:root [data-pane='reader'] h2 {
   font-size: 22px;
   letter-spacing: -0.01em;
 }
-html:root[data-skin='b'] [data-pane='reader'] article {
+html:root [data-pane='reader'] article {
   margin: 0 14px 8px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--card-bg);
   overflow: hidden;
 }
-html:root[data-skin='b'] [data-pane='reader'] article:last-child {
+html:root [data-pane='reader'] article:last-child {
   border-bottom: 1px solid var(--border);
 }
-html:root[data-skin='b'] [data-pane='reader'] header ~ div {
+html:root [data-pane='reader'] header ~ div {
   border-top: 0;
 }
-html:root[data-skin='b'] [data-pane='reader'] article > button {
+html:root [data-pane='reader'] article > button {
   padding-block: 12px;
 }
-html:root[data-skin='b'] ul[aria-label='Attachments'] li {
+html:root ul[aria-label='Attachments'] li {
   border-radius: 10px;
   background: var(--fill-0);
 }
@@ -446,7 +575,7 @@ html:root[data-skin='b'] ul[aria-label='Attachments'] li {
 /* Generous hit area: the visible circle is small, so an invisible extension (part of the button,
    and of its hover zone) turns near-misses into a toggle instead of a row click that would replace
    the selection. Only active while the checkbox is revealed (it is pointer-events: none otherwise). */
-html:root[data-skin='b'] [role='option'] [data-row-check]::before {
+html:root [role='option'] [data-row-check]::before {
   content: '';
   position: absolute;
   inset: -16px -10px;
@@ -454,6 +583,6 @@ html:root[data-skin='b'] [role='option'] [data-row-check]::before {
 }
 
 /* Mail tints the source-list icons with the system accent colour. */
-html:root[data-skin='b'] nav [data-mailbox-icon] {
+html:root nav [data-mailbox-icon] {
   color: var(--accent);
 }

@@ -56,14 +56,14 @@ reflects mutations.
 - **Layout**: sidebar (180–320, default 220) · list (300–640, default 410) · reader (flex, min 320). Drag or arrow-key resize.
   A 52 px drag-region header on each pane leaves room for native traffic lights (see Platform layer).
 
-### Rows and selection look (skin B2)
+### Rows and selection look
 
 - Each row shows a sender **avatar** (initials, hue from the address). It becomes the round checkbox only while the pointer is over the
   avatar itself (enlarged hit area around it) or on keyboard focus; once anything is multi-selected, every row shows checkboxes
   (selection mode). Star appears only when starred or on hover.
 - Selected rows use the macOS accent colour while the list **and** window are active, and gray otherwise (`data-window-inactive`),
   like native lists.
-- **Accent handling** (`styles/skins.css`): default tokens are a fixed blue. `@supports (color: AccentColor)` switches `--sel-accent` /
+- **Accent handling** (`styles/host.css`): default tokens are a fixed blue. `@supports (color: AccentColor)` switches `--sel-accent` /
   `--accent` to `AccentColor`; `@supports (color: -apple-system-control-accent)` overrides that with WebKit's own dynamic system colour
   (what `NSColor.controlAccentColor` returns). Text on the accent is always white (`--sel-accent-text`, `--accent-fg`), because
   `AccentColorText` resolves to black on bright accents. `trackWindowFocus` bumps `--accent-tick` on focus so the colour re-resolves
@@ -91,20 +91,18 @@ pixels blocked by default with an explicit "Load remote images" per message; lin
 only via `PlatformService.openExternal`; rendered in `<iframe sandbox="allow-same-origin" srcdoc>` with a CSP and no scripts;
 the parent sizes the frame and intercepts link clicks. Attachments are metadata-only in V1 (no download).
 
-## Hosts & skins
-
-<<<<<<< HEAD
+## Host and look
 
 - **Host**: `src-tauri/` (Rust, Tauri 2.12) is a thin shell around the frontend in `src/`;
   no UI code is copied. Native menu items reach the same action layer as toolbar and shortcuts (see Platform layer). Setup, commands
   and verification status are in `docs/tauri-host.md`; why Tauri (Wails was evaluated and removed) in `docs/host-decision.md`.
   Nothing native has been verified on a Mac yet.
 - **Vibrancy is the default**: transparent window with a macOS sidebar material; the host opens the page with
-  `?vibrancy=1`, which sets `data-vibrancy` so `skins/host.css` makes backdrop, gutters and sidebar transparent (list/reader stay opaque).
+  `?vibrancy=1`, which sets `data-vibrancy` so `styles/host.css` makes backdrop, gutters and sidebar transparent (list/reader stay opaque).
   Tauri needs `macOSPrivateApi` (a private API). Opaque variant:
   `npm run tauri:dev:opaque` / `tauri:build:opaque`.
-- **Skins** (`src/styles/skins/*.css`, `src/app/skin.ts`): **B2 ("Gmail-in-glass")** is the default in light and dark. A and C are opt-in and
-  dark-only: `?skin=a|b|c|default` (`default` = plain tokens). `?theme=dark` forces dark for one page load.
+- **Look** (`src/styles/mail.css`): "Gmail-in-glass" in light and dark: floating panes, title + search together, All/Unread/Starred tabs,
+  avatar rows with solid label chips. `?theme=dark` forces dark for one page load.
 
 ## Build and CI
 
@@ -112,15 +110,6 @@ the parent sizes the frame and intercepts link clicks. Attachments are metadata-
   `manualChunks` splits `react`, `tanstack` and `radix` vendor chunks. `base: './'` so hosts can load the build from disk.
 - `.github/workflows/frontend.yml` (every push/PR): `npm ci`, typecheck, lint, test, build.
 - `.github/workflows/tauri.yml` (when `src-tauri/**` or `src/platform/**` change): Tauri `cargo check --locked` after a frontend build. Linux only, so darwin code is not compiled in CI.
-  \=======
-- **Adapters**: `src/platform/` holds `PlatformService` (notification, badge, openExternal), the browser implementation,
-  and the Tauri adapter `tauri.ts`, selected in `platform/index.ts`.
-- **Host**: `src-tauri/` (Rust, Tauri 2) is a thin shell around the frontend in `src/`.
-  No UI code is copied. Native menu items are routed to the same action layer as toolbar and shortcuts.
-- **Skins**: dark mode defaults to skin B2 ("Gmail-in-glass"); `?skin=a|b|c|default` switches (`src/styles/skins.css`).
-- Why Tauri (Wails was evaluated and removed): `docs/host-decision.md`.
-
-> > > > > > > 20253c6 (Restructure to the create-tauri-app layout)
 
 ## Deliberately not built (later phases)
 

@@ -8,7 +8,7 @@ in-memory mock, in the browser or in a native macOS window with vibrancy. No Gma
 
 ```bash
 npm install
-npm run dev        # http://localhost:47831  (?latency=0, ?offline=1, ?skin=a|b|c|default, ?theme=dark)
+npm run dev        # http://localhost:47831  (?latency=0, ?offline=1, ?theme=dark)
 npm run typecheck && npm run lint && npm test
 npm run build
 ```

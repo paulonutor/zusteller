@@ -11,7 +11,7 @@
 /* Text on the accent is always white (AccentColorText resolves to black on bright blues, which
    made the selected row unreadable). Guarded so engines without AccentColor keep the default blue. */
 @supports (color: AccentColor) {
-  :root[data-host][data-skin] {
+  :root[data-host] {
     --sel-accent: var(--host-accent, AccentColor);
     --accent: var(--host-accent, AccentColor);
   }
@@ -21,24 +21,24 @@
 /* WebKit's own dynamic system colour (what NSColor.controlAccentColor is): preferred when present,
    it tracks System Settings > Appearance > Accent colour. Declared last so it wins. */
 @supports (color: -apple-system-control-accent) {
-  :root[data-host][data-skin] {
+  :root[data-host] {
     --sel-accent: var(--host-accent, -apple-system-control-accent);
     --accent: var(--host-accent, -apple-system-control-accent);
   }
 }
-:root[data-host][data-skin] {
+:root[data-host] {
   --sel-accent-text: #ffffff;
   --accent-fg: #ffffff;
 }
 /* macOS "unemphasised" selection: window not key => gray fill, normal text. */
-:root[data-window-inactive][data-skin] {
+:root[data-window-inactive] {
   --selection: var(--selection-inactive);
   --on-selection: var(--foreground);
   --on-selection-dim: var(--muted);
 }
 
 /* Checked box on the blue selection: invert so it stays visible. */
-html:not([data-window-inactive])[data-skin='b']
+html:not([data-window-inactive])
   [role='listbox']:focus-within
   [role='option'][aria-selected='true']
   [data-row-check][data-checked='true'] {
@@ -56,12 +56,12 @@ html:not([data-window-inactive])[data-skin='b']
 :root[data-vibrancy] #root {
   background: transparent !important;
 }
-:root[data-vibrancy][data-skin] {
+:root[data-vibrancy] {
   --window: transparent;
 }
-:root[data-vibrancy][data-skin] [data-shell],
-:root[data-vibrancy][data-skin] [data-pane='sidebar'],
-:root[data-vibrancy][data-skin] [data-pane='sidebar'] > nav {
+:root[data-vibrancy] [data-shell],
+:root[data-vibrancy] [data-pane='sidebar'],
+:root[data-vibrancy] [data-pane='sidebar'] > nav {
   background: transparent !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;

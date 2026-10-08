@@ -47,7 +47,7 @@ export function trackWindowFocus(): void {
 /**
  * WKWebView resolves the CSS system accent (`AccentColor`, `-apple-system-control-accent`) to default
  * blue whatever System Settings says, so native hosts report the real colour. It is exposed as
- * `--host-accent` (see skins.css), kept live by the host's change event and re-read on focus.
+ * `--host-accent` (see styles/host.css), kept live by the host's change event and re-read on focus.
  */
 export function trackNativeAccent(
   platform: Pick<PlatformService, 'getAccentColor' | 'subscribeAccentColor'>,

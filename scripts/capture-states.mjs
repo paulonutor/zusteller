@@ -1,6 +1,6 @@
 /* global document */
 // Usage: node scripts/capture-states.mjs [baseUrl] [outDir]
-// Captures a fixed matrix of UI states (skin x theme x vibrancy) at 1280x800 for pixel-diffing
+// Captures a fixed matrix of UI states (theme x vibrancy) at 1280x800 for pixel-diffing
 // stylesheet refactors. Run before and after, then compare the two directories. Requires a dev server.
 import { chromium } from 'playwright';
 import fs from 'node:fs';
@@ -9,15 +9,7 @@ const base = process.argv[2] ?? 'http://localhost:47831';
 const out = process.argv[3] ?? 'capture-states';
 fs.mkdirSync(out, { recursive: true });
 
-// [skin, scheme]: A and C are dark-only opt-ins; default and B have both themes.
-const variants = [
-  ['default', 'light'],
-  ['default', 'dark'],
-  ['a', 'dark'],
-  ['b', 'light'],
-  ['b', 'dark'],
-  ['c', 'dark'],
-];
+const variants = ['light', 'dark'];
 
 async function openFirstThread(page) {
   await page.locator('[role=option]').first().click();
@@ -68,7 +60,7 @@ const browser = await chromium.launch({
   executablePath: process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium',
 });
 let n = 0;
-for (const [skin, scheme] of variants) {
+for (const scheme of variants) {
   for (const vibrancy of [false, true]) {
     const ctx = await browser.newContext({
       viewport: { width: 1280, height: 800 },
@@ -79,7 +71,7 @@ for (const [skin, scheme] of variants) {
     for (const [state, run] of Object.entries(states)) {
       const page = await ctx.newPage();
       page.on('pageerror', (e) => console.error('PAGEERROR', e.message));
-      await page.goto(`${base}/?latency=0&skin=${skin}`);
+      await page.goto(`${base}/?latency=0`);
       await page.waitForSelector('[role=option]');
       if (vibrancy) {
         await page.evaluate(() => {
@@ -91,7 +83,7 @@ for (const [skin, scheme] of variants) {
       await run(page);
       await page.waitForTimeout(250);
       await page.screenshot({
-        path: `${out}/${skin}-${scheme}${vibrancy ? '-vibrancy' : ''}-${state}.png`,
+        path: `${out}/${scheme}${vibrancy ? '-vibrancy' : ''}-${state}.png`,
         omitBackground: vibrancy,
         animations: 'disabled',
         caret: 'hide',

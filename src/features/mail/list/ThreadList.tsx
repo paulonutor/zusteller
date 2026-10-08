@@ -127,7 +127,7 @@ export function ThreadList(p: Props) {
   const virtual = p.items.length > VIRTUALIZE_THRESHOLD;
   const rowsRef = useRef<HTMLDivElement>(null);
   const [scrollMargin, setScrollMargin] = useState(0);
-  // Row height comes from the skin's --row-h; real heights are then measured per row.
+  // Row height comes from --row-h; real heights are then measured per row.
   const rowH = () => {
     const el = scroller.current;
     const v = el ? parseFloat(getComputedStyle(el).getPropertyValue('--row-h')) : NaN;

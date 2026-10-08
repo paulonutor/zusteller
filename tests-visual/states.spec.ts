@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { expect, pinFrameFont, test } from './fixtures';
 
-// Mirrors the key states of scripts/capture-states.mjs for the default skin, light + dark.
+// Mirrors the key states of scripts/capture-states.mjs in light + dark.
 // Dates are frozen to the mock seed's "now" so relative timestamps never change.
 const SEED_NOW = '2026-10-07T12:00:00.000Z';
 const FLAT_BACKDROP = '#6b5bd6';
@@ -38,7 +38,7 @@ async function selectRows(page: Page, indices: number[]) {
 }
 
 for (const scheme of ['light', 'dark'] as const) {
-  test.describe(`default skin / ${scheme}`, () => {
+  test.describe(`${scheme}`, () => {
     test.use({ colorScheme: scheme });
 
     const shot = async (page: Page, name: string, maxDiffPixelRatio?: number) => {

@@ -57,7 +57,7 @@ definition — keep it in sync with the base config.
 
 Needs three layers: (1) transparent window + macOS `sidebar` material (`tauri.conf.json`, requires `macOSPrivateApi`),
 (2) the page opened with `?vibrancy=1` (set via the window `url` in `tauri.conf.json`) which makes `src/platform/hostChrome.ts`
-set `data-vibrancy` on `<html>`, and (3) `src/styles/skins.css` (`:root[data-vibrancy]`) which makes the window backdrop,
+set `data-vibrancy` on `<html>`, and (3) `src/styles/host.css` (`:root[data-vibrancy]`) which makes the window backdrop,
 gutters and sidebar transparent. List and reader panes stay opaque. Material is window-wide, not sidebar-only.
 `npm run tauri:dev:opaque` gives the plain window. If the effect is missing, check that the opaque overlay config is not in use.
 

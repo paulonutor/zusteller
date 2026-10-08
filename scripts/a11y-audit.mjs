@@ -1,5 +1,5 @@
 // Usage: node scripts/a11y-audit.mjs [baseUrl]     (needs `npm run dev`; `npm run a11y`)
-// Runs axe (wcag2a/aa, wcag21aa, best-practice) over the default skin B2 in many UI states,
+// Runs axe (wcag2a/aa, wcag21aa, best-practice) over the app in many UI states,
 // light + dark, plus the native-host vibrancy variant and the virtualized list (?seed=big, dev only).
 // Exit code 1 when any violation is found. CHROMIUM_PATH overrides the browser binary.
 /* global document, matchMedia */

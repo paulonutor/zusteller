@@ -1,9 +1,6 @@
 @import 'tailwindcss';
-@import './skins/shared.css';
-@import './skins/a.css';
-@import './skins/b.css';
-@import './skins/c.css';
-@import './skins/host.css';
+@import './mail.css';
+@import './host.css';
 
 @custom-variant dark (&:where(.dark, .dark *));
 

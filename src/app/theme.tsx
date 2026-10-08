@@ -8,7 +8,6 @@ import {
   type ReactNode,
 } from 'react';
 import { useServices } from './services';
-import { readThemeOverride } from './skin';
 
 export type ThemePreference = 'system' | 'light' | 'dark';
 type ThemeCtx = {
@@ -79,4 +78,9 @@ export function useTheme(): ThemeCtx {
   const v = useContext(Ctx);
   if (!v) throw new Error('useTheme must be used inside <ThemeProvider>');
   return v;
+}
+
+/** `?theme=dark` forces dark for this page load (not persisted). */
+export function readThemeOverride(search: string = window.location.search): 'dark' | null {
+  return new URLSearchParams(search).get('theme') === 'dark' ? 'dark' : null;
 }
