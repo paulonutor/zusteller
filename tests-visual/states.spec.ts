@@ -72,6 +72,16 @@ for (const scheme of ['light', 'dark'] as const) {
       await shot(page, 'thread-html', 0.012);
     });
 
+    test('junk mailbox with images blocked banner', async ({ page }) => {
+      await load(page);
+      await page.getByRole('button', { name: /^Junk/ }).click();
+      await openThread(page, /Exclusive offer/);
+      await waitForHtmlBody(page);
+      await expect(page.getByRole('button', { name: 'Load images' })).toBeVisible();
+      await page.mouse.move(640, 795);
+      await shot(page, 'junk', 0.012);
+    });
+
     test('avatar hover shows checkbox', async ({ page }) => {
       await load(page);
       await page.locator('[role=option] [data-lead]').nth(2).hover();

