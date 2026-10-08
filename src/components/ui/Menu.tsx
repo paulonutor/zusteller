@@ -2,7 +2,14 @@
 import * as DM from '@radix-ui/react-dropdown-menu';
 import * as CM from '@radix-ui/react-context-menu';
 import { Check, Minus } from 'lucide-react';
-import { cloneElement, type ComponentProps, type ReactElement, type ReactNode } from 'react';
+import {
+  cloneElement,
+  useEffect,
+  useState,
+  type ComponentProps,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import { cn } from '@/lib/cn';
 import { useServices } from '@/app/services';
 import type { NativeMenuItem } from '@/platform';
@@ -138,6 +145,27 @@ export function ContextMenu({
   const { platform } = useServices();
   const resolve = () => (typeof items === 'function' ? items() : items);
   const native = platform.showContextMenu?.bind(platform);
+  const [open, setOpen] = useState(false);
+  const changeOpen = (o: boolean) => {
+    setOpen(o);
+    onOpenChange?.(o);
+  };
+
+  // A menu anchored to a point goes stale when the page moves under it: close on scroll/resize.
+  useEffect(() => {
+    if (!open || native) return;
+    const close = (e: Event) => {
+      if (e.target instanceof Element && e.target.closest('[role="menu"]')) return;
+      setOpen(false);
+      onOpenChange?.(false);
+    };
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
+  }, [open, native, onOpenChange]);
 
   if (native) {
     // Native hosts draw the menu themselves; the trigger just needs a contextmenu handler.
@@ -153,7 +181,7 @@ export function ContextMenu({
   }
 
   return (
-    <CM.Root modal={false} onOpenChange={onOpenChange}>
+    <CM.Root modal={false} open={open} onOpenChange={changeOpen}>
       <CM.Trigger asChild>{children}</CM.Trigger>
       <CM.Portal>
         <CM.Content className={content}>{resolve().map((s, i) => render(CM, s, i))}</CM.Content>
