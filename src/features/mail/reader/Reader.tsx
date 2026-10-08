@@ -5,7 +5,7 @@ import type { ID, Label, Thread, ThreadSummary } from '@/domain/mail';
 import { SYSTEM_LABEL } from '@/domain/mail';
 import { Button } from '@/components/ui/Button';
 import { ActionBar } from '../ActionBar';
-import { labelChipStyle } from '../format';
+import { LabelChip } from '../LabelChip';
 import { useThreadActions, type Perform } from '../useThreadActions';
 import type { MailView } from '../view';
 import { MessageView } from './MessageView';
@@ -132,13 +132,7 @@ function ThreadBody({
           </span>
           {trashed && <span className="rounded bg-hover px-1.5">In Trash</span>}
           {chips.map((l) => (
-            <span
-              key={l.id}
-              className="rounded px-1.5 leading-[18px]"
-              style={labelChipStyle(l.color)}
-            >
-              {l.name}
-            </span>
+            <LabelChip key={l.id} label={l} className="max-w-64" />
           ))}
           {thread.messageCount > 1 && (
             <button

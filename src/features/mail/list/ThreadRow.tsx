@@ -6,8 +6,9 @@ import { Checkbox } from '@/components/ui/Checkbox';
 import { ContextMenu, type MenuItemSpec } from '@/components/ui/Menu';
 import { cn } from '@/lib/cn';
 import { beginThreadDrag, endDrag, useDropZone } from '../dnd';
+import { LabelChip } from '../LabelChip';
 import { LabelOverflow } from './LabelOverflow';
-import { avatarHue, displayName, formatListDate, initials, labelChipStyle } from '../format';
+import { avatarHue, displayName, formatListDate, initials } from '../format';
 
 type Props = {
   thread: ThreadSummary;
@@ -171,13 +172,7 @@ export const ThreadRow = memo(function ThreadRow(p: Props) {
                 {t.snippet}
               </span>
               {chips.slice(0, 2).map((l) => (
-                <span
-                  key={l.id}
-                  className="max-w-24 shrink-0 truncate rounded px-1.5 text-[11px] leading-[16px]"
-                  style={labelChipStyle(l.color)}
-                >
-                  {l.name}
-                </span>
+                <LabelChip key={l.id} label={l} />
               ))}
               {chips.length > 2 && <LabelOverflow labels={chips.slice(2)} />}
             </div>

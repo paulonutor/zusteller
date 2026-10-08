@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Label } from '@/domain/mail';
-import { labelChipStyle } from '../format';
+import { LabelChip } from '../LabelChip';
 
-const chip = 'shrink-0 truncate rounded px-1.5 text-[11px] leading-[16px]';
+const chip = 'shrink-0 rounded px-1.5 text-[11px] leading-[16px]';
 
 /**
  * "+N" badge that lists the labels that didn't fit in the row on hover. Pointer-only like the row's
@@ -65,9 +65,7 @@ export function LabelOverflow({ labels }: { labels: Label[] }) {
             className="z-50 flex max-w-64 flex-wrap gap-1 rounded-lg border border-border bg-surface-raised/95 p-2 shadow-lg backdrop-blur-xl"
           >
             {labels.map((l) => (
-              <span key={l.id} className={chip} style={labelChipStyle(l.color)}>
-                {l.name}
-              </span>
+              <LabelChip key={l.id} label={l} />
             ))}
           </div>,
           document.body,
