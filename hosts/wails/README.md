@@ -86,8 +86,8 @@ NOT verified (needs a Mac):
 
 The native window material follows the window's NSAppearance, not the page theme. Tauri pins it to the app theme at runtime
 (`setWindowTheme` -> `set_window_theme`). Wails v3 beta.28 only accepts `Mac.Appearance` when the window is created, so there is
-no runtime switch (the adapter deliberately does not implement `setWindowTheme`). This only matters once Wails vibrancy is enabled
-(it is opaque today): with a system/app theme mismatch the material and text colours would disagree.
+no runtime switch (the adapter deliberately does not implement `setWindowTheme`). Since vibrancy is now the default, a system/app theme
+mismatch makes the material and text colours disagree in Wails; pin it with `ZUSTELLER_APPEARANCE=dark|light` or match the OS theme.
 
 ## Vibrancy (default, macOS)
 
