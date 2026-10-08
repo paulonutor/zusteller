@@ -18,7 +18,7 @@ html.dark[data-skin='b'] {
   --on-selection-dim: color-mix(in srgb, var(--on-selection) 72%, transparent);
   --pane-radius: 12px;
   --row-radius: 9px;
-  --row-h: 60px;
+  --row-h: 74px;
   --toolbar-line: transparent;
   --row-line: transparent;
   --sidebar-blur: blur(40px) saturate(1.8);
@@ -57,7 +57,7 @@ html:not(.dark)[data-skin='b'] {
   --on-selection-dim: color-mix(in srgb, var(--on-selection) 72%, transparent);
   --pane-radius: 12px;
   --row-radius: 9px;
-  --row-h: 60px;
+  --row-h: 74px;
   --toolbar-line: transparent;
   --row-line: transparent;
   --sidebar-blur: blur(40px) saturate(1.8);
@@ -367,28 +367,21 @@ html:root[data-skin='b'] [role='option'][data-unread='false'] [data-sender] {
 html:root[data-skin='b'] [role='option'][aria-selected='true'][data-unread='false'] [data-sender] {
   color: inherit;
 }
+/* Three rows: sender + date, subject, snippet + labels. */
 html:root[data-skin='b'] [role='option'] [data-line2] {
-  display: flex;
-  align-items: baseline;
   margin-top: 1px;
 }
 html:root[data-skin='b'] [role='option'] [data-subject] {
-  flex: 0 1 auto;
-  max-width: 52%;
   font-weight: 400;
 }
 html:root[data-skin='b'] [role='option'][data-unread='true'] [data-subject] {
   font-weight: 600;
 }
 html:root[data-skin='b'] [role='option'] [data-snippet-row] {
-  flex: 1 1 0;
   min-width: 0;
+  margin-top: 1px;
 }
-html:root[data-skin='b'] [role='option'] [data-snippet]::before {
-  content: '–';
-  margin: 0 6px;
-}
-/* Gmail label chips: solid label colour, white text, one per row. */
+/* Gmail label chips: solid label colour, white text, two per row plus the +N badge. */
 html:root[data-skin='b'] [role='option'] [data-snippet-row] > span[style] {
   background: color-mix(in srgb, var(--chip) 80%, var(--chip-base)) !important;
   color: #fff !important;
@@ -397,10 +390,12 @@ html:root[data-skin='b'] [role='option'] [data-snippet-row] > span[style] {
   line-height: 15px;
   border-radius: 4px;
   padding-inline: 5px;
-  max-width: 74px;
+  max-width: 96px;
 }
-html:root[data-skin='b'] [role='option'] [data-snippet-row] > span[style] ~ span[style] {
-  display: none;
+html:root[data-skin='b'] [role='option'] [data-label-overflow] {
+  font-size: 10px;
+  line-height: 15px;
+  padding-inline: 5px;
 }
 
 /* Reader toolbar: round icon buttons with a hover circle */
