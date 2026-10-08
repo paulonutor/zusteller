@@ -4,6 +4,9 @@ Status: **provisional, written on Linux**. Nothing here was run on macOS. Every 
 `TO MEASURE (needs macOS)`. Facts come from the host READMEs, the scaffolds in `hosts/`, and the sources linked at the end.
 Both hosts load the same `frontend/` and `MockMailService`; neither adapter is wired into `platform/index.ts` yet.
 
+To fill the `TO MEASURE` cells: follow [`docs/mac-test-runbook.md`](mac-test-runbook.md) (checklist, screenshots, prompt for a local
+Claude Code session) and run [`scripts/measure-host.sh`](../scripts/measure-host.sh) (build time, size, cold start, idle RAM as a markdown table).
+
 ## Comparison table (plan section 7, 13 rows)
 
 | Metric | Wails v3 beta.28 | Tauri 2.12 |
@@ -14,7 +17,7 @@ Both hosts load the same `frontend/` and `MockMailService`; neither adapter is w
 | Native menus and shortcuts | App/Edit/Mailbox/View/Window menus in `menu.go`; mail items emit `zusteller:mail-action`. Compiles on Linux; rendering and event delivery TO MEASURE (needs macOS) | App/Edit/Mail/View/Window menus in `lib.rs`; mail items emit `zusteller://menu`. `cargo check` passes on Linux; rendering and events TO MEASURE (needs macOS) |
 | Notifications / Dock badge | Built-in dock + notifications services. Notifications need a signed bundle with a bundle identifier and user authorization (README; the Wails v2 docs say the same, v3 docs do not state it). Behaviour TO MEASURE (needs macOS) | `notification` plugin (called from Rust) and `window.set_badge_count`. In `tauri dev` macOS attributes notifications to the terminal (README). Behaviour TO MEASURE (needs macOS) |
 | Titlebar / traffic lights | `MacTitleBarHiddenInset` (hidden title, inset traffic lights). Look TO MEASURE (needs macOS) | `titleBarStyle: Overlay`, hidden title, lights at (16,18). Needs a `data-tauri-drag-region` strip in the frontend (not added). Look TO MEASURE (needs macOS) |
-| Vibrancy / Liquid Glass | Default since vibrancy was made the default: `MacBackdropTranslucent` (`task dev:glass` = `MacBackdropLiquidGlass`, macOS 15+ per source). The WebView only turns transparent when built with `-tags private_mac_apis` (private API), which the default tasks now set on macOS. Rendering TO MEASURE (needs macOS) | `windowEffects: sidebar` in the default `tauri.conf.json` (`dev:opaque` = plain window). Needs `macOSPrivateApi` (private API) for transparency. Liquid Glass not attempted. Rendering TO MEASURE (needs macOS) |
+| Vibrancy / Liquid Glass | Default since vibrancy was made the default: `MacBackdropTranslucent` (`task dev:glass` = `MacBackdropLiquidGlass`, macOS 15+ per source). The WebView only turns transparent when built with `-tags private_mac_apis` (private API), which the default tasks now set on macOS. Rendering TO MEASURE (needs macOS) | `windowEffects: sidebar` in the default `tauri.conf.json` (`dev:opaque` = plain window). Transparency uses a private WebKit key (see Mac App Store note below). Liquid Glass not attempted. Rendering TO MEASURE (needs macOS) |
 | Sidebar-only transparency | Not offered; backdrop is window-wide (README, from source) | Not offered; effect is window-wide, per-pane material needs custom native code (README) |
 | Theme / inactive appearance | TO MEASURE (needs macOS) | TO MEASURE (needs macOS) |
 | Packaging / signing | Not set up. `.app` needs the `wails3` CLI (`wails3 package`, Info.plist in `build/darwin/`) or a manual plist. Signing and notarization are macOS-only and need an Apple Developer account. DMG via `create-dmg`/`hdiutil`, not built in. End-to-end TO MEASURE (needs macOS) | `bundle.targets` = `app`, `dmg`; identifier `de.onutor.zusteller`; placeholder icon only (`tauri icon` generates icns). Signing/notarization not set up. End-to-end TO MEASURE (needs macOS) |
@@ -42,7 +45,7 @@ Wails:
 - Linux compile checks need `-tags gtk3` because beta.28 defaults to GTK4.
 
 Tauri:
-- Transparency needs `macOSPrivateApi` (private AppKit API). Community sources state this blocks Mac App Store acceptance (guideline 2.5.1); no official Tauri statement was reachable (see sources).
+- Transparency relies on a private API; Mac App Store review is AT RISK (not proven rejected). See "Mac App Store note" below.
 - A Tauri issue reports transparent windows rendering solid white in a bundled DMG while `tauri dev` works. Unconfirmed for this app.
 - CSP in `tauri.conf.json` is a first guess; check Vite HMR and the reader iframe.
 - `plugin:opener|open_url` invoke name and the `mailto:*` scope pattern are unverified.
@@ -50,6 +53,20 @@ Tauri:
 
 Both: Liquid Glass support must be verified on the installed framework version and macOS version; reduced-transparency and
 inactive-window behaviour are unverified.
+
+## Mac App Store note (corrected)
+
+Verified from source on Linux (not by submitting anything):
+- Installed Tauri 2.12.1: the `macos-private-api` Cargo feature / `macOSPrivateApi` config is documented as a no-op now
+  ("APIs are always enabled"), so it no longer toggles anything and cannot be used to opt out.
+- wry 0.57 sets the private KVC key `drawsBackground` on the WKWebView when `transparent` is requested (source comment).
+- Wails marks `-tags private_mac_apis` as using undocumented API (source comment); it is what makes the WebView transparent.
+
+Unverified: how Apple's review treats this. Apple's App Review guideline 2.5.1 requires public APIs only, so Mac App Store
+submission of a transparent-WebView build of either host is AT RISK of rejection; it is NOT proven rejected, and no
+submission was attempted. Distribution with Developer ID + notarization outside the store is unaffected as far as known
+(not tested; notarization checks malware/signing, not API usage). An opaque variant (`dev:opaque` / `build:opaque`,
+`task dev:opaque`) uses public APIs only and is the fallback if the store matters.
 
 ## Measurement checklist (run on a Mac, same machine, same macOS, release builds, mock data)
 
@@ -91,4 +108,4 @@ translucent look, so that does not separate them. Decide only after items 1 to 6
 - [Wails v2 notifications guide](https://wails.io/docs/guides/notifications) (bundle identifier note)
 - [Tauri issue 13415](https://github.com/tauri-apps/tauri/issues/13415) (transparent window white in bundled build)
 - [window-vibrancy](https://docsearch.algolia.com/mcp/docs/repo/tauri-apps/window-vibrancy) (macOSPrivateApi needed for transparency)
-- Official Tauri docs (v2.tauri.app) were not reachable from the authoring environment; the App Store claim is community-sourced.
+- Official Tauri docs (v2.tauri.app) were not reachable from the authoring environment. The no-op wording comes from the installed 2.12.1 crate docs, the `drawsBackground` key from wry 0.57 source; Apple's review behaviour is not documented in any source here.

@@ -60,3 +60,5 @@ gutters and sidebar transparent. List and reader panes stay opaque. Material is 
 
 The window theme is pinned to the in-app theme (`set_window_theme`, called from `ThemeProvider`), so the vibrancy material
 always matches the page colours; choosing "System" in the app lets the window follow the OS again.
+
+Mac test steps and checklist: [`docs/mac-test-runbook.md`](../../docs/mac-test-runbook.md); measurements: `scripts/measure-host.sh`.

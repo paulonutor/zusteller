@@ -97,3 +97,5 @@ transparent (`task dev`, `task build` set it on macOS). `task dev:opaque` / `ZUS
 public APIs only. Optional `ZUSTELLER_APPEARANCE=dark|light` pins the native appearance (fixed at creation).
 Unverified on a Mac. Decision rule agreed with the owner: if this does not give a working translucent sidebar, Wails is out and the
 project commits to Tauri.
+
+Mac test steps and checklist: [`docs/mac-test-runbook.md`](../../docs/mac-test-runbook.md); measurements: `scripts/measure-host.sh`.
