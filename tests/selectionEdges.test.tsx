@@ -47,12 +47,13 @@ describe('selection edge cases', () => {
     await waitForRows();
     await user.click(rows()[0]!);
     await user.click(screen.getByRole('button', { name: 'Archive' }));
-    await waitFor(() => expect(selectedCount()).toBe(0));
+    // The next thread opens, so it is the only selected row (and the new anchor).
+    await waitFor(() => expect(selectedCount()).toBe(1));
     const target = rows()[2]!;
     await user.keyboard('{Shift>}');
     await user.click(target);
     await user.keyboard('{/Shift}');
-    // The cursor moved to the next row when the anchor was archived, so the range starts there.
+    // The next row became the anchor when the open thread was archived, so the range starts there.
     await waitFor(() => expect(selectedCount()).toBeGreaterThanOrEqual(1));
     expect(selectedCount()).toBeLessThanOrEqual(3);
     expect(document.getElementById(idOf(target))).toHaveAttribute('aria-selected', 'true');
@@ -86,7 +87,7 @@ describe('selection edge cases', () => {
     expect(screen.queryAllByRole('article')).toHaveLength(0);
   });
 
-  it('archiving the open thread moves the cursor to the next row and empties the reader', async () => {
+  it('archiving the open thread moves to and opens the next thread', async () => {
     const { user } = setup();
     await waitForRows();
     const [first, second] = rows();
@@ -95,7 +96,8 @@ describe('selection edge cases', () => {
     await user.click(screen.getByRole('button', { name: 'Archive' }));
     await waitFor(() => expect(document.getElementById(idOf(first!))).toBeNull());
     await waitFor(() => expect(listbox()).toHaveAttribute('aria-activedescendant', idOf(second!)));
-    expect(screen.queryAllByRole('article')).toHaveLength(0);
+    await waitFor(() => expect(second!).toHaveAttribute('aria-selected', 'true'));
+    expect(await screen.findAllByRole('article')).not.toHaveLength(0);
   });
 
   it('archiving the last remaining thread shows the empty state, no crash', async () => {
