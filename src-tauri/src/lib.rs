@@ -94,12 +94,13 @@ fn show_context_menu(window: Window, items: Vec<ContextItem>) -> Result<(), Stri
 }
 
 /// Menu item ids sent to the frontend as the event payload.
-const MAIL_ITEMS: [(&str, &str, Option<&str>); 6] = [
+const MAIL_ITEMS: [(&str, &str, Option<&str>); 7] = [
     ("mail.archive", "Archive", None),
     ("mail.trash", "Move to Trash", None),
     ("mail.markRead", "Mark as Read", None),
     ("mail.markUnread", "Mark as Unread", None),
     ("mail.star", "Add / Remove Star", None),
+    ("mail.junk", "Mark as Junk / Not Junk", None),
     // Cmd+F is the standard macOS Find shortcut. The other mail items get no
     // accelerator: the frontend owns its plain-key shortcuts (and ignores them
     // while typing), a menu accelerator would fire even inside text fields.

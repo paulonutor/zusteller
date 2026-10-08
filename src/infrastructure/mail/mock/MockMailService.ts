@@ -120,6 +120,7 @@ export class MockMailService implements MailService {
         inbox: 0,
         starred: 0,
         sent: 0,
+        junk: 0,
         trash: 0,
         all: 0,
       };
@@ -131,7 +132,7 @@ export class MockMailService implements MailService {
         for (const box of Object.keys(mailboxes) as SystemMailbox[]) {
           if (this.inMailbox(s, box)) mailboxes[box]++;
         }
-        if (!s.labelIds.includes(SYSTEM_LABEL.trash)) {
+        if (!s.labelIds.includes(SYSTEM_LABEL.trash) && !s.labelIds.includes(SYSTEM_LABEL.junk)) {
           for (const id of s.labelIds) if (id in labels) labels[id] = (labels[id] ?? 0) + 1;
         }
       }
@@ -152,8 +153,11 @@ export class MockMailService implements MailService {
         if (summary.accountId !== query.accountId) continue;
         if (mailbox && !this.inMailbox(summary, mailbox)) continue;
         if (query.labelId) {
-          if (summary.labelIds.includes(SYSTEM_LABEL.trash) && query.labelId !== SYSTEM_LABEL.trash)
-            continue;
+          const hidden =
+            (summary.labelIds.includes(SYSTEM_LABEL.trash) &&
+              query.labelId !== SYSTEM_LABEL.trash) ||
+            (summary.labelIds.includes(SYSTEM_LABEL.junk) && query.labelId !== SYSTEM_LABEL.junk);
+          if (hidden) continue;
           if (!summary.labelIds.includes(query.labelId)) continue;
         }
         if (terms.length && !this.matchesSearch(list, terms)) continue;
@@ -203,6 +207,7 @@ export class MockMailService implements MailService {
   trash(accountId: ID, threadIds: ID[]) {
     return this.mutate('trash', accountId, threadIds, (m) => {
       this.removeId(m, SYSTEM_LABEL.inbox);
+      this.removeId(m, SYSTEM_LABEL.junk);
       this.addId(m, SYSTEM_LABEL.trash);
     });
   }
@@ -210,6 +215,23 @@ export class MockMailService implements MailService {
   restore(accountId: ID, threadIds: ID[]) {
     return this.mutate('restore', accountId, threadIds, (m) => {
       this.removeId(m, SYSTEM_LABEL.trash);
+      this.removeId(m, SYSTEM_LABEL.junk);
+      this.addId(m, SYSTEM_LABEL.inbox);
+    });
+  }
+
+  markJunk(accountId: ID, threadIds: ID[]) {
+    return this.mutate('markJunk', accountId, threadIds, (m) => {
+      this.removeId(m, SYSTEM_LABEL.inbox);
+      this.removeId(m, SYSTEM_LABEL.trash);
+      this.addId(m, SYSTEM_LABEL.junk);
+    });
+  }
+
+  notJunk(accountId: ID, threadIds: ID[]) {
+    return this.mutate('notJunk', accountId, threadIds, (m) => {
+      if (!m.labelIds.includes(SYSTEM_LABEL.junk)) return;
+      this.removeId(m, SYSTEM_LABEL.junk);
       this.addId(m, SYSTEM_LABEL.inbox);
     });
   }
@@ -303,17 +325,21 @@ export class MockMailService implements MailService {
 
   private inMailbox(s: ThreadSummary, box: SystemMailbox): boolean {
     const trashed = s.labelIds.includes(SYSTEM_LABEL.trash);
+    const junk = s.labelIds.includes(SYSTEM_LABEL.junk);
+    const live = !trashed && !junk;
     switch (box) {
       case 'trash':
         return trashed;
+      case 'junk':
+        return junk && !trashed;
       case 'inbox':
-        return !trashed && s.labelIds.includes(SYSTEM_LABEL.inbox);
+        return live && s.labelIds.includes(SYSTEM_LABEL.inbox);
       case 'sent':
-        return !trashed && s.labelIds.includes(SYSTEM_LABEL.sent);
+        return live && s.labelIds.includes(SYSTEM_LABEL.sent);
       case 'starred':
-        return !trashed && s.isStarred;
+        return live && s.isStarred;
       case 'all':
-        return !trashed;
+        return live;
     }
   }
 

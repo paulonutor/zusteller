@@ -3,6 +3,8 @@ import {
   Mail,
   MailOpen,
   RotateCcw,
+  ShieldAlert,
+  ShieldCheck,
   Star,
   Tag,
   Trash2,
@@ -22,6 +24,8 @@ const ICONS: Record<MailActionId, LucideIcon> = {
   markUnread: Mail,
   star: Star,
   unstar: Star,
+  markJunk: ShieldAlert,
+  notJunk: ShieldCheck,
 };
 
 type Props = {

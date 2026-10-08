@@ -19,6 +19,13 @@ describe('actionForKey', () => {
     expect(actionForKey(k('U', { shiftKey: true }))).toBe('markUnread');
     expect(actionForKey(k('s'))).toBe('toggleStar');
   });
+  it('maps ! (Shift+1 or the key itself) to the junk toggle, never with ⌘/Ctrl/Alt', () => {
+    expect(actionForKey(k('!', { shiftKey: true }))).toBe('toggleJunk');
+    expect(actionForKey(k('!'))).toBe('toggleJunk');
+    expect(actionForKey(k('!', { metaKey: true }))).toBeNull();
+    expect(actionForKey(k('!', { ctrlKey: true }))).toBeNull();
+    expect(actionForKey(k('!', { altKey: true }))).toBeNull();
+  });
   it('is safe with CapsLock (uppercase key without shift)', () => {
     expect(actionForKey(k('I'))).toBeNull();
     expect(actionForKey(k('U'))).toBeNull();

@@ -260,3 +260,92 @@ describe('simulation', () => {
     expect(performance.now() - t0).toBeGreaterThanOrEqual(35);
   });
 });
+
+describe('junk', () => {
+  it('markJunk moves a thread out of Inbox/All/Starred/Sent/labels into Junk, keeping its labels', async () => {
+    await svc.markJunk(A, ['t2', 't1']);
+    expect(await ids({ accountId: A, mailbox: 'junk' })).toEqual(['t2', 't1']);
+    for (const mailbox of ['inbox', 'all', 'starred', 'sent'] as const) {
+      const got = await ids({ accountId: A, mailbox });
+      expect(got).not.toContain('t1');
+      expect(got).not.toContain('t2');
+    }
+    expect(await ids({ accountId: A, labelId: 'L1' })).toEqual([]);
+    const t = await svc.getThread(A, 't1');
+    expect(t.labelIds).toEqual(expect.arrayContaining(['SPAM', 'L1']));
+    expect(t.labelIds).not.toContain('INBOX');
+    // every message of a multi-message thread is marked
+    const t2 = await svc.getThread(A, 't2');
+    expect(t2.messages.every((m) => m.labelIds.includes('SPAM'))).toBe(true);
+  });
+
+  it('markJunk is idempotent and also pulls a trashed thread out of Trash', async () => {
+    await svc.markJunk(A, ['t4']);
+    await svc.markJunk(A, ['t4']);
+    expect(await ids({ accountId: A, mailbox: 'trash' })).toEqual([]);
+    expect(await ids({ accountId: A, mailbox: 'junk' })).toEqual(['t4']);
+    const labels = (await svc.getThread(A, 't4')).messages[0]!.labelIds;
+    expect(labels.filter((l) => l === 'SPAM')).toHaveLength(1);
+  });
+
+  it('notJunk returns the thread to the Inbox and leaves non-junk threads alone', async () => {
+    await svc.markJunk(A, ['t1']);
+    await svc.notJunk(A, ['t1', 't5']);
+    expect(await ids({ accountId: A, mailbox: 'junk' })).toEqual([]);
+    expect(await ids({ accountId: A, mailbox: 'inbox' })).toContain('t1');
+    expect(await ids({ accountId: A, labelId: 'L1' })).toEqual(['t1']);
+    // t5 was archived (no INBOX) and never junk: unchanged
+    expect((await svc.getThread(A, 't5')).labelIds).toEqual([]);
+  });
+
+  it('trash from Junk leaves Junk; restore (Move to Inbox) clears Junk and Trash', async () => {
+    await svc.markJunk(A, ['t1']);
+    await svc.trash(A, ['t1']);
+    expect(await ids({ accountId: A, mailbox: 'junk' })).toEqual([]);
+    expect(await ids({ accountId: A, mailbox: 'trash' })).toContain('t1');
+    expect((await svc.getThread(A, 't1')).labelIds).not.toContain('SPAM');
+    await svc.markJunk(A, ['t6']);
+    await svc.restore(A, ['t6']);
+    const labels = (await svc.getThread(A, 't6')).labelIds;
+    expect(labels).toContain('INBOX');
+    expect(labels).not.toContain('SPAM');
+  });
+
+  it('archive does not change Junk membership', async () => {
+    await svc.markJunk(A, ['t1']);
+    await svc.archive(A, ['t1']);
+    expect(await ids({ accountId: A, mailbox: 'junk' })).toEqual(['t1']);
+  });
+
+  it('a junk thread is found by search in Junk but not in All', async () => {
+    await svc.markJunk(A, ['t2']);
+    expect(await ids({ accountId: A, mailbox: 'junk', search: 'needle' })).toEqual(['t2']);
+    expect(await ids({ accountId: A, mailbox: 'all', search: 'needle' })).toEqual([]);
+  });
+
+  it('counts unread Junk separately and keeps junk out of the other counts', async () => {
+    const before = await svc.getMailboxCounts(A);
+    expect(before.mailboxes.junk).toBe(0);
+    await svc.markJunk(A, ['t2', 't1']); // both unread; t2 starred
+    const after = await svc.getMailboxCounts(A);
+    expect(after.mailboxes).toMatchObject({ inbox: 1, starred: 0, all: 1, junk: 2, trash: 0 });
+    expect(after.labels).toEqual({ L1: 0, L2: 1 });
+    await svc.markRead(A, ['t1'], true);
+    expect((await svc.getMailboxCounts(A)).mailboxes.junk).toBe(1);
+  });
+
+  it('junk mutations are atomic, validated and subject to failure injection', async () => {
+    await expect(svc.markJunk(A, ['t1', 'nope'])).rejects.toMatchObject({ code: 'not_found' });
+    expect(await ids({ accountId: A, mailbox: 'junk' })).toEqual([]);
+    await expect(svc.notJunk(A, ['nope'])).rejects.toMatchObject({ code: 'not_found' });
+    svc.failNext('markJunk');
+    await expect(svc.markJunk(A, ['t1'])).rejects.toMatchObject({ code: 'simulated' });
+    expect(await ids({ accountId: A, mailbox: 'junk' })).toEqual([]);
+    await svc.markJunk(A, ['t1']);
+    expect(await ids({ accountId: A, mailbox: 'junk' })).toEqual(['t1']);
+  });
+
+  it('rejects SPAM as a user label', async () => {
+    await expect(svc.addLabel(A, ['t1'], 'SPAM')).rejects.toMatchObject({ code: 'invalid' });
+  });
+});

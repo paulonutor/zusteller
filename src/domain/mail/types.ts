@@ -3,7 +3,7 @@
  * provider (Gmail), a host (Tauri) or a UI library.
  */
 export type ID = string;
-export type SystemMailbox = 'inbox' | 'starred' | 'sent' | 'trash' | 'all';
+export type SystemMailbox = 'inbox' | 'starred' | 'sent' | 'junk' | 'trash' | 'all';
 
 export type Address = { name?: string; email: string };
 export type Account = { id: ID; email: string; displayName: string; avatarUrl?: string };
@@ -81,6 +81,8 @@ export interface MailService {
   archive(accountId: ID, threadIds: ID[]): Promise<void>;
   trash(accountId: ID, threadIds: ID[]): Promise<void>;
   restore(accountId: ID, threadIds: ID[]): Promise<void>;
+  markJunk(accountId: ID, threadIds: ID[]): Promise<void>;
+  notJunk(accountId: ID, threadIds: ID[]): Promise<void>;
   addLabel(accountId: ID, threadIds: ID[], labelId: ID): Promise<void>;
   removeLabel(accountId: ID, threadIds: ID[], labelId: ID): Promise<void>;
 }

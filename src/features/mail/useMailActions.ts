@@ -19,6 +19,8 @@ const VERBS: Record<PerformAction, string> = {
   addLabel: 'add label',
   removeLabel: 'remove label',
   moveToLabel: 'move to label',
+  markJunk: 'mark as junk',
+  notJunk: 'mark as not junk',
 };
 
 /** Optimistically patch flags in every cached list. Only used for trivial, semantics-free flags. */
@@ -81,6 +83,12 @@ export function useMailActions(accountId: ID | undefined) {
             break;
           case 'restore':
             await mail.restore(accountId, threadIds);
+            break;
+          case 'markJunk':
+            await mail.markJunk(accountId, threadIds);
+            break;
+          case 'notJunk':
+            await mail.notJunk(accountId, threadIds);
             break;
           case 'addLabel':
             await mail.addLabel(accountId, threadIds, opts.labelId!);

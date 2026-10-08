@@ -45,6 +45,25 @@ describe('createSeedData', () => {
     }
   });
 
+  it('has junk threads (SPAM, never INBOX) including one with remote images', () => {
+    const junkIds = [...threads.entries()]
+      .filter(([, ms]) => ms.some((m) => m.labelIds.includes('SPAM')))
+      .map(([id]) => id);
+    expect(junkIds.length).toBeGreaterThanOrEqual(3);
+    for (const id of junkIds)
+      for (const m of threads.get(id)!) {
+        expect(m.labelIds).not.toContain('INBOX');
+        expect(m.labelIds).not.toContain('TRASH');
+      }
+    const pharma = threads.get('t-junk-pharma')!;
+    expect(pharma.some((m) => /<img src="https:/.test(m.html ?? ''))).toBe(true);
+    expect(pharma.some((m) => !m.isRead)).toBe(true);
+    expect(seed.labels.find((l) => l.id === 'SPAM')).toMatchObject({
+      type: 'system',
+      name: 'Junk',
+    });
+  });
+
   it('contains the special threads', () => {
     for (const id of ['t-hostile', 't-wide', 't-long', 't-plain-only', 't-injection'])
       expect(threads.has(id)).toBe(true);

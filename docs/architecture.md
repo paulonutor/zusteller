@@ -15,15 +15,18 @@ mailbox and per user label. Correct counts can't be derived from paginated `getT
 Compose/draft/send methods are intentionally absent until Phase 4.
 
 System mailboxes (`SystemMailbox`) and user labels stay distinct in the UI. Internally system state is carried as label ids
-(`INBOX`, `SENT`, `TRASH`) on messages, as Gmail does, but `Label.type` and `isSystemLabelId` always tell them apart, and
+(`INBOX`, `SENT`, `TRASH`, `SPAM` = Junk) on messages, as Gmail does, but `Label.type` and `isSystemLabelId` always tell them apart, and
 `addLabel`/`removeLabel` reject system labels.
 
 ### Thread semantics (mock; not a claim about Gmail)
 
 - Thread unread ⇔ any message unread; starred ⇔ any message starred; labels = union. Mutations apply to every message.
-- Inbox = `INBOX` ∧ ¬`TRASH`; Sent = `SENT` ∧ ¬`TRASH`; Starred = starred ∧ ¬`TRASH`; All = ¬`TRASH`; Trash = `TRASH`.
-- archive removes `INBOX`; trash adds `TRASH` and removes `INBOX`; restore removes `TRASH` and adds `INBOX`
-  (original placement is not remembered).
+- Inbox = `INBOX` ∧ ¬`TRASH` ∧ ¬`SPAM`; Sent = `SENT` ∧ ¬`TRASH` ∧ ¬`SPAM`; Starred = starred ∧ ¬`TRASH` ∧ ¬`SPAM`; All = ¬`TRASH` ∧ ¬`SPAM`;
+  Junk = `SPAM` ∧ ¬`TRASH`; Trash = `TRASH`. Unread counts follow the same membership.
+- archive removes `INBOX`; trash adds `TRASH` and removes `INBOX`/`SPAM`; restore ("Move to Inbox") removes `TRASH`/`SPAM` and adds `INBOX`
+  (original placement is not remembered). `markJunk` adds `SPAM` and removes `INBOX`/`TRASH`; `notJunk` removes `SPAM` and adds `INBOX`.
+- Junk threads never auto-load remote images in the reader: a banner offers "Load images" for that message only (not remembered).
+- A single-message thread renders as a plain message (no collapse header); multi-message threads collapse older messages.
 - Batch mutations are atomic: an unknown id fails the whole call and changes nothing.
 - Ordering is `lastMessageAt` desc, id desc. Cursors are keyset-based, so mutations between pages can't duplicate or skip rows.
 - Search is AND over whitespace-separated terms across subject, sender, recipients, body (HTML stripped) and attachment names,
@@ -51,7 +54,7 @@ reflects mutations.
   Opening a conversation marks it read once.
 - **Filter tabs** (All / Unread / Starred): client-side over the _loaded_ rows only (not a server query). Selected rows stay
   visible even if they no longer match, so opening an unread thread doesn't make it vanish. Tab counts are over loaded rows.
-- **Shortcuts** (`shortcuts.ts`): `E` archive · `⌫`/`Del`/`#` trash · `⇧Z` move to Inbox · `⇧I`/`⇧U` read/unread · `S` star toggle ·
+- **Shortcuts** (`shortcuts.ts`): `E` archive · `⌫`/`Del`/`#` trash · `⇧Z` move to Inbox · `!` Mark as Junk / Not Junk (toggle, like Gmail) · `⇧I`/`⇧U` read/unread · `S` star toggle ·
   `/` or `⌘F` search. Plain keys only so they never collide with macOS ⌘ shortcuts; ignored while typing or while a menu is open.
 - **Layout**: sidebar (180–320, default 220) · list (300–640, default 410) · reader (flex, min 320). Drag or arrow-key resize.
   A 52 px drag-region header on each pane leaves room for native traffic lights (see Platform layer).
@@ -71,15 +74,15 @@ reflects mutations.
 
 ## Platform layer (`src/platform`)
 
-| File                 | Role                                                                                                                                                                                                                                                                        |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PlatformService.ts` | Interface: `showNotification`, `setBadge`, `openExternal`, `subscribeMenuActions(handler)` returning an unsubscribe, optional `setWindowTheme('system'/'light'/'dark')`                                                                                                     |
-| `browser.ts`         | Browser implementation (`subscribeMenuActions` is a no-op, no `setWindowTheme`)                                                                                                                                                                                             |
-| `tauri.ts`           | Host adapter (`isTauriHost`): notifications, badge, `openExternal`, `setWindowTheme`, system accent colour                                                                                                                                                                  |
-| `index.ts`           | `createPlatformService()`: Tauri, else browser; adapts host menu events to `subscribeMenuActions`                                                                                                                                                                           |
-| `menuActions.ts`     | Host-neutral `MenuAction` (`archive trash markRead markUnread star find`); maps Tauri item ids (`mail.archive`). `MailApp` feeds them to the same handler as keyboard shortcuts (`star` = toggle, `find` = focus search); actions not enabled for the selection are ignored |
-| `hostChrome.ts`      | `applyHostChrome()` sets `data-host="tauri"` and, if the host opened `?vibrancy=1`, `data-vibrancy` on `<html>`; `trackWindowFocus()` mirrors focus into `data-window-inactive`; `dragRegionProps` (`data-tauri-drag-region`) marks draggable headers                       |
-| `accentDebug.ts`     | `?debug=accent` diagnostic panel                                                                                                                                                                                                                                            |
+| File                 | Role                                                                                                                                                                                                                                                                             |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PlatformService.ts` | Interface: `showNotification`, `setBadge`, `openExternal`, `subscribeMenuActions(handler)` returning an unsubscribe, optional `setWindowTheme('system'/'light'/'dark')`                                                                                                          |
+| `browser.ts`         | Browser implementation (`subscribeMenuActions` is a no-op, no `setWindowTheme`)                                                                                                                                                                                                  |
+| `tauri.ts`           | Host adapter (`isTauriHost`): notifications, badge, `openExternal`, `setWindowTheme`, system accent colour                                                                                                                                                                       |
+| `index.ts`           | `createPlatformService()`: Tauri, else browser; adapts host menu events to `subscribeMenuActions`                                                                                                                                                                                |
+| `menuActions.ts`     | Host-neutral `MenuAction` (`archive trash markRead markUnread star junk find`); maps Tauri item ids (`mail.archive`). `MailApp` feeds them to the same handler as keyboard shortcuts (`star` = toggle, `find` = focus search); actions not enabled for the selection are ignored |
+| `hostChrome.ts`      | `applyHostChrome()` sets `data-host="tauri"` and, if the host opened `?vibrancy=1`, `data-vibrancy` on `<html>`; `trackWindowFocus()` mirrors focus into `data-window-inactive`; `dragRegionProps` (`data-tauri-drag-region`) marks draggable headers                            |
+| `accentDebug.ts`     | `?debug=accent` diagnostic panel                                                                                                                                                                                                                                                 |
 
 `ThemeProvider` calls `platform.setWindowTheme?.()` so the native material follows the in-app theme ("System" follows the OS).
 `main.tsx` runs `applyHostChrome`, `trackWindowFocus` and `showAccentDebug` at startup.
