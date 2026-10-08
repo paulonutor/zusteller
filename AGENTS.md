@@ -122,4 +122,4 @@ Board: **Zusteller** â€” https://trello.com/b/LJT3FtfE/zusteller (lists: Ideas Â
   Keep the `Co-Authored-By: Claude ... <noreply@anthropic.com>` trailer; do **not** add a `Claude-Session:` line.
   Check `git log --format='%an <%ae>'` before pushing; no other author identity.
 - History is only rewritten when Paul explicitly asks (it needs a force-push; take a backup tag first).
-- Small, descriptive commits. Never commit `node_modules`, `dist`, screenshots or secrets.
+- Small, descriptive commits. Never commit `node_modules`, `dist`, ad-hoc screenshots or secrets (exception: the visual-regression baselines in `frontend/tests-visual/__screenshots__`, and curated `docs/previews`).
