@@ -808,11 +808,17 @@ html.dark[data-skin='c'] [data-pane='reader'] article > button {
 
 /* ---- Selection follows the system accent in native hosts; gray when the window is inactive ---- */
 /* WKWebView resolves the CSS system colour `AccentColor` to the user's macOS accent colour. */
+/* Text on the accent is always white (AccentColorText resolves to black on bright blues, which
+   made the selected row unreadable). Guarded so engines without AccentColor keep the default blue. */
+@supports (color: AccentColor) {
+  :root[data-host][data-skin] {
+    --sel-accent: AccentColor;
+    --accent: AccentColor;
+  }
+}
 :root[data-host][data-skin] {
-  --sel-accent: AccentColor;
-  --sel-accent-text: AccentColorText;
-  --accent: AccentColor;
-  --accent-fg: AccentColorText;
+  --sel-accent-text: #ffffff;
+  --accent-fg: #ffffff;
 }
 /* macOS "unemphasised" selection: window not key => gray fill, normal text. */
 :root[data-window-inactive][data-skin] {
