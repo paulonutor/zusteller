@@ -17,6 +17,7 @@
  *  - restore: "Move to Inbox": removes TRASH and SPAM and (re)adds INBOX. Original placement is not remembered.
  *  - markJunk: adds SPAM, removes INBOX and TRASH. Other labels are kept.
  *  - notJunk:  removes SPAM and adds INBOX (a thread that was never in Junk is left unchanged).
+ *  - deleteForever: removes the thread for good; only allowed for threads in Junk or Trash (else `invalid`, nothing is deleted).
  *  - Remote images are never loaded automatically for a Junk thread (UI rule, see Reader);
  *    the user can load them for one message at a time.
  */

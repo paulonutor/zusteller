@@ -21,6 +21,7 @@ const VERBS: Record<PerformAction, string> = {
   moveToLabel: 'move to label',
   markJunk: 'mark as junk',
   notJunk: 'mark as not junk',
+  deleteForever: 'delete permanently',
 };
 
 /** Optimistically patch flags in every cached list. Only used for trivial, semantics-free flags. */
@@ -93,6 +94,9 @@ export function useMailActions(accountId: ID | undefined) {
             break;
           case 'notJunk':
             await mail.notJunk(accountId, threadIds);
+            break;
+          case 'deleteForever':
+            await mail.deleteForever(accountId, threadIds);
             break;
           case 'addLabel':
             await mail.addLabel(accountId, threadIds, opts.labelId!);

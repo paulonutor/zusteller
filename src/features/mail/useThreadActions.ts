@@ -5,7 +5,7 @@ import { labelStates, resolveActions, type ActionDescriptor, type PerformAction 
 import type { MailView } from './view';
 
 /** Actions that move a conversation between mailboxes: the first group of the context menu. */
-const PRIMARY = new Set<string>(['archive', 'trash', 'restore', 'notJunk']);
+const PRIMARY = new Set<string>(['archive', 'trash', 'restore', 'notJunk', 'deleteForever']);
 
 export type Perform = (action: PerformAction, ids: ID[], opts?: { labelId?: ID }) => void;
 

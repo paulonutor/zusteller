@@ -83,6 +83,8 @@ export interface MailService {
   restore(accountId: ID, threadIds: ID[]): Promise<void>;
   markJunk(accountId: ID, threadIds: ID[]): Promise<void>;
   notJunk(accountId: ID, threadIds: ID[]): Promise<void>;
+  /** Permanently removes threads that are in Junk or Trash. Rejects (`invalid`) for any other thread. */
+  deleteForever(accountId: ID, threadIds: ID[]): Promise<void>;
   addLabel(accountId: ID, threadIds: ID[], labelId: ID): Promise<void>;
   removeLabel(accountId: ID, threadIds: ID[], labelId: ID): Promise<void>;
 }

@@ -64,9 +64,9 @@ describe('resolveActions: Junk', () => {
       'markJunk',
     );
   });
-  it('junk view swaps archive/mark-as-junk for Not Junk and keeps trash and read (no star)', () => {
+  it('junk view swaps archive/mark-as-junk for Not Junk and offers Delete Permanently instead of trash, and read (no star)', () => {
     const a = resolveActions([junk()], junkView);
-    expect(a.map((x) => x.id)).toEqual(['notJunk', 'trash', 'markRead']);
+    expect(a.map((x) => x.id)).toEqual(['notJunk', 'deleteForever', 'markRead']);
     expect(a.find((x) => x.id === 'notJunk')).toMatchObject({ label: 'Not Junk', shortcut: '!' });
   });
   it('Mark as Junk is disabled when everything selected is already junk', () => {

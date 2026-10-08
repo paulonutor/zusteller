@@ -236,6 +236,22 @@ export class MockMailService implements MailService {
     });
   }
 
+  deleteForever(accountId: ID, threadIds: ID[]) {
+    return this.run('deleteForever', () => {
+      this.requireAccount(accountId);
+      // Validate everything first so a bad id cannot leave a half-applied batch.
+      const lists = threadIds.map((id) => this.requireThread(accountId, id));
+      for (const list of lists) {
+        const binned = list.some(
+          (m) => m.labelIds.includes(SYSTEM_LABEL.junk) || m.labelIds.includes(SYSTEM_LABEL.trash),
+        );
+        if (!binned)
+          throw new MailServiceError('invalid', 'Only threads in Junk or Trash can be deleted.');
+      }
+      for (const id of threadIds) this.messages.delete(id);
+    });
+  }
+
   addLabel(accountId: ID, threadIds: ID[], labelId: ID) {
     return this.mutate(
       'addLabel',

@@ -166,6 +166,7 @@ export function MailApp() {
         action === 'restore' ||
         action === 'markJunk' ||
         action === 'notJunk' ||
+        action === 'deleteForever' ||
         // Moving to a label takes rows out of the Inbox view only.
         (action === 'moveToLabel' && view.kind === 'mailbox' && view.mailbox === 'inbox');
       const next = removes ? nextAfterRemoval(ids, new Set(targetIds)) : null;
