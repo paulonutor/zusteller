@@ -157,6 +157,7 @@ function ThreadBody({
             key={m.id}
             message={m}
             expanded={open.has(m.id)}
+            collapsible={thread.messages.length > 1}
             onToggle={() => toggle(m.id)}
             onOpenLink={onOpenLink}
           />
