@@ -658,3 +658,9 @@ html:root [data-row-slot][data-state='enter'] {
 html:root [data-row-slot][data-state='enter'] [role='option']:not([aria-selected='true']) {
   animation: row-flash 1.4s ease-out both;
 }
+
+/* The list scroller is focusable (it owns the keyboard cursor), but the rows show focus themselves;
+   the global :focus-visible ring around the whole list is noise. */
+html:root [data-list-scroller]:focus-visible {
+  outline: none;
+}
