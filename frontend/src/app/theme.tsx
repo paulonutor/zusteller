@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { useServices } from './services';
 import { readThemeOverride } from './skin';
 
 export type ThemePreference = 'system' | 'light' | 'dark';
@@ -34,6 +35,7 @@ function readStored(): ThemePreference {
 const systemDark = () => window.matchMedia('(prefers-color-scheme: dark)').matches;
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
+  const { platform } = useServices();
   const [preference, setPref] = useState<ThemePreference>(readStored);
   const [sysDark, setSysDark] = useState(systemDark);
 
@@ -50,6 +52,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     document.documentElement.classList.toggle('dark', resolved === 'dark');
     document.documentElement.style.colorScheme = resolved;
   }, [resolved]);
+
+  // Keep the native window appearance (and its vibrancy material) in step with the app theme,
+  // otherwise e.g. a dark material sits behind light-theme text. 'system' = follow the OS again.
+  useEffect(() => {
+    void platform.setWindowTheme?.(preference).catch(() => undefined);
+  }, [platform, preference]);
 
   const setPreference = useCallback((p: ThemePreference) => {
     setPref(p);

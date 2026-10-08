@@ -57,3 +57,6 @@ Needs three layers: (1) transparent window + macOS `sidebar` material (`tauri.vi
 set `data-vibrancy` on `<html>`, and (3) `frontend/src/styles/skins.css` (`:root[data-vibrancy]`) which makes the window backdrop,
 gutters and sidebar transparent. List and reader panes stay opaque. Material is window-wide, not sidebar-only.
 Plain `npm run dev` stays opaque. If the effect is missing, check that the overlay config (not `tauri.conf.json`) is in use.
+
+The window theme is pinned to the in-app theme (`set_window_theme`, called from `ThemeProvider`), so the vibrancy material
+always matches the page colours; choosing "System" in the app lets the window follow the OS again.

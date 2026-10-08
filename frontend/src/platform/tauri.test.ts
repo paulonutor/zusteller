@@ -34,6 +34,10 @@ describe('tauri platform', () => {
     await p.setBadge(3);
     await p.setBadge();
     await p.openExternal('https://example.com/a');
+    await p.setWindowTheme?.('dark');
+    await p.setWindowTheme?.('system');
+    expect(invoke).toHaveBeenCalledWith('set_window_theme', { theme: 'dark' });
+    expect(invoke).toHaveBeenCalledWith('set_window_theme', { theme: null });
     expect(invoke).toHaveBeenCalledWith('notify', { title: 'Hi', body: 'There' });
     expect(invoke).toHaveBeenCalledWith('set_badge', { count: 3 });
     expect(invoke).toHaveBeenCalledWith('set_badge', { count: null });

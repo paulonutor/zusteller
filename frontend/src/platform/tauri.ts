@@ -50,6 +50,11 @@ export function createTauriPlatformService(): Omit<PlatformService, 'subscribeMe
     async setBadge(count) {
       await requireTauri().core.invoke('set_badge', { count: count ?? null });
     },
+    async setWindowTheme(theme) {
+      await requireTauri().core.invoke('set_window_theme', {
+        theme: theme === 'system' ? null : theme,
+      });
+    },
     async openExternal(url) {
       // Defence in depth; the Rust-side capability scope enforces the same list.
       const parsed = new URL(url);

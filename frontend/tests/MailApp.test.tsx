@@ -16,6 +16,7 @@ function setup() {
     showNotification: vi.fn().mockResolvedValue(undefined),
     setBadge: vi.fn().mockResolvedValue(undefined),
     openExternal: vi.fn().mockResolvedValue(undefined),
+    setWindowTheme: vi.fn().mockResolvedValue(undefined),
     subscribeMenuActions: (h) => {
       menu = h;
       return () => {
@@ -304,5 +305,10 @@ describe('appearance', () => {
     expect(localStorage.getItem('zusteller.theme')).toBe('dark');
     await user.click(screen.getByRole('radio', { name: 'Light appearance' }));
     expect(document.documentElement).not.toHaveClass('dark');
+    // The native window (and its vibrancy material) is pinned to the app theme, 'system' unpins.
+    expect(platform.setWindowTheme).toHaveBeenCalledWith('dark');
+    expect(platform.setWindowTheme).toHaveBeenLastCalledWith('light');
+    await user.click(screen.getByRole('radio', { name: 'System appearance' }));
+    expect(platform.setWindowTheme).toHaveBeenLastCalledWith('system');
   });
 });

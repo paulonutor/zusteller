@@ -81,3 +81,10 @@ NOT verified (needs a Mac):
   `MacBackdropLiquidGlass` exists (macOS 15+ per source) but was not enabled.
 - Sidebar-only material is not offered by Wails; the backdrop is window-wide.
 - JS bindings are called by string name (no generated bindings, to avoid a dependency); renaming the Go type/package breaks them.
+
+## Known limitation: native appearance vs. app theme
+
+The native window material follows the window's NSAppearance, not the page theme. Tauri pins it to the app theme at runtime
+(`setWindowTheme` -> `set_window_theme`). Wails v3 beta.28 only accepts `Mac.Appearance` when the window is created, so there is
+no runtime switch (the adapter deliberately does not implement `setWindowTheme`). This only matters once Wails vibrancy is enabled
+(it is opaque today): with a system/app theme mismatch the material and text colours would disagree.

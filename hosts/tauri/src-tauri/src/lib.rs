@@ -98,12 +98,27 @@ fn set_badge(app: AppHandle, count: Option<i64>) -> Result<(), String> {
     window.set_badge_count(count).map_err(|e| e.to_string())
 }
 
+/// Pin the window (and so the native vibrancy material) to light/dark, or follow the system with
+/// `None`. The page's own theme and the native material must agree, otherwise text loses contrast.
+#[tauri::command]
+fn set_window_theme(app: AppHandle, theme: Option<String>) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "main window not found".to_string())?;
+    let theme = match theme.as_deref() {
+        Some("dark") => Some(tauri::Theme::Dark),
+        Some("light") => Some(tauri::Theme::Light),
+        _ => None,
+    };
+    window.set_theme(theme).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
-        .invoke_handler(tauri::generate_handler![notify, set_badge])
+        .invoke_handler(tauri::generate_handler![notify, set_badge, set_window_theme])
         .menu(|app| build_menu(app))
         .on_menu_event(|app, event| {
             let id = event.id().as_ref();
