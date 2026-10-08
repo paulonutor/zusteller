@@ -587,34 +587,43 @@ html:root nav [data-mailbox-icon] {
   color: var(--accent);
 }
 
-/* A row that left the list collapses out instead of vanishing (useListMotion, 150ms). */
-@keyframes row-exit {
+/* Row slots (ThreadList): rows collapse out / expand in via the grid-row trick, so the height
+   animates to the row's exact size and nothing jumps when the animation ends (useListMotion). */
+html:root [data-row-slot] {
+  display: grid;
+  grid-template-rows: 1fr;
+}
+html:root [data-row-clip] {
+  min-height: 0;
+}
+html:root [data-row-slot][data-state] > [data-row-clip] {
+  overflow: hidden;
+}
+@keyframes slot-exit {
   from {
-    max-height: var(--row-h, 68px);
+    grid-template-rows: 1fr;
     opacity: 1;
     transform: translateX(0);
   }
   to {
-    max-height: 0;
+    grid-template-rows: 0fr;
     opacity: 0;
     transform: translateX(-16px);
   }
 }
-html:root [data-row-exit] {
-  overflow: hidden;
-  pointer-events: none;
-  animation: row-exit 150ms cubic-bezier(0.3, 0, 0.8, 0.4) forwards;
+@keyframes slot-collapse {
+  to {
+    grid-template-rows: 0fr;
+  }
 }
-
-/* New mail slides in from above and its row flashes the accent colour once (useListMotion). */
-@keyframes row-enter {
+@keyframes slot-enter {
   from {
-    max-height: 0;
+    grid-template-rows: 0fr;
     opacity: 0;
     transform: translateY(-10px);
   }
   to {
-    max-height: var(--row-h, 68px);
+    grid-template-rows: 1fr;
     opacity: 1;
     transform: translateY(0);
   }
@@ -627,10 +636,21 @@ html:root [data-row-exit] {
     background-color: transparent;
   }
 }
-html:root [data-row-enter] {
-  overflow: hidden;
-  animation: row-enter 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+html:root [data-row-slot][data-state='exit'] {
+  pointer-events: none;
+  animation: slot-exit 150ms cubic-bezier(0.3, 0, 0.8, 0.4) forwards;
 }
-html:root [data-row-enter] > [role='option']:not([aria-selected='true']) {
+/* The row itself is flying to a drop target (position: fixed): only the gap closes. A transform or
+   opacity on the slot would otherwise hold / fade the flying row. */
+html:root [data-row-slot][data-state='exit'][data-fly] {
+  animation: slot-collapse 200ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+html:root [data-row-slot][data-state='exit'][data-fly] > [data-row-clip] {
+  overflow: visible;
+}
+html:root [data-row-slot][data-state='enter'] {
+  animation: slot-enter 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+html:root [data-row-slot][data-state='enter'] [role='option']:not([aria-selected='true']) {
   animation: row-flash 1.4s ease-out both;
 }

@@ -282,7 +282,7 @@ export function MailApp() {
   const dropThreads = (target: DropTarget, dragged: ID[], copy: boolean) => {
     const plan = planThreadDrop(target, byId(dragged), copy);
     if (!plan) return;
-    flyRowsToTarget(dragged, target);
+    if (!copy) flyRowsToTarget(dragged, target);
     void perform(plan.action, dragged, { labelId: plan.labelId });
     if (target.kind === 'label') {
       const name = labels.find((l) => l.id === target.labelId)?.name ?? 'label';
@@ -349,6 +349,7 @@ export function MailApp() {
           accountEmail={account?.email}
           selection={selection}
           isLoading={!query || (list.isPending && !list.data)}
+          isPlaceholder={list.isPlaceholderData}
           error={list.error}
           hasMore={!!list.hasNextPage}
           isFetchingMore={list.isFetchingNextPage}

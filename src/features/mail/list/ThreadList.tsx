@@ -34,6 +34,8 @@ type Props = {
   accountEmail: string | undefined;
   selection: Selection;
   isLoading: boolean;
+  /** Rows on screen still belong to the previous view (a new one is loading behind them). */
+  isPlaceholder?: boolean;
   error: Error | null;
   hasMore: boolean;
   isFetchingMore: boolean;
@@ -211,7 +213,7 @@ export function ThreadList(p: Props) {
   const entries = useListMotion(
     p.items,
     `${p.filter}|${p.title}|${p.searchText}`,
-    !virtual && !p.isLoading,
+    !virtual && !p.isLoading && !p.isPlaceholder,
   );
 
   const renderRow = (t: ThreadSummary, index?: number) => (
@@ -393,19 +395,20 @@ export function ThreadList(p: Props) {
                 })}
               </div>
             ) : (
-              entries.map((e) =>
-                e.exiting ? (
-                  <div key={e.thread.id} data-row-exit aria-hidden="true" inert>
-                    {renderRow(e.thread)}
-                  </div>
-                ) : e.entering ? (
-                  <div key={e.thread.id} data-row-enter>
-                    {renderRow(e.thread)}
-                  </div>
-                ) : (
-                  renderRow(e.thread)
-                ),
-              )
+              entries.map((e) => (
+                // Every row lives in a slot that can collapse (leaving) or expand (arriving) without
+                // the row element ever being re-created, so no state resets when an animation ends.
+                <div
+                  key={e.thread.id}
+                  role="presentation"
+                  data-row-slot
+                  data-state={e.exiting ? 'exit' : e.entering ? 'enter' : undefined}
+                  aria-hidden={e.exiting || undefined}
+                  inert={e.exiting || undefined}
+                >
+                  <div data-row-clip>{renderRow(e.thread)}</div>
+                </div>
+              ))
             )}
             {p.isFetchingMore && (
               <div className="py-3 text-center text-[12px] text-muted">Loading…</div>
