@@ -1,11 +1,97 @@
+use serde::Deserialize;
 use tauri::{
-    menu::{Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder},
-    AppHandle, Emitter, Manager, Runtime,
+    menu::{
+        CheckMenuItemBuilder, IsMenuItem, Menu, MenuBuilder, MenuItemBuilder, PredefinedMenuItem,
+        Submenu, SubmenuBuilder,
+    },
+    AppHandle, Emitter, Manager, Runtime, Window,
 };
 use tauri_plugin_notification::NotificationExt;
 
 /// Event the frontend listens to. Payload is the menu item id (see MENU_* below).
 const MENU_EVENT: &str = "zusteller://menu";
+
+/// Event for picks from the native context menu. Payload is the frontend's item id.
+const CONTEXT_MENU_EVENT: &str = "zusteller://context-menu";
+/// Prefix that tells `on_menu_event` an id belongs to a context menu, not the app menu.
+const CONTEXT_PREFIX: &str = "ctx:";
+
+/// Context-menu description sent by the frontend (src/platform/PlatformService.ts `NativeMenuItem`).
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+enum ContextItem {
+    Item {
+        id: String,
+        label: String,
+        disabled: Option<bool>,
+    },
+    Check {
+        id: String,
+        label: String,
+        checked: bool,
+    },
+    Separator,
+    Sub {
+        label: String,
+        disabled: Option<bool>,
+        items: Vec<ContextItem>,
+    },
+}
+
+fn context_entry<R: Runtime>(
+    app: &AppHandle<R>,
+    item: &ContextItem,
+) -> tauri::Result<Box<dyn IsMenuItem<R>>> {
+    Ok(match item {
+        ContextItem::Item {
+            id,
+            label,
+            disabled,
+        } => Box::new(
+            MenuItemBuilder::with_id(format!("{CONTEXT_PREFIX}{id}"), label)
+                .enabled(!disabled.unwrap_or(false))
+                .build(app)?,
+        ),
+        ContextItem::Check { id, label, checked } => Box::new(
+            CheckMenuItemBuilder::with_id(format!("{CONTEXT_PREFIX}{id}"), label)
+                .checked(*checked)
+                .build(app)?,
+        ),
+        ContextItem::Separator => Box::new(PredefinedMenuItem::separator(app)?),
+        ContextItem::Sub {
+            label,
+            disabled,
+            items,
+        } => {
+            let entries = items
+                .iter()
+                .map(|i| context_entry(app, i))
+                .collect::<tauri::Result<Vec<_>>>()?;
+            let refs: Vec<&dyn IsMenuItem<R>> = entries.iter().map(|e| e.as_ref()).collect();
+            Box::new(Submenu::with_items(
+                app,
+                label,
+                !disabled.unwrap_or(false),
+                &refs,
+            )?)
+        }
+    })
+}
+
+/// Pop up a native context menu at the pointer. The pick arrives via `on_menu_event`
+/// (`CONTEXT_MENU_EVENT`); dismissing the menu emits nothing.
+#[tauri::command]
+fn show_context_menu(window: Window, items: Vec<ContextItem>) -> Result<(), String> {
+    let app = window.app_handle();
+    let entries = items
+        .iter()
+        .map(|i| context_entry(app, i))
+        .collect::<tauri::Result<Vec<_>>>()
+        .map_err(|e| e.to_string())?;
+    let refs: Vec<&dyn IsMenuItem<_>> = entries.iter().map(|e| e.as_ref()).collect();
+    let menu = Menu::with_items(app, &refs).map_err(|e| e.to_string())?;
+    window.popup_menu(&menu).map_err(|e| e.to_string())
+}
 
 /// Menu item ids sent to the frontend as the event payload.
 const MAIL_ITEMS: [(&str, &str, Option<&str>); 6] = [
@@ -151,7 +237,8 @@ pub fn run() {
             notify,
             set_badge,
             set_window_theme,
-            accent_color
+            accent_color,
+            show_context_menu
         ])
         .setup(|app| {
             // No cheap in-process callback for accent changes: check once a second, emit on change.
@@ -173,7 +260,9 @@ pub fn run() {
         .menu(|app| build_menu(app))
         .on_menu_event(|app, event| {
             let id = event.id().as_ref();
-            if id.starts_with("mail.") {
+            if let Some(ctx) = id.strip_prefix(CONTEXT_PREFIX) {
+                let _ = app.emit(CONTEXT_MENU_EVENT, ctx);
+            } else if id.starts_with("mail.") {
                 let _ = app.emit(MENU_EVENT, id);
             }
         })

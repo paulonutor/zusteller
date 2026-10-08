@@ -3,7 +3,7 @@ import { fromTauriItemId, type MenuAction } from './menuActions';
 import type { PlatformService } from './PlatformService';
 import { createTauriPlatformService, isTauriHost, onTauriMenuAction } from './tauri';
 
-export type { PlatformService } from './PlatformService';
+export type { PlatformService, NativeMenuItem } from './PlatformService';
 export type { MenuAction } from './menuActions';
 
 type Subscribe = (handler: (action: MenuAction) => void) => () => void;

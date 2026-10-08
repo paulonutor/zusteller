@@ -2,8 +2,10 @@
 import * as DM from '@radix-ui/react-dropdown-menu';
 import * as CM from '@radix-ui/react-context-menu';
 import { Check, Minus } from 'lucide-react';
-import type { ComponentProps, ReactNode } from 'react';
+import { cloneElement, type ComponentProps, type ReactElement, type ReactNode } from 'react';
 import { cn } from '@/lib/cn';
+import { useServices } from '@/app/services';
+import type { NativeMenuItem } from '@/platform';
 
 const content =
   'z-50 min-w-48 overflow-hidden rounded-lg border border-border bg-surface-raised/95 p-1 text-[13px] text-foreground shadow-lg backdrop-blur-xl';
@@ -95,6 +97,34 @@ export function DropdownMenu({
   );
 }
 
+/** Flatten specs to the host's serializable form; `actions` maps each generated id to its handler. */
+function toNative(
+  specs: MenuItemSpec[],
+  actions: Map<string, () => void>,
+  prefix = '',
+): NativeMenuItem[] {
+  return specs.map((spec, i): NativeMenuItem => {
+    const id = `${prefix}${i}`;
+    switch (spec.kind) {
+      case 'separator':
+        return { kind: 'separator' };
+      case 'item':
+        actions.set(id, spec.onSelect);
+        return { kind: 'item', id, label: spec.label, disabled: spec.disabled };
+      case 'check':
+        actions.set(id, spec.onSelect);
+        return { kind: 'check', id, label: spec.label, checked: spec.state === 'all' };
+      case 'sub':
+        return {
+          kind: 'sub',
+          label: spec.label,
+          disabled: spec.disabled,
+          items: toNative(spec.items, actions, `${id}.`),
+        };
+    }
+  });
+}
+
 export function ContextMenu({
   children,
   items,
@@ -105,13 +135,28 @@ export function ContextMenu({
   items: MenuItemSpec[] | (() => MenuItemSpec[]);
   onOpenChange?: (open: boolean) => void;
 }) {
+  const { platform } = useServices();
+  const resolve = () => (typeof items === 'function' ? items() : items);
+  const native = platform.showContextMenu?.bind(platform);
+
+  if (native) {
+    // Native hosts draw the menu themselves; the trigger just needs a contextmenu handler.
+    return cloneElement(children as ReactElement<ComponentProps<'div'>>, {
+      onContextMenu: (e: React.MouseEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        onOpenChange?.(true);
+        const actions = new Map<string, () => void>();
+        const tree = toNative(resolve(), actions);
+        void native(tree, (id) => actions.get(id)?.()).catch(() => undefined);
+      },
+    });
+  }
+
   return (
     <CM.Root modal={false} onOpenChange={onOpenChange}>
       <CM.Trigger asChild>{children}</CM.Trigger>
       <CM.Portal>
-        <CM.Content className={content}>
-          {(typeof items === 'function' ? items() : items).map((s, i) => render(CM, s, i))}
-        </CM.Content>
+        <CM.Content className={content}>{resolve().map((s, i) => render(CM, s, i))}</CM.Content>
       </CM.Portal>
     </CM.Root>
   );

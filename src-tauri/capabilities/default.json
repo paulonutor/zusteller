@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Minimal permissions for the main window. App commands (notify, set_badge, set_window_theme, accent_color) are defined in lib.rs; event listening is needed for menu and accent events.",
+  "description": "Minimal permissions for the main window. App commands (notify, set_badge, set_window_theme, accent_color, show_context_menu) are defined in lib.rs; event listening is needed for menu and accent events.",
   "windows": [
     "main"
   ],

@@ -1,5 +1,5 @@
 import { parseAccent } from './accent';
-import type { PlatformService } from './PlatformService';
+import type { NativeMenuItem, PlatformService } from './PlatformService';
 
 /**
  * Tauri v2 host adapter. Uses the `window.__TAURI__` globals injected when
@@ -10,6 +10,8 @@ import type { PlatformService } from './PlatformService';
  *   - command `notify { title, body }`   -> notification plugin
  *   - command `set_badge { count }`      -> window.set_badge_count
  *   - `plugin:opener|open_url { url }`   -> opener plugin, ACL-scoped to http/https/mailto
+ *   - command `show_context_menu { items }` -> native popup; the pick comes back as event
+ *     `zusteller://context-menu` (payload = item id; nothing on dismissal)
  *   - event  `zusteller://menu`          -> native menu clicks, payload = item id
  *
  * Wired: platform/index.ts maps item ids to host-neutral MenuActions (menuActions.ts),
@@ -27,6 +29,7 @@ type TauriGlobal = {
 
 export const TAURI_ACCENT_EVENT = 'zusteller://accent';
 export const TAURI_MENU_EVENT = 'zusteller://menu';
+export const TAURI_CONTEXT_MENU_EVENT = 'zusteller://context-menu';
 
 function tauriGlobal(): TauriGlobal | undefined {
   const t = (globalThis as { __TAURI__?: Partial<TauriGlobal> }).__TAURI__;
@@ -43,6 +46,8 @@ function requireTauri(): TauriGlobal {
   if (!t) throw new Error('Tauri runtime not available');
   return t;
 }
+
+let contextOff: Unlisten | undefined;
 
 export function createTauriPlatformService(): Omit<PlatformService, 'subscribeMenuActions'> {
   return {
@@ -73,6 +78,26 @@ export function createTauriPlatformService(): Omit<PlatformService, 'subscribeMe
         cancelled = true;
         off?.();
       };
+    },
+    async showContextMenu(items: NativeMenuItem[], onSelect) {
+      const t = requireTauri();
+      const listen = t.event?.listen;
+      if (!listen) throw new Error('Tauri events not available');
+      // One-shot: the next pick belongs to this menu. Replace any listener left by a dismissed one.
+      contextOff?.();
+      contextOff = undefined;
+      const off = await listen(TAURI_CONTEXT_MENU_EVENT, (e) => {
+        off();
+        if (contextOff === off) contextOff = undefined;
+        if (typeof e.payload === 'string') onSelect(e.payload);
+      });
+      contextOff = off;
+      try {
+        await t.core.invoke('show_context_menu', { items });
+      } catch (err) {
+        off();
+        throw err;
+      }
     },
     async openExternal(url) {
       // Defence in depth; the Rust-side capability scope enforces the same list.
