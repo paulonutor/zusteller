@@ -86,9 +86,9 @@ describe('axe (structure, names, roles)', () => {
     await expectNoViolations();
   });
 
-  it('loading / offline', async () => {
+  it('offline shows an error screen (not an endless skeleton)', async () => {
     setup({ offline: true });
-    await screen.findByText('Loading conversations');
+    await screen.findByText('Can’t load your mail');
     await expectNoViolations();
   });
 });

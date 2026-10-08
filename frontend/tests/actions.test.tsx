@@ -73,3 +73,22 @@ describe('action layer keyboard safety', () => {
     expect(after!.getAttribute('aria-selected')).toBe('true');
   });
 });
+
+describe('startup failure', () => {
+  it('shows an error with Try again instead of loading forever, and recovers', async () => {
+    const mail = new MockMailService(createSeedData(), { latency: 0 });
+    mail.setOffline(true);
+    const platform = {
+      showNotification: vi.fn(),
+      setBadge: vi.fn().mockResolvedValue(undefined),
+      openExternal: vi.fn(),
+      subscribeMenuActions: () => () => undefined,
+    };
+    const user = userEvent.setup();
+    render(<App services={{ mail, platform }} />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Can’t load your mail');
+    mail.setOffline(false);
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(screen.getAllByRole('option').length).toBeGreaterThan(0));
+  });
+});

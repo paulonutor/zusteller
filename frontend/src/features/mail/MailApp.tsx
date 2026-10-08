@@ -4,6 +4,8 @@ import { MAILBOXES, type ID, type ThreadSummary } from '@/domain/mail';
 import { useServices } from '@/app/services';
 import { Resizer } from '@/components/ui/Resizer';
 import { resolveActions, type MailActionId } from './actions';
+import { WifiOff } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
 import { useAccounts, useCounts, useLabels, useThread, useThreadList } from './hooks';
 import { ThreadList, type ListFilter } from './list/ThreadList';
 import { Reader } from './reader/Reader';
@@ -235,6 +237,26 @@ export function MailApp() {
     (url: string) => void platform.openExternal(prepareExternalUrl(url)).catch(() => undefined),
     [platform],
   );
+
+  // Without an account nothing else can load; say so instead of showing skeletons forever.
+  if (accounts.isError && !account) {
+    return (
+      <div
+        data-shell
+        {...dragRegionProps}
+        className="flex h-full items-center justify-center bg-background"
+      >
+        <div role="alert" className="flex max-w-sm flex-col items-center gap-2 px-6 text-center">
+          <WifiOff size={26} className="text-muted" aria-hidden />
+          <h1 className="text-[15px] font-semibold">Can’t load your mail</h1>
+          <p className="text-[13px] text-muted">{accounts.error.message}</p>
+          <Button variant="subtle" onClick={() => void accounts.refetch()}>
+            Try again
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div data-shell {...dragRegionProps} className="flex h-full min-w-0 overflow-hidden">
