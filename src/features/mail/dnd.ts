@@ -167,6 +167,10 @@ export function planThreadDrop(
   }
 }
 
+/** Option held? `altKey` where the engine provides it, else the effect it narrowed the drag to. */
+const wantsCopy = (e: DragEvent) =>
+  e.altKey || e.dataTransfer.effectAllowed === 'copy' || e.dataTransfer.dropEffect === 'copy';
+
 export type DropState = 'idle' | 'valid' | 'invalid' | 'over';
 
 /**
@@ -178,14 +182,19 @@ export function useDropZone<K extends NonNullable<DragSession>['kind']>(
   opts: {
     canDrop: (s: Live<K>) => boolean;
     onDrop: (s: Live<K>, mods: { copy: boolean }) => void;
-    /** Drop effect for the cursor; defaults to Option = copy, otherwise move. */
-    effect?: (e: DragEvent) => 'move' | 'copy';
+    /**
+     * Forces the drop effect. Leave it out to follow the modifier keys (Option = copy).
+     */
+    effect?: (e: DragEvent) => 'move' | 'copy' | undefined;
   },
 ): { props: HTMLAttributes<HTMLElement>; state: DropState } {
   const s = useDragSession();
   // `overFor` is keyed to a session object, so a drag that ended without leaving can't stick.
   const [overFor, setOverFor] = useState<DragSession>(null);
   const depth = useRef<{ s: DragSession; n: number }>({ s: null, n: 0 });
+  // WKWebView never sets `altKey` during a drag. It narrows `effectAllowed` to what the held
+  // modifier permits instead (Option -> 'copy'), so that is the signal; remembered from `dragover`.
+  const alt = useRef(false);
 
   const live = s && s.kind === accepts ? (s as Live<K>) : null;
   const ok = live !== null && opts.canDrop(live);
@@ -202,7 +211,10 @@ export function useDropZone<K extends NonNullable<DragSession>['kind']>(
     onDragOver: (e) => {
       if (!ok) return;
       e.preventDefault();
-      e.dataTransfer.dropEffect = opts.effect ? opts.effect(e) : e.altKey ? 'copy' : 'move';
+      alt.current = wantsCopy(e);
+      // Left alone, WebKit shows the "+" (copy) cursor for every copyMove drag; say move unless
+      // Option is actually held.
+      e.dataTransfer.dropEffect = opts.effect?.(e) ?? (alt.current ? 'copy' : 'move');
     },
     onDragLeave: () => {
       if (!ok || depth.current.s !== s) return;
@@ -213,7 +225,8 @@ export function useDropZone<K extends NonNullable<DragSession>['kind']>(
       e.preventDefault();
       depth.current = { s: null, n: 0 };
       setOverFor(null);
-      opts.onDrop(live, { copy: e.altKey });
+      opts.onDrop(live, { copy: wantsCopy(e) || alt.current });
+      alt.current = false;
       endDrag();
     },
   };

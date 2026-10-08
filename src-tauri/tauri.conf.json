@@ -26,6 +26,7 @@
           "y": 28
         },
         "url": "index.html?vibrancy=1",
+        "dragDropEnabled": false,
         "transparent": true,
         "windowEffects": {
           "effects": [

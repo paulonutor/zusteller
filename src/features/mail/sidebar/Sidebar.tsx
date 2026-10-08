@@ -56,8 +56,8 @@ function Item({
   const zone = useDropZone('threads', {
     canDrop: (s) => !active && canDropThreads(target, s.ids),
     onDrop: (s, { copy }) => onDropThreads(target, s.ids, copy),
-    // Option only means something for labels (add without leaving the Inbox).
-    effect: (e) => (target.kind === 'label' && e.altKey ? 'copy' : 'move'),
+    // Option only means something for labels (add without leaving the Inbox); elsewhere it's a move.
+    effect: () => (target.kind === 'label' ? undefined : 'move'),
   });
   return (
     <li
