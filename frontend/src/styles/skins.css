@@ -457,8 +457,9 @@ html:not(.__)[data-skin='b'] [role='option'] [role='checkbox'] {
     height 120ms ease,
     background-color 120ms ease;
 }
-/* Reveal the checkbox, hide avatar + unread dot. */
-html:not(.__)[data-skin='b'] [role='option']:hover [role='checkbox'],
+/* Reveal the checkbox, hide avatar + unread dot. Hover only counts over the avatar itself
+   (not the whole row), with a short intent delay so sweeping the pointer past doesn't flicker. */
+html:not(.__)[data-skin='b'] [role='option'] [data-lead]:hover [role='checkbox'],
 html:not(.__)[data-skin='b']
   [data-kbd='true']
   [role='option'][data-focused='true']
@@ -469,14 +470,14 @@ html:not(.__)[data-skin='b'] [role='listbox'][data-selection-mode='true'] [role=
   pointer-events: auto;
   transform: none;
 }
-html:not(.__)[data-skin='b'] [role='option']:hover [data-avatar],
+html:not(.__)[data-skin='b'] [role='option'] [data-lead]:hover [data-avatar],
 html:not(.__)[data-skin='b'] [data-kbd='true'] [role='option'][data-focused='true'] [data-avatar],
 html:not(.__)[data-skin='b'] [role='option']:has([role='checkbox']:focus-visible) [data-avatar],
 html:not(.__)[data-skin='b'] [role='listbox'][data-selection-mode='true'] [data-avatar] {
   opacity: 0;
   transform: scale(0.8);
 }
-html:not(.__)[data-skin='b'] [role='option']:hover [data-unread-dot],
+html:not(.__)[data-skin='b'] [role='option'] [data-lead]:hover [data-unread-dot],
 html:not(.__)[data-skin='b']
   [data-kbd='true']
   [role='option'][data-focused='true']
@@ -829,4 +830,17 @@ html:not([data-window-inactive])[data-skin='b']
   background: var(--on-selection);
   border-color: var(--on-selection);
   color: var(--selection);
+}
+
+html:not(.__)[data-skin='b'] [role='option'] [data-lead]:hover [role='checkbox'],
+html:not(.__)[data-skin='b'] [role='option'] [data-lead]:hover [data-avatar],
+html:not(.__)[data-skin='b'] [role='option'] [data-lead]:hover [data-unread-dot] {
+  transition-delay: 140ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  html:not(.__)[data-skin='b'] [role='option'] [data-lead]:hover [role='checkbox'],
+  html:not(.__)[data-skin='b'] [role='option'] [data-lead]:hover [data-avatar],
+  html:not(.__)[data-skin='b'] [role='option'] [data-lead]:hover [data-unread-dot] {
+    transition-delay: 0s;
+  }
 }
