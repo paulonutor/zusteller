@@ -57,6 +57,12 @@ export function resolveActions(threads: ThreadSummary[], view: MailView): Action
     });
   } else if (inTrashView) {
     list.push({ id: 'restore', label: 'Move to Inbox', shortcut: '⇧Z', enabled: some });
+    list.push({
+      id: 'deleteForever',
+      label: 'Delete Permanently',
+      destructive: true,
+      enabled: some,
+    });
   } else {
     list.push({
       id: 'archive',
