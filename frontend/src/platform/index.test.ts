@@ -77,3 +77,13 @@ describe('createPlatformService', () => {
     expect(h.mock.calls).toEqual([['markRead']]);
   });
 });
+
+describe('wantsVibrancy', () => {
+  it('only the explicit host flag enables the native-material styling', async () => {
+    const { wantsVibrancy } = await import('./hostChrome');
+    expect(wantsVibrancy('?vibrancy=1')).toBe(true);
+    expect(wantsVibrancy('?latency=0&vibrancy=1')).toBe(true);
+    expect(wantsVibrancy('')).toBe(false);
+    expect(wantsVibrancy('?vibrancy=0')).toBe(false);
+  });
+});

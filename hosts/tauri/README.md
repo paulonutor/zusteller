@@ -49,3 +49,11 @@ the whole window definition — keep it in sync with the base config.
 - Notifications (permission prompt; in `tauri dev` macOS attributes them to the terminal), Dock badge, menu rendering/events,
   `plugin:opener|open_url` invoke name and scope matching (the `mailto:*` pattern in particular).
 - CSP in `tauri.conf.json` is a first guess: check the dev server (Vite HMR websocket / inline styles) and the reader iframe.
+
+## Vibrancy mode (`npm run dev:vibrancy`)
+
+Needs three layers: (1) transparent window + macOS `sidebar` material (`tauri.vibrancy.conf.json`, requires `macOSPrivateApi`),
+(2) the page opened with `?vibrancy=1` (set via the window `url` in that overlay) which makes `frontend/src/platform/hostChrome.ts`
+set `data-vibrancy` on `<html>`, and (3) `frontend/src/styles/skins.css` (`:root[data-vibrancy]`) which makes the window backdrop,
+gutters and sidebar transparent. List and reader panes stay opaque. Material is window-wide, not sidebar-only.
+Plain `npm run dev` stays opaque. If the effect is missing, check that the overlay config (not `tauri.conf.json`) is in use.

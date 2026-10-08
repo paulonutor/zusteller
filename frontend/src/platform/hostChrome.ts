@@ -15,9 +15,17 @@ export function detectNativeHost(): NativeHost | null {
 }
 
 /** Sets `data-host` on <html> so CSS can inset the sidebar header and mark drag regions. */
-export function applyHostChrome(): void {
+export function applyHostChrome(search: string = window.location.search): void {
   const host = detectNativeHost();
-  if (host) document.documentElement.dataset.host = host;
+  if (!host) return;
+  const root = document.documentElement;
+  root.dataset.host = host;
+  if (wantsVibrancy(search)) root.dataset.vibrancy = '';
+}
+
+/** The host opens the page with `?vibrancy=1` when it enabled a native window material. */
+export function wantsVibrancy(search: string): boolean {
+  return new URLSearchParams(search).get('vibrancy') === '1';
 }
 
 /**

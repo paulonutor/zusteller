@@ -791,8 +791,8 @@ html.dark[data-skin='c'] [data-pane='reader'] article > button {
 /* ---- Native host chrome (Tauri/Wails overlay titlebar) ---------------------------------- */
 /* Traffic lights float over the top-left of the sidebar: push its header content below them. */
 :root[data-host] [data-pane='sidebar'] > nav > .drag-region {
-  height: 94px !important;
-  padding-top: 54px !important;
+  height: 76px !important;
+  padding-top: 40px !important;
   align-items: flex-end;
 }
 /* Wails marks draggable areas with this custom property (inherited, so opt buttons out). */
@@ -839,4 +839,30 @@ html:not(.__)[data-skin='b'] [role='option'] [role='checkbox']::before {
   position: absolute;
   inset: -16px -10px;
   border-radius: 14px;
+}
+
+/* Mail tints the source-list icons with the system accent colour. */
+html:not(.__)[data-skin='b'] nav [data-mailbox-icon] {
+  color: var(--accent);
+}
+
+/* ---- Native vibrancy (Tauri dev:vibrancy: transparent window + macOS `sidebar` material) ----
+   `data-vibrancy` is set by hostChrome.ts when the host opens the app with ?vibrancy=1.
+   The page must stop painting opaque colour over the material: window backdrop, gutters and the
+   sidebar become transparent. List + reader panes stay opaque (plan: opaque message surfaces). */
+:root[data-vibrancy],
+:root[data-vibrancy] body,
+:root[data-vibrancy] #root {
+  background: transparent !important;
+}
+:root[data-vibrancy][data-skin] {
+  --window: transparent;
+}
+:root[data-vibrancy][data-skin] [data-shell],
+:root[data-vibrancy][data-skin] [data-pane='sidebar'],
+:root[data-vibrancy][data-skin] [data-pane='sidebar'] > nav {
+  background: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  box-shadow: none !important;
 }

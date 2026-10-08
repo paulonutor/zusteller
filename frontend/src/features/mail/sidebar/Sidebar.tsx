@@ -91,7 +91,13 @@ export function Sidebar({ account, labels, counts, view, onSelectView }: Props) 
                 <Row
                   active={isActive}
                   onClick={() => onSelectView({ kind: 'mailbox', mailbox: m.id })}
-                  icon={<Icon size={15} className={cn(isActive ? 'text-accent' : 'text-muted')} />}
+                  icon={
+                    <Icon
+                      size={15}
+                      data-mailbox-icon
+                      className={cn(isActive ? 'text-accent' : 'text-muted')}
+                    />
+                  }
                   label={m.name}
                   // Only the Inbox shows a count, like Mail/Gmail; others would be noise.
                   count={m.id === 'inbox' ? counts?.mailboxes.inbox : undefined}
