@@ -172,7 +172,51 @@ function normalizeCss(css: string): string {
 const DANGEROUS_CSS =
   /expression\s*\(|behaviou?r\s*:|-moz-binding|javascript:|vbscript:|@import|@charset|image-set\s*\(|\bsrc\s*\(|-webkit-image-set/i;
 
+/** Inline styles larger than this are dropped wholesale (bounds all per-declaration work). */
+const MAX_STYLE_LENGTH = 8_000;
+
+/**
+ * Linear-time check of every `url(...)` token in a declaration value. Returns false when any
+ * URL is not allowed (or a `url(` is unterminated). Records blocked remote content in `state`.
+ */
+function urlsAllowed(value: string): boolean {
+  const lower = value.toLowerCase();
+  let ok = true;
+  let from = 0;
+  for (;;) {
+    const start = lower.indexOf('url(', from);
+    if (start < 0) return ok;
+    let i = start + 4;
+    while (i < value.length && /\s/.test(value[i] ?? '')) i++;
+    const q = value[i] === '"' || value[i] === "'" ? (value[i] as string) : '';
+    let url: string;
+    let end: number;
+    if (q) {
+      const close = value.indexOf(q, i + 1);
+      if (close < 0) return false;
+      url = value.slice(i + 1, close);
+      end = close + 1;
+      while (end < value.length && /\s/.test(value[end] ?? '')) end++;
+      if (value[end] !== ')') return false;
+    } else {
+      const close = value.indexOf(')', i);
+      if (close < 0) return false;
+      url = value.slice(i, close);
+      end = close;
+    }
+    url = url.trim();
+    if (REMOTE_URL.test(url)) {
+      state.blocked = true;
+      if (!state.allowRemote || /^\/\//.test(url)) ok = false;
+    } else if (!/^cid:/i.test(url) && !RASTER_DATA_URI.test(url)) {
+      ok = false;
+    }
+    from = end + 1;
+  }
+}
+
 function sanitizeInlineStyle(style: string): string {
+  if (style.length > MAX_STYLE_LENGTH) return '';
   const kept: string[] = [];
   for (const raw of splitDeclarations(normalizeCss(style))) {
     const decl = raw.trim();
@@ -185,17 +229,7 @@ function sanitizeInlineStyle(style: string): string {
     if (prop === 'z-index' || prop === 'content' || prop === 'behavior') continue;
     if (prop === 'position' && /fixed|absolute|sticky/i.test(value)) continue;
 
-    let ok = true;
-    for (const m of value.matchAll(/url\(\s*(['"]?)(.*?)\1\s*\)/gi)) {
-      const url = (m[2] ?? '').trim();
-      if (REMOTE_URL.test(url)) {
-        state.blocked = true;
-        if (!state.allowRemote || /^\/\//.test(url)) ok = false;
-      } else if (!/^cid:/i.test(url) && !RASTER_DATA_URI.test(url)) {
-        ok = false;
-      }
-    }
-    if (/url\(/i.test(value) && !/url\(\s*(['"]?).*?\1\s*\)/i.test(value)) ok = false;
+    const ok = urlsAllowed(value);
     if (ok) kept.push(`${prop}: ${value}`);
   }
   return kept.join('; ');
