@@ -1,7 +1,7 @@
 import type { MenuAction } from './menuActions';
 
 /**
- * Native capabilities the UI may ask for. Host implementations (Wails, Tauri)
+ * Native capabilities the UI may ask for. Host implementations (Tauri)
  * live behind this interface; feature code never imports host APIs.
  * Only capabilities that are actually implemented are listed here.
  */

@@ -4,7 +4,7 @@
  *   a.css       A "Mail"            dark-only opt-in: graphite source list, solid-blue selection
  *   b.css       B "Gmail-in-glass"  the default, light + dark: floating panes, tabs, avatar rows
  *   c.css       C "Quiet graphite"  dark-only opt-in: flat, hairlines, muted accent
- *   host.css    native host chrome (Tauri/Wails), system accent, inactive window, vibrancy
+ *   host.css    native host chrome (Tauri), system accent, inactive window, vibrancy
  * No skin attribute (`?skin=default`) = the plain look. Colours always come from tokens.
  * Skin B selectors use `html:root[data-skin='b']` (specificity 0,2,1) to tie with the shared
  * `html:is(.dark[data-skin], [data-skin='b'])` prefix; later rules win ties.

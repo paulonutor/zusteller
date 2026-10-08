@@ -9,10 +9,6 @@ const hostRestricted = [
     message: 'Host APIs belong behind src/platform or infrastructure adapters.',
   },
   {
-    group: ['**/wailsjs/**', '@wailsio/*'],
-    message: 'Host APIs belong behind src/platform or infrastructure adapters.',
-  },
-  {
     group: ['googleapis', '@googleapis/*', 'google-auth-library'],
     message: 'Provider SDKs must not reach the UI.',
   },

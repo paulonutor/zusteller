@@ -28,28 +28,15 @@ npm run dev            # vibrancy (default)
 npm run dev:opaque     # opaque variant (comparison / fallback)
 ```
 
-Wails (two terminals, from repo root):
-
-```bash
-cd hosts/wails && task dev:vite     # terminal 1 (Vite on :5173)
-cd hosts/wails && task dev          # terminal 2: vibrancy (private_mac_apis tag)
-cd hosts/wails && task dev:glass    # optional: Liquid Glass (macOS 15+)
-cd hosts/wails && task dev:opaque   # opaque variant, public APIs only
-```
-
-Wails appearance can be pinned at creation: `ZUSTELLER_APPEARANCE=dark|light task dev`.
-
 Release builds (needed for notifications, Dock badge, sizes): `cd hosts/tauri && npm run build` (bundle in
-`src-tauri/target/release/bundle/macos/zusteller.app`), `cd hosts/wails && task build` (bare binary `bin/zusteller`; a
-Wails `.app` is not packaged yet, so notification checks are Tauri-only until it is).
+`src-tauri/target/release/bundle/macos/zusteller.app`, or under your cargo `target-dir` if `build.target-dir` is set).
 
-Accent panel: the page must be opened with `?debug=accent`. In the browser use `http://localhost:5173/?debug=accent` (reference
-in Safari). In a host, temporarily edit the window URL (Tauri: `url` in `tauri.conf.json`, `index.html?vibrancy=1&debug=accent`;
-Wails: add `&debug=accent` to the `/?vibrancy=1` URL in `main.go`) and revert afterwards.
+Accent panel: the page must be opened with `?debug=accent`. In the browser use `http://localhost:47831/?debug=accent` (reference
+in Safari). In a host, temporarily edit the window URL (Tauri: `url` in `tauri.conf.json`, `index.html?vibrancy=1&debug=accent`) and revert afterwards.
 
 ## 3. Checklist
 
-Run every item for: Tauri vibrancy, Tauri opaque, Wails vibrancy, Wails opaque (skip rows that do not apply). Mark
+Run every item for: Tauri vibrancy and Tauri opaque (skip rows that do not apply). Mark
 PASS / FAIL / N/A and note the macOS version.
 
 1. App launches; the mock inbox lists and a thread opens in the reader. No blank or white window (Tauri issue 13415 risk).
@@ -73,15 +60,14 @@ PASS / FAIL / N/A and note the macOS version.
    loses focus. Selection must go gray when the window is inactive and differ from the active accent selection. Check light
    and dark.
 7. Theme mismatch: System Dark with app theme Light, and the reverse. Tauri pins the window theme (`set_window_theme`) so
-   material and text agree; app theme "System" follows the OS again. Wails cannot change at runtime (creation-time only):
-   expect material/text disagreement; verify `ZUSTELLER_APPEARANCE` fixes it. Also flip the OS theme while running with app
+   material and text agree; app theme "System" follows the OS again. Also flip the OS theme while running with app
    theme "System".
-8. Sidebar-only transparency is not offered by either host (window-wide); confirm and screenshot the gutters.
+8. Sidebar-only transparency is not offered (window-wide); confirm and screenshot the gutters.
 9. Menus: App/Edit/Mail(Mailbox)/View/Window render. With a thread selected use Archive, Move to Trash, Mark Read/Unread,
    Star, Find (Cmd+F focuses search). Actions not enabled for the selection are ignored. Plain-key shortcuts still work in the
    list and are ignored while typing in search. Cmd+C/V/A work in the search field.
 10. Dock badge: trigger `set_badge` (see "Triggering platform calls"); badge shows the count, 0 clears it.
-11. Notifications: needs a bundled `.app` with a bundle identifier (Tauri release build; the Wails host has no `.app` yet).
+11. Notifications: needs a bundled `.app` with a bundle identifier (Tauri release build).
     Expect the permission prompt on first use; System Settings > Notifications lists "zusteller". In `tauri dev` macOS
     attributes them to the terminal.
 12. `mailto:` and `https:` open: a mailto link opens the default mail app, https the default browser; `file:`,
@@ -89,15 +75,14 @@ PASS / FAIL / N/A and note the macOS version.
 13. Reader iframe renders sanitized HTML, remote images are not loaded, CSP breaks neither Vite HMR (dev) nor the release app.
 14. Fullscreen, minimum size 900x600, move between displays: no layout or vibrancy glitches.
 15. Release build only: no white/solid background where `dev` was transparent.
-16. Run `scripts/measure-host.sh` and paste its table into the host-comparison rows.
+16. Run `scripts/measure-host.sh` and paste its table into the `docs/host-decision.md` if useful.
 
 ### Triggering platform calls
 
 The app has no UI for badge/notification yet. In the host webview devtools (right-click > Inspect Element, dev builds):
 Tauri `await window.__TAURI__.core.invoke('set_badge', { count: 3 })` and
 `await window.__TAURI__.core.invoke('notify', { title: 'Hi', body: 'Test' })` (`withGlobalTauri` is true).
-Wails: `const r = await import('/wails/runtime.js'); r.Call.ByName('zusteller/hosts/wails/internal/platform.Service.SetBadge', 3)`
-(also `.ShowNotification`, `.OpenExternal`). These snippets are unverified: if one fails, record the error text.
+These snippets are unverified: if one fails, record the error text.
 
 ## 4. Screenshots to take
 
@@ -115,11 +100,11 @@ Same window size per host and variant (vibrancy/opaque). Save outside the repo (
 ## 5. Prompt for a local Claude Code session with computer use
 
 ```text
-You are testing the zusteller desktop hosts on this Mac. Read AGENTS.md, docs/host-comparison.md, hosts/tauri/README.md,
-hosts/wails/README.md and docs/mac-test-runbook.md first. Do not change source code, push, or commit screenshots.
+You are testing the zusteller desktop hosts on this Mac. Read AGENTS.md, docs/host-decision.md, hosts/tauri/README.md
+and docs/mac-test-runbook.md first. Do not change source code, push, or commit screenshots.
 1. Verify prerequisites from the runbook (brew, go >= 1.25, task, rust, Xcode CLT, node); install missing ones with brew/rustup
    and tell me what you installed.
-2. Run each of the four variants in turn (Tauri dev, Tauri dev:opaque, Wails task dev:vite + task dev, Wails dev:opaque).
+2. Run each variant in turn (Tauri dev, Tauri dev:opaque).
    For each, use computer use to screenshot the window and walk through checklist items 1-15 in the runbook, including opening
    System Settings to change the accent colour and toggling the system appearance, and clicking another app to make the
    window inactive. Use ?debug=accent as described and transcribe the panel values.

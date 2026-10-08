@@ -3,7 +3,7 @@
 ```
 React UI (features/mail) ──► MailService (domain contract) ◄── MockMailService   (Phase 1)
         │                                                  ◄── GmailMailService  (Phase 3, future)
-        └────────────────► PlatformService ◄── browser impl ◄── Wails / Tauri adapters (Phase 2, wired)
+        └────────────────► PlatformService ◄── browser impl ◄── Tauri adapter (Phase 2, wired)
 ```
 
 `src/app/createServices.ts` is the only place a concrete mail provider is chosen; `src/platform/index.ts` is the only place the host is detected.
@@ -75,10 +75,10 @@ reflects mutations.
 |---|---|
 | `PlatformService.ts` | Interface: `showNotification`, `setBadge`, `openExternal`, `subscribeMenuActions(handler)` returning an unsubscribe, optional `setWindowTheme('system'/'light'/'dark')` |
 | `browser.ts` | Browser implementation (`subscribeMenuActions` is a no-op, no `setWindowTheme`) |
-| `wails.ts` / `tauri.ts` | Host adapters (`isWailsHost` / `isTauriHost`). Tauri implements `setWindowTheme`; Wails does not (appearance is fixed at window creation) |
-| `index.ts` | `createPlatformService()`: Wails, then Tauri, else browser; adapts host menu events to `subscribeMenuActions` |
-| `menuActions.ts` | Host-neutral `MenuAction` (`archive trash markRead markUnread star find`); maps Wails payloads (`archive`) and Tauri item ids (`mail.archive`). `MailApp` feeds them to the same handler as keyboard shortcuts (`star` = toggle, `find` = focus search); actions not enabled for the selection are ignored |
-| `hostChrome.ts` | `applyHostChrome()` sets `data-host="tauri\|wails"` and, if the host opened `?vibrancy=1`, `data-vibrancy` on `<html>`; `trackWindowFocus()` mirrors focus into `data-window-inactive`; `dragRegionProps` (`data-tauri-drag-region`) marks draggable headers (Wails uses the `--wails-draggable` CSS property) |
+| `tauri.ts` | Host adapter (`isTauriHost`): notifications, badge, `openExternal`, `setWindowTheme`, system accent colour |
+| `index.ts` | `createPlatformService()`: Tauri, else browser; adapts host menu events to `subscribeMenuActions` |
+| `menuActions.ts` | Host-neutral `MenuAction` (`archive trash markRead markUnread star find`); maps Tauri item ids (`mail.archive`). `MailApp` feeds them to the same handler as keyboard shortcuts (`star` = toggle, `find` = focus search); actions not enabled for the selection are ignored |
+| `hostChrome.ts` | `applyHostChrome()` sets `data-host="tauri"` and, if the host opened `?vibrancy=1`, `data-vibrancy` on `<html>`; `trackWindowFocus()` mirrors focus into `data-window-inactive`; `dragRegionProps` (`data-tauri-drag-region`) marks draggable headers |
 | `accentDebug.ts` | `?debug=accent` diagnostic panel |
 
 `ThemeProvider` calls `platform.setWindowTheme?.()` so the native material follows the in-app theme ("System" follows the OS).
@@ -93,14 +93,14 @@ the parent sizes the frame and intercepts link clicks. Attachments are metadata-
 
 ## Hosts & skins
 
-- **Hosts**: `hosts/wails` (Go, Wails v3 beta.28) and `hosts/tauri` (Rust, Tauri 2.12) are thin shells around the shared `frontend/`;
+- **Host**: `hosts/tauri` (Rust, Tauri 2.12) is a thin shell around the shared `frontend/`;
   no UI code is copied. Native menu items reach the same action layer as toolbar and shortcuts (see Platform layer). Setup, commands
-  and verification status are in each host's `README.md`; Wails vs Tauri findings in `docs/host-comparison.md`.
+  and verification status are in the host's `README.md`; why Tauri (Wails was evaluated and removed) in `docs/host-decision.md`.
   Nothing native has been verified on a Mac yet.
-- **Vibrancy is the default in both hosts**: transparent window with a macOS sidebar material; the host opens the page with
+- **Vibrancy is the default**: transparent window with a macOS sidebar material; the host opens the page with
   `?vibrancy=1`, which sets `data-vibrancy` so `skins.css` makes backdrop, gutters and sidebar transparent (list/reader stay opaque).
-  Tauri needs `macOSPrivateApi`; Wails needs `-tags private_mac_apis` (both private APIs). Opaque variants: Tauri
-  `npm run dev:opaque` / `build:opaque`; Wails `task dev:opaque` / `ZUSTELLER_VIBRANCY=0`.
+  Tauri needs `macOSPrivateApi` (a private API). Opaque variant:
+  `npm run dev:opaque` / `build:opaque`.
 - **Skins** (`src/styles/skins.css`, `src/app/skin.ts`): **B2 ("Gmail-in-glass")** is the default in light and dark. A and C are opt-in and
   dark-only: `?skin=a|b|c|default` (`default` = plain tokens). `?theme=dark` forces dark for one page load.
 
@@ -109,8 +109,7 @@ the parent sizes the frame and intercepts link clicks. Attachments are metadata-
 - Reader HTML is code-split: `SafeHtmlFrame` (with DOMPurify) is `lazy()`-loaded from `MessageView` behind `Suspense`. Vite
   `manualChunks` splits `react`, `tanstack` and `radix` vendor chunks. `base: './'` so hosts can load the build from disk.
 - `.github/workflows/frontend.yml` (every push/PR): `npm ci`, typecheck, lint, test, build in `frontend/`.
-- `.github/workflows/hosts.yml` (when `hosts/**` or `frontend/src/platform/**` change): Wails `go vet` / `go build -tags gtk3` /
-  `go test ./internal/...`; Tauri `cargo check --locked` after a frontend build. Linux only, so darwin code is not compiled in CI.
+- `.github/workflows/hosts.yml` (when `hosts/**` or `frontend/src/platform/**` change): Tauri `cargo check --locked` after a frontend build. Linux only, so darwin code is not compiled in CI.
 
 ## Deliberately not built (later phases)
 

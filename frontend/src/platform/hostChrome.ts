@@ -1,17 +1,15 @@
 import type { PlatformService } from './PlatformService';
 import { isTauriHost } from './tauri';
-import { isWailsHost } from './wails';
 
 /**
  * Native window chrome helpers. Desktop hosts use an overlay titlebar (traffic lights float over
  * the web content), so the web UI must (a) leave room for them and (b) mark draggable regions in
- * the way each webview understands. The CSS `app-region` property is not honoured by either.
+ * the way the webview understands. The CSS `app-region` property is not honoured.
  */
-export type NativeHost = 'tauri' | 'wails';
+export type NativeHost = 'tauri';
 
 export function detectNativeHost(): NativeHost | null {
   if (isTauriHost()) return 'tauri';
-  if (isWailsHost()) return 'wails';
   return null;
 }
 
@@ -29,10 +27,7 @@ export function wantsVibrancy(search: string): boolean {
   return new URLSearchParams(search).get('vibrancy') === '1';
 }
 
-/**
- * Spread onto elements that should drag the window. Tauri reads this attribute (only on the
- * element itself); Wails reads the `--wails-draggable` CSS property set in index.css.
- */
+/** Spread onto elements that should drag the window. Tauri reads this attribute (only on the element itself). */
 export const dragRegionProps = { 'data-tauri-drag-region': '' } as const;
 
 /** Mirrors window focus into `data-window-inactive` so selection can turn gray like native lists. */

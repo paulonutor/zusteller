@@ -14,9 +14,9 @@ The product/engineering plan lives in `zusteller-plan.md` (original spec) and `d
 ## Current state
 
 - **Phase 1** (shared mock mail reader) is implemented in `frontend/`.
-- **Phase 2** hosts exist: `hosts/wails` (Go, Wails v3 beta.28) and `hosts/tauri` (Rust, Tauri 2.12), wired through `src/platform`
-  (menus, notifications, badge, external links, window theme). Vibrancy is the default in both; opaque variants exist. Written and
-  checked on Linux only (CI compiles them); **nothing native is verified on a Mac**. Decision rule: if Wails vibrancy doesn't work, commit to Tauri.
+- **Phase 2** host exists: `hosts/tauri` (Rust, Tauri 2.12), the **only** desktop host (Wails was evaluated and removed, see
+  `docs/host-decision.md`), wired through `src/platform` (menus, notifications, badge, external links, window theme, system accent
+  colour). Vibrancy is the default; an opaque variant exists. Signing/notarisation/updater are open.
 - **Phase 3** (Gmail), **4** (compose/send) and **5** (Apple on-device AI) are **not started** — do not implement them without an explicit request.
 - V1 explicitly excludes: OAuth, network calls, compose/reply/forward/drafts/send, AI, background sync.
 
@@ -27,29 +27,28 @@ Frontend (run from `frontend/`):
 | Task | Command |
 |---|---|
 | Install | `npm install` |
-| Dev server (browser mode) | `npm run dev` → http://localhost:5173 (`?latency=0`, `?offline=1`, `?skin=`, `?theme=dark`, `?debug=accent`) |
+| Dev server (browser mode) | `npm run dev` → http://localhost:47831 (static port, also used by `tauri dev`; `?latency=0`, `?offline=1`, `?skin=`, `?theme=dark`, `?debug=accent`) |
 | Typecheck / lint / test | `npm run typecheck` · `npm run lint` · `npm test` (also `npm run test:watch`, `npm run format`) |
 | Production build | `npm run build` (typecheck + vite) |
 | Accessibility audit (needs dev server) | `npm run a11y` (axe via Playwright over many states, light/dark, host+vibrancy, `?seed=big`; `CHROMIUM_PATH=...`, `A11Y_VERBOSE=1`; non-zero exit on violations; known design-token findings are listed, not failing). Structure/ARIA also asserted in `tests/a11y.test.tsx` |
 | Visual regression | `npm run test:visual` (Playwright `toHaveScreenshot`, baselines in `frontend/tests-visual/__screenshots__/`, starts its own dev server on :5304, clock frozen to the seed's now). After an intentional visual change run `npm run test:visual:update`, LOOK at the changed PNGs, commit them. Baselines are `-linux`; regenerate on the CI runner via the manual `update-visual-baselines` workflow if fonts differ |
-| Screenshots (needs dev server) | `CHROMIUM_PATH=/opt/pw-browsers/chromium node scripts/screenshots.mjs http://localhost:5173 screenshots` |
+| Screenshots (needs dev server) | `CHROMIUM_PATH=/opt/pw-browsers/chromium node scripts/screenshots.mjs http://localhost:47831 screenshots` |
 
-Hosts (macOS; details in each `hosts/*/README.md`):
+Tauri host (macOS; details in `hosts/tauri/README.md`; from `hosts/tauri/`):
 
 | Task | Command |
 |---|---|
-| Wails (from `hosts/wails/`; Go ≥ 1.25 + Task) | `task dev:vite` then `task dev` · `task dev:glass` · `task dev:opaque` · `task build` · `task test` · `task vet` |
-| Tauri (from `hosts/tauri/`) | `npm install`, then `npm run dev` · `dev:opaque` · `build` · `build:opaque` · `check` (cargo check) |
+| Dev / build | `npm install`, then `npm run dev` (Vite on static port 47831) · `dev:opaque` · `build` · `build:opaque` · `check` (cargo check) |
+| `.app` for UI automation | `npx tauri build --debug --bundles app`, then `open` the printed `.app` path (a `tauri dev` binary is attributed to the launching app and cannot be driven by computer use) |
 
-CI (`.github/workflows/`): `frontend.yml` runs typecheck, lint, test and build (job `check`) plus visual regression (job `visual`) on every push/PR; `update-visual-baselines.yml` (manual) regenerates baselines and uploads them as an artifact (never auto-commits); `hosts.yml` runs Wails vet/build/test and
-Tauri `cargo check` when `hosts/**` or `frontend/src/platform/**` change.
+CI (`.github/workflows/`): `frontend.yml` runs typecheck, lint, test and build (job `check`) plus visual regression (job `visual`) on every push/PR; `update-visual-baselines.yml` (manual) regenerates baselines and uploads them as an artifact (never auto-commits); `hosts.yml` runs Tauri `cargo check` (Linux and macOS) when `hosts/**` or `frontend/src/platform/**` change.
 
 Before every push: typecheck, lint, tests and build must all pass. Look at screenshots for any visual change.
 
 ## Architecture rules (non-negotiable)
 
-1. **One shared frontend** (`frontend/`) for both future hosts. Never fork or copy UI code into a host.
-2. React feature code **must not import** `@tauri-apps/*`, Wails bindings, provider SDKs or native APIs. ESLint enforces this
+1. **One shared frontend** (`frontend/`) for the browser and the Tauri host. Never fork or copy UI code into a host.
+2. React feature code **must not import** `@tauri-apps/*`, provider SDKs or native APIs. ESLint enforces this
    (`no-restricted-imports`); features also may not import `@/infrastructure/*` — they use `MailService` from context.
 3. Host/native behaviour goes behind typed adapters (`src/platform`, `src/infrastructure/mail/*`). Don't add placeholder
    methods that look functional. Host-only capabilities are optional on `PlatformService` (e.g. `setWindowTheme`);
@@ -84,13 +83,13 @@ frontend/src/
   domain/mail/    provider-neutral types, MailService contract (incl. getMailboxCounts), semantics, query keys
   features/mail/  sidebar/ list/ reader/ (+ safe-html/, lazy-loaded), actions, selection, shortcuts
   infrastructure/mail/mock/  stateful MockMailService + deterministic seed
-  platform/       PlatformService, browser/wails/tauri adapters, menuActions, hostChrome, accentDebug
+  platform/       PlatformService, browser/tauri adapters, menuActions, hostChrome, accentDebug
   styles/         index.css (tokens), skins.css (skins, accent, vibrancy)
 frontend/tests/   integration tests (full app against the mock)
 frontend/scripts/ screenshots.mjs
-hosts/wails/      Go host (Taskfile.yml, internal/platform)     hosts/tauri/  Rust host (src-tauri)
+hosts/tauri/      Rust host (src-tauri)
 .github/workflows/ frontend.yml, hosts.yml
-docs/             architecture.md, host-comparison.md, previews/
+docs/             architecture.md, host-decision.md, mac-test-runbook.md, previews/
 ```
 
 ## Conventions

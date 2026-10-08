@@ -1,6 +1,6 @@
 /**
  * Provider-neutral mail domain model. Nothing in here may reference a concrete
- * provider (Gmail), a host (Wails/Tauri) or a UI library.
+ * provider (Gmail), a host (Tauri) or a UI library.
  */
 export type ID = string;
 export type SystemMailbox = 'inbox' | 'starred' | 'sent' | 'trash' | 'all';

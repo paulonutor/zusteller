@@ -1,7 +1,7 @@
 # Mac test checklist: Tauri only (remaining items)
 
 For a local Claude desktop session with computer use. Setup and run commands: `docs/mac-test-runbook.md` §1–2 (Tauri parts only).
-Wails is dropped. Record results as Trello comments on the "Test on Mac" card. Do not change source, push or commit screenshots.
+Wails was dropped (see `docs/host-decision.md`). Record results as Trello comments on the "Test on Mac" card. Do not change source, push or commit screenshots.
 
 **Already verified by Paul, skip:** dark mode / theme mismatch, accent colour (live update + inactive gray), traffic lights, vibrancy.
 

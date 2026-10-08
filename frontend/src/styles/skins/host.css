@@ -1,19 +1,9 @@
-/* ---- Native host chrome (Tauri/Wails overlay titlebar) ---------------------------------- */
+/* ---- Native host chrome (Tauri overlay titlebar) ---------------------------------- */
 /* Traffic lights float over the top-left of the sidebar: push its header content below them. */
 :root[data-host] [data-pane='sidebar'] > nav > .drag-region {
   height: 76px !important;
   padding-top: 40px !important;
   align-items: flex-end;
-}
-/* Wails marks draggable areas with this custom property (inherited, so opt buttons out). */
-:root[data-host='wails'] .drag-region {
-  --wails-draggable: drag;
-}
-:root[data-host='wails'] .no-drag,
-:root[data-host='wails'] button,
-:root[data-host='wails'] input,
-:root[data-host='wails'] [role='option'] {
-  --wails-draggable: no-drag;
 }
 
 /* ---- Selection follows the system accent in native hosts; gray when the window is inactive ---- */

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Measure build time, size, cold start and idle RAM of both zusteller hosts (macOS only).
-# Usage: scripts/measure-host.sh [tauri|wails|all]   (default: all)
+# Measure build time, size, cold start and idle RAM of the zusteller Tauri host (macOS only).
+# Usage: scripts/measure-host.sh
 # Output: a markdown table on stdout; progress and errors on stderr.
 # Env: IDLE_SECS (default 30), START_TIMEOUT (default 30), SKIP_BUILD=1 reuses existing builds.
 set -euo pipefail
@@ -9,13 +9,6 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "measure-host.sh: macOS only (detected $(uname -s)); run it on your Mac." >&2
   exit 1
 fi
-
-which_host="${1:-all}"
-case "$which_host" in tauri | wails | all) ;; *)
-  echo "usage: $0 [tauri|wails|all]" >&2
-  exit 2
-  ;;
-esac
 
 IDLE_SECS="${IDLE_SECS:-30}"
 START_TIMEOUT="${START_TIMEOUT:-30}"
@@ -75,10 +68,10 @@ wait_for_window() {
   echo "n/a"
 }
 
-BUILD_T_TAURI="skipped" BUILD_T_WAILS="skipped"
-SIZE_TAURI="n/a" SIZE_WAILS="n/a"
-START_TAURI="n/a" START_WAILS="n/a"
-RAM_TAURI="n/a" RAM_WAILS="n/a"
+BUILD_T_TAURI="skipped"
+SIZE_TAURI="n/a"
+START_TAURI="n/a"
+RAM_TAURI="n/a"
 
 measure_tauri() {
   need cargo "install Rust: https://rustup.rs"
@@ -115,43 +108,7 @@ measure_tauri() {
   fi
 }
 
-measure_wails() {
-  need go "brew install go"
-  need task "brew install go-task"
-  need npm "brew install node"
-  local dir="$ROOT/hosts/wails" bin
-  bin="$dir/bin/zusteller"
-  if [[ "${SKIP_BUILD:-0}" != 1 ]]; then
-    log "Wails: npm install + task build"
-    (cd "$ROOT/frontend" && npm install > /dev/null)
-    local t0
-    t0="$(now)"
-    (cd "$dir" && task build >&2)
-    BUILD_T_WAILS="$(secs_since "$t0")s"
-  fi
-  [[ -x "$bin" ]] || {
-    echo "Wails: $bin not found (build failed, or run without SKIP_BUILD)" >&2
-    return 1
-  }
-  SIZE_WAILS="$(human "$bin") (bare binary, no .app yet)"
-  log "Wails: cold start + idle RAM"
-  pkill -x zusteller 2> /dev/null || true
-  sudo -n purge 2> /dev/null || log "(no passwordless sudo: skipping 'purge')"
-  local t0 pid
-  t0="$(now)"
-  "$bin" > /dev/null 2>&1 &
-  pid=$!
-  START_WAILS="$(wait_for_window zusteller "$t0")s"
-  if kill -0 "$pid" 2> /dev/null; then
-    sleep "$IDLE_SECS"
-    RAM_WAILS="$(rss_mb "$pid") MB"
-    kill "$pid" 2> /dev/null || true
-  fi
-}
-
-# Failures in one host must not hide the other host's numbers.
-if [[ "$which_host" != wails ]]; then measure_tauri || log "Tauri measurement failed"; fi
-if [[ "$which_host" != tauri ]]; then measure_wails || log "Wails measurement failed"; fi
+measure_tauri || log "Tauri measurement failed"
 
 cat << EOF
 
@@ -160,10 +117,10 @@ Cold start = launch to first window (osascript polling, ~0.1 s resolution), not 
 Idle RAM = RSS of the app process tree plus all system WebKit WebContent/Networking processes (upper bound if other
 WebKit apps, e.g. Safari, are running: quit them first).
 
-| Metric | Wails v3 beta.28 | Tauri 2.12 |
-|---|---|---|
-| Build time (clean-ish, incl. frontend) | ${BUILD_T_WAILS} | ${BUILD_T_TAURI} |
-| Bundle size | ${SIZE_WAILS} | ${SIZE_TAURI} |
-| Cold startup (first window) | ${START_WAILS} | ${START_TAURI} |
-| Idle RAM (${IDLE_SECS}s) | ${RAM_WAILS} | ${RAM_TAURI} |
+| Metric | Tauri 2.12 |
+|---|---|
+| Build time (clean-ish, incl. frontend) | ${BUILD_T_TAURI} |
+| Bundle size | ${SIZE_TAURI} |
+| Cold startup (first window) | ${START_TAURI} |
+| Idle RAM (${IDLE_SECS}s) | ${RAM_TAURI} |
 EOF

@@ -7,9 +7,6 @@ coverage/
 # Desktop hosts (Phase 2)
 hosts/tauri/src-tauri/target/
 hosts/tauri/src-tauri/gen/
-hosts/wails/bin/
-hosts/wails/build/bin/
-hosts/wails/frontend/
 *.app
 *.dmg
 
