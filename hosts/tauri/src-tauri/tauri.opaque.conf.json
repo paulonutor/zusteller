@@ -4,7 +4,6 @@
     "windows": [
       {
         "label": "main",
-        "url": "index.html?vibrancy=1",
         "title": "zusteller",
         "width": 1280,
         "height": 800,
@@ -12,11 +11,9 @@
         "minHeight": 600,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
-        "trafficLightPosition": { "x": 20, "y": 28 },
-        "transparent": true,
-        "windowEffects": {
-          "effects": ["sidebar"],
-          "state": "followsWindowActiveState"
+        "trafficLightPosition": {
+          "x": 20,
+          "y": 28
         }
       }
     ]

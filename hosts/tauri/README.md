@@ -10,23 +10,23 @@ Loads the shared `frontend/` Vite project; no UI code lives here. Paths in `taur
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh   # if `cargo -V` fails
 (cd ../../frontend && npm install)                               # shared frontend deps
 npm install                                                      # installs the Tauri CLI (this folder)
-npm run dev                                                      # or: npm run dev:vibrancy
+npm run dev                                                      # vibrancy is the default; `npm run dev:opaque` for a plain window
 ```
 
 ## Use (macOS)
 ```
 cd frontend && npm install && cd ../hosts/tauri && npm install
 npx tauri icon src-tauri/icons/icon.png   # placeholder icon -> generates icns etc.
-npm run dev            # opaque window
-npm run dev:vibrancy   # transparent window + sidebar vibrancy (overlay config)
+npm run dev            # native vibrancy (default): transparent window + sidebar material
+npm run dev:opaque     # plain opaque window (overlay config) for comparison / fallback
 ```
-`dev:vibrancy`/`build:vibrancy` merge `src-tauri/tauri.vibrancy.conf.json` (sets `macOSPrivateApi`, `transparent`,
-`windowEffects: sidebar`). Transparency on macOS requires Tauri's `macos-private-api` (a private AppKit API); the Tauri CLI
-will add/remove that feature in `Cargo.toml` to match the config. Because config merge replaces arrays, the overlay repeats
-the whole window definition — keep it in sync with the base config.
+Vibrancy is configured in `src-tauri/tauri.conf.json` (`macOSPrivateApi`, `transparent`, `windowEffects: sidebar`, window `url`
+`index.html?vibrancy=1`) and requires Tauri's `macos-private-api` Cargo feature (a private AppKit API), which must match the config.
+`dev:opaque`/`build:opaque` merge `src-tauri/tauri.opaque.conf.json`; config merge replaces arrays, so it repeats the whole window
+definition — keep it in sync with the base config.
 
 ## What exists
-- Window 1280x800, min 900x600, `titleBarStyle: Overlay`, hidden title, traffic lights at (16,18). `withGlobalTauri: true`.
+- Window 1280x800, min 900x600, `titleBarStyle: Overlay`, hidden title, traffic lights at (20,28). `withGlobalTauri: true`.
 - Plugins: opener (capability scoped to `https://*`, `http://*`, `mailto:*` only), notification (used from Rust).
 - Commands `notify`, `set_badge` (`window.set_badge_count`); native menu App/Edit/Mail/View/Window; Mail items
   (Archive, Move to Trash, Mark Read/Unread, Add/Remove Star, Find=Cmd+F) emit event `zusteller://menu` with the item id.
@@ -50,13 +50,13 @@ the whole window definition — keep it in sync with the base config.
   `plugin:opener|open_url` invoke name and scope matching (the `mailto:*` pattern in particular).
 - CSP in `tauri.conf.json` is a first guess: check the dev server (Vite HMR websocket / inline styles) and the reader iframe.
 
-## Vibrancy mode (`npm run dev:vibrancy`)
+## Vibrancy mode (default)
 
-Needs three layers: (1) transparent window + macOS `sidebar` material (`tauri.vibrancy.conf.json`, requires `macOSPrivateApi`),
-(2) the page opened with `?vibrancy=1` (set via the window `url` in that overlay) which makes `frontend/src/platform/hostChrome.ts`
+Needs three layers: (1) transparent window + macOS `sidebar` material (`tauri.conf.json`, requires `macOSPrivateApi`),
+(2) the page opened with `?vibrancy=1` (set via the window `url` in `tauri.conf.json`) which makes `frontend/src/platform/hostChrome.ts`
 set `data-vibrancy` on `<html>`, and (3) `frontend/src/styles/skins.css` (`:root[data-vibrancy]`) which makes the window backdrop,
 gutters and sidebar transparent. List and reader panes stay opaque. Material is window-wide, not sidebar-only.
-Plain `npm run dev` stays opaque. If the effect is missing, check that the overlay config (not `tauri.conf.json`) is in use.
+`npm run dev:opaque` gives the plain window. If the effect is missing, check that the opaque overlay config is not in use.
 
 The window theme is pinned to the in-app theme (`set_window_theme`, called from `ThemeProvider`), so the vibrancy material
 always matches the page colours; choosing "System" in the app lets the window follow the OS again.

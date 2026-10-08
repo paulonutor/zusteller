@@ -69,7 +69,7 @@ Record macOS version, chip, and Go/Rust/Node versions. Quit other apps; take the
    - Cross-check with Activity Monitor "Memory" column.
 4. Appearance (same-size screenshots, light + dark, active + inactive, Reduce Transparency on/off)
    - Traffic light position, dragging, fullscreen, resize.
-   - Wails: with and without `-tags private_mac_apis`. Tauri: `dev:vibrancy` vs `dev`.
+   - Wails: with and without `-tags private_mac_apis`. Tauri: `dev` vs `dev:opaque`.
    - Does a sidebar-only material exist? (Expected: no for both.)
 5. Native behaviour: menu items fire events, Dock badge, notification permission prompt (from a signed `.app`, not the terminal), `openExternal` allow-list.
 6. Packaging: sign with a Developer ID cert, notarize, open on a second Mac, check Gatekeeper.

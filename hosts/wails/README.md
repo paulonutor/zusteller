@@ -89,10 +89,11 @@ The native window material follows the window's NSAppearance, not the page theme
 no runtime switch (the adapter deliberately does not implement `setWindowTheme`). This only matters once Wails vibrancy is enabled
 (it is opaque today): with a system/app theme mismatch the material and text colours would disagree.
 
-## Vibrancy experiment (macOS)
+## Vibrancy (default, macOS)
 
-`task dev:vibrancy` (or `task dev:vibrancy:glass` for Liquid Glass, macOS 15+) starts with `ZUSTELLER_VIBRANCY=1`, a translucent/glass
-backdrop, a transparent window, the page opened as `/?vibrancy=1`, and the **private** `-tags private_mac_apis` build tag, which is the only
-way Wails beta.28 makes the WebView transparent. Optional `ZUSTELLER_APPEARANCE=dark|light` pins the native appearance (fixed at creation).
-Plain `task dev` stays opaque. Unverified on a Mac. Decision rule agreed with the owner: if this does not give a working translucent sidebar,
-Wails is out and the project commits to Tauri.
+Vibrancy is on by default: translucent (or `task dev:glass`: Liquid Glass, macOS 15+) backdrop, transparent window, page opened as
+`/?vibrancy=1`, and the **private** `-tags private_mac_apis` build tag, which is the only way Wails beta.28 makes the WebView
+transparent (`task dev`, `task build` set it on macOS). `task dev:opaque` / `ZUSTELLER_VIBRANCY=0` give a plain opaque window with
+public APIs only. Optional `ZUSTELLER_APPEARANCE=dark|light` pins the native appearance (fixed at creation).
+Unverified on a Mac. Decision rule agreed with the owner: if this does not give a working translucent sidebar, Wails is out and the
+project commits to Tauri.

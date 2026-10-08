@@ -18,11 +18,11 @@ type WindowOptions struct {
 	URL string
 }
 
-// ParseWindowOptions reads ZUSTELLER_VIBRANCY=1, ZUSTELLER_BACKDROP=glass and
-// ZUSTELLER_APPEARANCE=dark|light.
+// ParseWindowOptions reads ZUSTELLER_VIBRANCY (default on; "0" turns it off),
+// ZUSTELLER_BACKDROP=glass and ZUSTELLER_APPEARANCE=dark|light.
 func ParseWindowOptions(getenv func(string) string) WindowOptions {
 	o := WindowOptions{URL: "/"}
-	o.Vibrancy = getenv("ZUSTELLER_VIBRANCY") == "1"
+	o.Vibrancy = getenv("ZUSTELLER_VIBRANCY") != "0"
 	o.Glass = o.Vibrancy && strings.EqualFold(getenv("ZUSTELLER_BACKDROP"), "glass")
 	switch a := strings.ToLower(getenv("ZUSTELLER_APPEARANCE")); a {
 	case "dark", "light":

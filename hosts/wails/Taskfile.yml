@@ -6,7 +6,9 @@ version: '3'
 vars:
   # Wails v3 on Linux defaults to GTK4; use `-tags gtk3` with libwebkit2gtk-4.1.
   DEV_TAGS: '{{if eq OS "linux"}}-tags gtk3{{end}}'
-  PROD_TAGS: '-tags production{{if eq OS "linux"}},gtk3{{end}}'
+  PROD_TAGS: '-tags production{{if eq OS "linux"}},gtk3{{end}}{{if eq OS "darwin"}},private_mac_apis{{end}}'
+  # Vibrancy is the default: macOS only makes the WebView transparent with this (private API) tag.
+  VIBRANCY_TAGS: '{{if eq OS "darwin"}}-tags private_mac_apis{{else if eq OS "linux"}}-tags gtk3{{end}}'
 
 tasks:
   deps:
@@ -20,19 +22,19 @@ tasks:
     cmds: [npm run dev -- --port 5173 --strictPort]
 
   dev:
-    desc: Terminal 2 - Wails window proxying to the Vite dev server (HMR)
+    desc: Terminal 2 - Wails window with native vibrancy (default; needs the private_mac_apis tag on macOS)
     cmds:
-      - FRONTEND_DEVSERVER_URL=http://localhost:5173 go run {{.DEV_TAGS}} .
+      - FRONTEND_DEVSERVER_URL=http://localhost:5173 go run {{.VIBRANCY_TAGS}} .
 
-  dev:vibrancy:
-    desc: EXPERIMENT (macOS) - translucent backdrop + transparent webview. Uses the private_mac_apis build tag.
+  dev:glass:
+    desc: Like dev, with Liquid Glass (macOS 15+). ZUSTELLER_APPEARANCE=dark|light optional
     cmds:
-      - ZUSTELLER_VIBRANCY=1 FRONTEND_DEVSERVER_URL=http://localhost:5173 go run -tags private_mac_apis {{.DEV_TAGS}} .
+      - ZUSTELLER_BACKDROP=glass FRONTEND_DEVSERVER_URL=http://localhost:5173 go run {{.VIBRANCY_TAGS}} .
 
-  dev:vibrancy:glass:
-    desc: EXPERIMENT (macOS 15+) - like dev:vibrancy but with Liquid Glass; ZUSTELLER_APPEARANCE=dark|light optional
+  dev:opaque:
+    desc: Opaque window, public APIs only (no private_mac_apis tag)
     cmds:
-      - ZUSTELLER_VIBRANCY=1 ZUSTELLER_BACKDROP=glass FRONTEND_DEVSERVER_URL=http://localhost:5173 go run -tags private_mac_apis {{.DEV_TAGS}} .
+      - ZUSTELLER_VIBRANCY=0 FRONTEND_DEVSERVER_URL=http://localhost:5173 go run {{.DEV_TAGS}} .
 
   build:frontend:
     desc: Build ../../frontend into ./appdist (embedded; build artifact only)
