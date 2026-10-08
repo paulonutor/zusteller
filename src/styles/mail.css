@@ -640,13 +640,10 @@ html:root [data-row-slot][data-state='exit'] {
   pointer-events: none;
   animation: slot-exit 150ms cubic-bezier(0.3, 0, 0.8, 0.4) forwards;
 }
-/* The row itself is flying to a drop target (position: fixed): only the gap closes. A transform or
-   opacity on the slot would otherwise hold / fade the flying row. */
+/* A copy of the row is flying to a drop target: only the gap closes (no slide, the row is already
+   invisible). */
 html:root [data-row-slot][data-state='exit'][data-fly] {
   animation: slot-collapse 200ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
-}
-html:root [data-row-slot][data-state='exit'][data-fly] > [data-row-clip] {
-  overflow: visible;
 }
 html:root [data-row-slot][data-state='enter'] {
   animation: slot-enter 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
