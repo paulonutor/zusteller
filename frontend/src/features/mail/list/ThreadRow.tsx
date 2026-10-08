@@ -19,6 +19,9 @@ type Props = {
   onToggleStar: () => void;
   buildContextItems: () => MenuItemSpec[];
   onContextOpen: () => void;
+  /** Set when the list is windowed: total rows (-1 = unknown) and 1-based position. */
+  setSize?: number;
+  posInSet?: number;
 };
 
 /** The correspondent shown on the avatar: first participant who isn't me. */
@@ -54,6 +57,8 @@ export const ThreadRow = memo(function ThreadRow(p: Props) {
         role="option"
         id={`row-${t.id}`}
         aria-selected={p.selected}
+        aria-setsize={p.setSize}
+        aria-posinset={p.posInSet}
         data-unread={!t.isRead}
         data-focused={p.focused && p.listHasFocus}
         onClick={p.onClick}

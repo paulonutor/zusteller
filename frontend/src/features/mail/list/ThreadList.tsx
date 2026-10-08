@@ -1,5 +1,6 @@
 import { dragRegionProps } from '@/platform/hostChrome';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { defaultRangeExtractor, useVirtualizer, type Range } from '@tanstack/react-virtual';
 import { AlertCircle, Inbox, MailOpen, RefreshCw, Search, Star, X } from 'lucide-react';
 import type { ID, Label, ThreadSummary } from '@/domain/mail';
 import { Button } from '@/components/ui/Button';
@@ -8,6 +9,12 @@ import type { MenuItemSpec } from '@/components/ui/Menu';
 import { cn } from '@/lib/cn';
 import type { Selection } from '../selection';
 import { ThreadRow } from './ThreadRow';
+
+/** Lists longer than this are windowed; shorter ones render every row as before. */
+export const VIRTUALIZE_THRESHOLD = 100;
+/** Selected rows are kept mounted only while there are few of them (⌘A must not mount everything). */
+const MAX_PINNED_SELECTED = 20;
+const DEFAULT_ROW_H = 68;
 
 export type ListFilter = 'all' | 'unread' | 'starred';
 
@@ -100,10 +107,55 @@ export function ThreadList(p: Props) {
   const [kbd, setKbd] = useState(false);
   const selectionMode = someSelected && (multi || p.selection.selected.size > 1);
 
+  const virtual = p.items.length > VIRTUALIZE_THRESHOLD;
+  const rowsRef = useRef<HTMLDivElement>(null);
+  const [scrollMargin, setScrollMargin] = useState(0);
+  // Row height comes from the skin's --row-h; real heights are then measured per row.
+  const rowH = () => {
+    const el = scroller.current;
+    const v = el ? parseFloat(getComputedStyle(el).getPropertyValue('--row-h')) : NaN;
+    return Number.isFinite(v) && v > 0 ? v : DEFAULT_ROW_H;
+  };
+  const indexById = new Map(p.items.map((t, i) => [t.id, i]));
+  const rangeExtractor = (range: Range) => {
+    const idx = new Set(defaultRangeExtractor(range));
+    // The focused row backs aria-activedescendant, so it must stay mounted.
+    const f = p.selection.focusedId ? indexById.get(p.selection.focusedId) : undefined;
+    if (f !== undefined) idx.add(f);
+    if (p.selection.selected.size <= MAX_PINNED_SELECTED)
+      for (const id of p.selection.selected) {
+        const i = indexById.get(id);
+        if (i !== undefined) idx.add(i);
+      }
+    return [...idx].sort((a, b) => a - b);
+  };
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const virtualizer = useVirtualizer({
+    enabled: virtual,
+    count: p.items.length,
+    getScrollElement: () => scroller.current,
+    estimateSize: rowH,
+    overscan: 8,
+    scrollMargin,
+    rangeExtractor,
+    getItemKey: (i) => p.items[i]?.id ?? i,
+  });
+  // The error banner sits above the rows inside the scroller; account for its height.
+  useLayoutEffect(() => {
+    if (virtual && rowsRef.current) setScrollMargin(rowsRef.current.offsetTop);
+  }, [virtual, p.error, p.isLoading]);
+
   // Keep the keyboard cursor visible.
   useEffect(() => {
-    if (p.selection.focusedId)
-      document.getElementById(`row-${p.selection.focusedId}`)?.scrollIntoView({ block: 'nearest' });
+    const id = p.selection.focusedId;
+    if (!id) return;
+    if (virtual) {
+      const i = indexById.get(id);
+      if (i !== undefined) virtualizer.scrollToIndex(i, { align: 'auto' });
+    } else {
+      document.getElementById(`row-${id}`)?.scrollIntoView({ block: 'nearest' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [p.selection.focusedId]);
 
   const onScroll = useLoadMoreOnScroll(scroller, p.hasMore, p.isFetchingMore, p.onFetchMore);
@@ -129,6 +181,32 @@ export function ThreadList(p: Props) {
       p.onClear();
     }
   };
+
+  const renderRow = (t: ThreadSummary, index?: number) => (
+    <ThreadRow
+      key={t.id}
+      setSize={index === undefined ? undefined : p.hasMore ? -1 : p.items.length}
+      posInSet={index === undefined ? undefined : index + 1}
+      thread={t}
+      accountEmail={p.accountEmail}
+      labelsById={labelsById}
+      selected={p.selection.selected.has(t.id)}
+      focused={p.selection.focusedId === t.id}
+      listHasFocus={hasFocus}
+      onClick={(e) => {
+        const mods = { meta: e.metaKey || e.ctrlKey, shift: e.shiftKey };
+        setMulti(mods.meta || mods.shift);
+        p.onClickRow(t.id, mods);
+      }}
+      onToggleSelect={() => {
+        setMulti(true);
+        p.onToggleRow(t.id);
+      }}
+      onToggleStar={() => p.onToggleStar(t)}
+      buildContextItems={() => p.buildContextItems(t.id)}
+      onContextOpen={() => p.onContextOpen(t.id)}
+    />
+  );
 
   return (
     <section aria-label={p.title} className="flex h-full min-w-0 flex-col bg-background">
@@ -263,29 +341,32 @@ export function ThreadList(p: Props) {
                 </button>
               </div>
             )}
-            {p.items.map((t) => (
-              <ThreadRow
-                key={t.id}
-                thread={t}
-                accountEmail={p.accountEmail}
-                labelsById={labelsById}
-                selected={p.selection.selected.has(t.id)}
-                focused={p.selection.focusedId === t.id}
-                listHasFocus={hasFocus}
-                onClick={(e) => {
-                  const mods = { meta: e.metaKey || e.ctrlKey, shift: e.shiftKey };
-                  setMulti(mods.meta || mods.shift);
-                  p.onClickRow(t.id, mods);
-                }}
-                onToggleSelect={() => {
-                  setMulti(true);
-                  p.onToggleRow(t.id);
-                }}
-                onToggleStar={() => p.onToggleStar(t)}
-                buildContextItems={() => p.buildContextItems(t.id)}
-                onContextOpen={() => p.onContextOpen(t.id)}
-              />
-            ))}
+            {virtual ? (
+              <div
+                ref={rowsRef}
+                className="relative w-full"
+                style={{ height: virtualizer.getTotalSize() }}
+              >
+                {virtualizer.getVirtualItems().map((v) => {
+                  const t = p.items[v.index];
+                  if (!t) return null;
+                  return (
+                    <div
+                      key={v.key}
+                      role="presentation"
+                      data-index={v.index}
+                      ref={virtualizer.measureElement}
+                      className="absolute left-0 top-0 w-full"
+                      style={{ transform: `translateY(${v.start - scrollMargin}px)` }}
+                    >
+                      {renderRow(t, v.index)}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              p.items.map((t) => renderRow(t))
+            )}
             {p.isFetchingMore && (
               <div className="py-3 text-center text-[12px] text-muted">Loading…</div>
             )}
