@@ -11,8 +11,8 @@ import type { NativeMenuItem, PlatformService } from './PlatformService';
  *   - command `set_badge { count }`      -> window.set_badge_count
  *   - `plugin:opener|open_url { url }`   -> opener plugin, ACL-scoped to http/https/mailto
  *   - command `confirm { title, message, confirmLabel, destructive }` -> native dialog, resolves to boolean
- *   - command `show_context_menu { items }` -> native popup; the pick comes back as event
- *     `zusteller://context-menu` (payload = item id; nothing on dismissal)
+ *   - command `show_context_menu { items, requestId }` -> native popup; correlated selection/close events
+ *     arrive on `zusteller://context-menu`
  *   - event  `zusteller://menu`          -> native menu clicks, payload = item id
  *
  * Wired: platform/index.ts maps item ids to host-neutral MenuActions (menuActions.ts),
@@ -48,7 +48,7 @@ function requireTauri(): TauriGlobal {
   return t;
 }
 
-let contextOff: Unlisten | undefined;
+let nextMenuRequest = 0;
 
 export function createTauriPlatformService(): Omit<PlatformService, 'subscribeMenuActions'> {
   return {
@@ -89,24 +89,28 @@ export function createTauriPlatformService(): Omit<PlatformService, 'subscribeMe
       });
       return ok === true;
     },
-    async showContextMenu(items: NativeMenuItem[], onSelect) {
+    async showContextMenu(items: NativeMenuItem[]) {
       const t = requireTauri();
       const listen = t.event?.listen;
       if (!listen) throw new Error('Tauri events not available');
-      // One-shot: the next pick belongs to this menu. Replace any listener left by a dismissed one.
-      contextOff?.();
-      contextOff = undefined;
-      const off = await listen(TAURI_CONTEXT_MENU_EVENT, (e) => {
-        off();
-        if (contextOff === off) contextOff = undefined;
-        if (typeof e.payload === 'string') onSelect(e.payload);
+      const requestId = String(++nextMenuRequest);
+      let selected: string | null = null;
+      let close!: () => void;
+      const closed = new Promise<void>((resolve) => {
+        close = resolve;
       });
-      contextOff = off;
+      const off = await listen(TAURI_CONTEXT_MENU_EVENT, (e) => {
+        const payload = e.payload as { requestId?: unknown; itemId?: unknown } | null;
+        if (!payload || payload.requestId !== requestId) return;
+        if (typeof payload.itemId === 'string') selected = payload.itemId;
+        else if (payload.itemId === null) close();
+      });
       try {
-        await t.core.invoke('show_context_menu', { items });
-      } catch (err) {
+        await t.core.invoke('show_context_menu', { items, requestId });
+        await closed;
+        return selected;
+      } finally {
         off();
-        throw err;
       }
     },
     async openExternal(url) {

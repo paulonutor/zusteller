@@ -1,5 +1,11 @@
+import { deferred } from '../../tests/helpers/mail';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createTauriPlatformService, isTauriHost, onTauriMenuAction } from './tauri';
+import {
+  createTauriPlatformService,
+  isTauriHost,
+  onTauriMenuAction,
+  TAURI_CONTEXT_MENU_EVENT,
+} from './tauri';
 
 type G = { __TAURI__?: unknown };
 const g = globalThis as G;
@@ -87,5 +93,60 @@ describe('tauri platform', () => {
     expect(h).toHaveBeenCalledWith('mail.archive');
     off();
     expect(s.unlisten).toHaveBeenCalled();
+  });
+});
+
+describe('native popup result', () => {
+  it.each([null, '0'])('returns %s only after close and removes its listener', async (itemId) => {
+    const { invoke, emit, listen, unlisten } = stub();
+    const platform = createTauriPlatformService();
+    const promise = platform.showContextMenu!([{ kind: 'item', id: '0', label: 'Archive' }]);
+    await Promise.resolve();
+    const requestId = invoke.mock.calls[0]![1].requestId;
+    expect(listen).toHaveBeenCalledWith(TAURI_CONTEXT_MENU_EVENT, expect.any(Function));
+    emit({ requestId: 'wrong-menu', itemId: '9' });
+    if (itemId !== null) emit({ requestId, itemId });
+    expect(unlisten).not.toHaveBeenCalled();
+    emit({ requestId, itemId: null });
+    expect(await promise).toBe(itemId);
+    expect(unlisten).toHaveBeenCalledTimes(1);
+  });
+
+  it('cleans up after a failed native invocation', async () => {
+    const { invoke, unlisten } = stub();
+    invoke.mockRejectedValue(new Error('Popup failed'));
+    await expect(createTauriPlatformService().showContextMenu!([])).rejects.toThrow('Popup failed');
+    expect(unlisten).toHaveBeenCalledTimes(1);
+  });
+
+  it('isolates overlapping requests even when the older registration finishes last', async () => {
+    const firstRegistration = deferred<() => void>();
+    const handlers: ((e: { payload: unknown }) => void)[] = [];
+    const offA = vi.fn();
+    const offB = vi.fn();
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    const listen = vi.fn((_name: string, h: (e: { payload: unknown }) => void) => {
+      handlers.push(h);
+      return handlers.length === 1 ? firstRegistration.promise : Promise.resolve(offB);
+    });
+    g.__TAURI__ = { core: { invoke }, event: { listen } };
+    const platform = createTauriPlatformService();
+    const a = platform.showContextMenu!([]);
+    const b = platform.showContextMenu!([]);
+    await Promise.resolve();
+    const bId = invoke.mock.calls[0]![1].requestId;
+    firstRegistration.resolve(offA);
+    await Promise.resolve();
+    const aId = invoke.mock.calls[1]![1].requestId;
+    for (const handler of handlers) {
+      handler({ payload: { requestId: bId, itemId: 'b' } });
+      handler({ payload: { requestId: bId, itemId: null } });
+    }
+    expect(await b).toBe('b');
+    expect(offB).toHaveBeenCalledTimes(1);
+    expect(offA).not.toHaveBeenCalled();
+    for (const handler of handlers) handler({ payload: { requestId: aId, itemId: null } });
+    expect(await a).toBeNull();
+    expect(offA).toHaveBeenCalledTimes(1);
   });
 });

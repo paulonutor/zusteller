@@ -5,7 +5,7 @@ import type { MenuAction } from './menuActions';
  * live behind this interface; feature code never imports host APIs.
  * Only capabilities that are actually implemented are listed here.
  */
-/** Serializable context-menu description; `id` is echoed back to `onSelect` when chosen. */
+/** Serializable context-menu description; `id` is returned when chosen. */
 export type NativeMenuItem =
   | { kind: 'item'; id: string; label: string; disabled?: boolean }
   | { kind: 'check'; id: string; label: string; checked: boolean }
@@ -41,10 +41,10 @@ export interface PlatformService {
   /** Called with the new `#rrggbb` when the system accent changes. Returns an unsubscribe function. */
   subscribeAccentColor?(handler: (color: string) => void): () => void;
   /**
-   * Pop up a native context menu at the pointer. `onSelect` gets the chosen item id; nothing is
-   * called on dismissal. Optional: the browser has no native menu, so the UI draws its own.
+   * Pop up a native menu at the pointer. Resolves to the chosen id, or null on dismissal.
+   * Optional: unsupported hosts use the browser menu.
    */
-  showContextMenu?(items: NativeMenuItem[], onSelect: (id: string) => void): Promise<void>;
+  showContextMenu?(items: NativeMenuItem[]): Promise<string | null>;
   /** Native menu clicks (desktop hosts). Returns an unsubscribe function; a no-op in the browser. */
   subscribeMenuActions(handler: (action: MenuAction) => void): () => void;
 }

@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tauri::{
     menu::{
         CheckMenuItemBuilder, IsMenuItem, Menu, MenuBuilder, MenuItemBuilder, PredefinedMenuItem,
@@ -12,10 +12,17 @@ use tauri_plugin_notification::NotificationExt;
 /// Event the frontend listens to. Payload is the menu item id (see MENU_* below).
 const MENU_EVENT: &str = "zusteller://menu";
 
-/// Event for picks from the native context menu. Payload is the frontend's item id.
+/// Correlated native menu selection and close events.
 const CONTEXT_MENU_EVENT: &str = "zusteller://context-menu";
 /// Prefix that tells `on_menu_event` an id belongs to a context menu, not the app menu.
 const CONTEXT_PREFIX: &str = "ctx:";
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ContextMenuEvent {
+    request_id: String,
+    item_id: Option<String>,
+}
 
 /// Context-menu description sent by the frontend (src/platform/PlatformService.ts `NativeMenuItem`).
 #[derive(Deserialize)]
@@ -42,6 +49,7 @@ enum ContextItem {
 fn context_entry<R: Runtime>(
     app: &AppHandle<R>,
     item: &ContextItem,
+    request_id: &str,
 ) -> tauri::Result<Box<dyn IsMenuItem<R>>> {
     Ok(match item {
         ContextItem::Item {
@@ -49,12 +57,12 @@ fn context_entry<R: Runtime>(
             label,
             disabled,
         } => Box::new(
-            MenuItemBuilder::with_id(format!("{CONTEXT_PREFIX}{id}"), label)
+            MenuItemBuilder::with_id(format!("{CONTEXT_PREFIX}{request_id}:{id}"), label)
                 .enabled(!disabled.unwrap_or(false))
                 .build(app)?,
         ),
         ContextItem::Check { id, label, checked } => Box::new(
-            CheckMenuItemBuilder::with_id(format!("{CONTEXT_PREFIX}{id}"), label)
+            CheckMenuItemBuilder::with_id(format!("{CONTEXT_PREFIX}{request_id}:{id}"), label)
                 .checked(*checked)
                 .build(app)?,
         ),
@@ -66,7 +74,7 @@ fn context_entry<R: Runtime>(
         } => {
             let entries = items
                 .iter()
-                .map(|i| context_entry(app, i))
+                .map(|i| context_entry(app, i, request_id))
                 .collect::<tauri::Result<Vec<_>>>()?;
             let refs: Vec<&dyn IsMenuItem<R>> = entries.iter().map(|e| e.as_ref()).collect();
             Box::new(Submenu::with_items(
@@ -79,19 +87,43 @@ fn context_entry<R: Runtime>(
     })
 }
 
-/// Pop up a native context menu at the pointer. The pick arrives via `on_menu_event`
-/// (`CONTEXT_MENU_EVENT`); dismissing the menu emits nothing.
+/// macOS popup tracking blocks until the menu closes. Run the command off the main thread;
+/// Tauri marshals popup_menu to AppKit. Queue the close event after any queued selection event.
 #[tauri::command]
-fn show_context_menu(window: Window, items: Vec<ContextItem>) -> Result<(), String> {
-    let app = window.app_handle();
-    let entries = items
-        .iter()
-        .map(|i| context_entry(app, i))
-        .collect::<tauri::Result<Vec<_>>>()
-        .map_err(|e| e.to_string())?;
-    let refs: Vec<&dyn IsMenuItem<_>> = entries.iter().map(|e| e.as_ref()).collect();
-    let menu = Menu::with_items(app, &refs).map_err(|e| e.to_string())?;
-    window.popup_menu(&menu).map_err(|e| e.to_string())
+async fn show_context_menu(
+    window: Window,
+    items: Vec<ContextItem>,
+    request_id: String,
+) -> Result<(), String> {
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (window, items, request_id);
+        Err("Native popup lifecycle is only supported on macOS".to_string())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let app = window.app_handle();
+        let entries = items
+            .iter()
+            .map(|i| context_entry(app, i, &request_id))
+            .collect::<tauri::Result<Vec<_>>>()
+            .map_err(|e| e.to_string())?;
+        let refs: Vec<&dyn IsMenuItem<_>> = entries.iter().map(|e| e.as_ref()).collect();
+        let menu = Menu::with_items(app, &refs).map_err(|e| e.to_string())?;
+        window.popup_menu(&menu).map_err(|e| e.to_string())?;
+        let closed_window = window.clone();
+        window
+            .run_on_main_thread(move || {
+                let _ = closed_window.emit(
+                    CONTEXT_MENU_EVENT,
+                    ContextMenuEvent {
+                        request_id,
+                        item_id: None,
+                    },
+                );
+            })
+            .map_err(|e| e.to_string())
+    }
 }
 
 /// Menu item ids sent to the frontend as the event payload.
@@ -290,7 +322,15 @@ pub fn run() {
         .on_menu_event(|app, event| {
             let id = event.id().as_ref();
             if let Some(ctx) = id.strip_prefix(CONTEXT_PREFIX) {
-                let _ = app.emit(CONTEXT_MENU_EVENT, ctx);
+                if let Some((request_id, item_id)) = ctx.split_once(':') {
+                    let _ = app.emit(
+                        CONTEXT_MENU_EVENT,
+                        ContextMenuEvent {
+                            request_id: request_id.to_string(),
+                            item_id: Some(item_id.to_string()),
+                        },
+                    );
+                }
             } else if id.starts_with("mail.") {
                 let _ = app.emit(MENU_EVENT, id);
             }

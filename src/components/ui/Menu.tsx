@@ -5,14 +5,15 @@ import { Check, Minus } from 'lucide-react';
 import {
   cloneElement,
   useEffect,
+  useLayoutEffect,
+  useRef,
   useState,
   type ComponentProps,
   type ReactElement,
   type ReactNode,
 } from 'react';
 import { cn } from '@/lib/cn';
-import { useServices } from '@/app/services';
-import type { NativeMenuItem } from '@/platform';
+import { useNativeMenu } from './useNativeMenu';
 
 const content =
   'z-50 min-w-48 overflow-hidden rounded-lg border border-border bg-surface-raised/95 p-1 text-[13px] text-foreground shadow-lg backdrop-blur-xl';
@@ -92,23 +93,20 @@ export function DropdownMenu({
   ComponentProps<typeof DM.Content>,
   'children'
 >) {
-  const { platform } = useServices();
-  const native = platform.showContextMenu?.bind(platform);
-  if (native) {
-    // Native hosts draw the menu themselves, popped up at the pointer that clicked the trigger.
+  const native = useNativeMenu();
+  const [fallback, setFallback] = useState(false);
+  if (native && !fallback) {
     const el = trigger as ReactElement<ComponentProps<'button'>>;
     return cloneElement(el, {
       'aria-haspopup': 'menu',
       onClick: (e: React.MouseEvent<HTMLButtonElement>) => {
         el.props.onClick?.(e);
-        const actions = new Map<string, () => void>();
-        const tree = toNative(items, actions);
-        void native(tree, (id) => actions.get(id)?.()).catch(() => undefined);
+        void native(items, e.currentTarget, () => setFallback(true));
       },
     });
   }
   return (
-    <DM.Root modal={false}>
+    <DM.Root modal={false} defaultOpen={fallback}>
       <DM.Trigger asChild>{trigger}</DM.Trigger>
       <DM.Portal>
         <DM.Content className={content} sideOffset={4} align="end" {...rest}>
@@ -117,34 +115,6 @@ export function DropdownMenu({
       </DM.Portal>
     </DM.Root>
   );
-}
-
-/** Flatten specs to the host's serializable form; `actions` maps each generated id to its handler. */
-function toNative(
-  specs: MenuItemSpec[],
-  actions: Map<string, () => void>,
-  prefix = '',
-): NativeMenuItem[] {
-  return specs.map((spec, i): NativeMenuItem => {
-    const id = `${prefix}${i}`;
-    switch (spec.kind) {
-      case 'separator':
-        return { kind: 'separator' };
-      case 'item':
-        actions.set(id, spec.onSelect);
-        return { kind: 'item', id, label: spec.label, disabled: spec.disabled };
-      case 'check':
-        actions.set(id, spec.onSelect);
-        return { kind: 'check', id, label: spec.label, checked: spec.state === 'all' };
-      case 'sub':
-        return {
-          kind: 'sub',
-          label: spec.label,
-          disabled: spec.disabled,
-          items: toNative(spec.items, actions, `${id}.`),
-        };
-    }
-  });
 }
 
 export function ContextMenu({
@@ -157,10 +127,21 @@ export function ContextMenu({
   items: MenuItemSpec[] | (() => MenuItemSpec[]);
   onOpenChange?: (open: boolean) => void;
 }) {
-  const { platform } = useServices();
   const resolve = () => (typeof items === 'function' ? items() : items);
-  const native = platform.showContextMenu?.bind(platform);
+  const native = useNativeMenu(onOpenChange);
+  const [fallback, setFallback] = useState(false);
   const [open, setOpen] = useState(false);
+  const fallbackTrigger = useRef<HTMLElement | null>(null);
+  const [fallbackPoint, setFallbackPoint] = useState<{ clientX: number; clientY: number } | null>(
+    null,
+  );
+  // Let Radix initialize its pointer anchor after replacing an unavailable native trigger.
+  useLayoutEffect(() => {
+    if (!fallback || !fallbackPoint) return;
+    fallbackTrigger.current?.dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, ...fallbackPoint }),
+    );
+  }, [fallback, fallbackPoint]);
   const changeOpen = (o: boolean) => {
     setOpen(o);
     onOpenChange?.(o);
@@ -168,7 +149,7 @@ export function ContextMenu({
 
   // A menu anchored to a point goes stale when the page moves under it: close on scroll/resize.
   useEffect(() => {
-    if (!open || native) return;
+    if (!open || (native && !fallback)) return;
     const close = (e: Event) => {
       if (e.target instanceof Element && e.target.closest('[role="menu"]')) return;
       setOpen(false);
@@ -180,24 +161,31 @@ export function ContextMenu({
       window.removeEventListener('scroll', close, true);
       window.removeEventListener('resize', close);
     };
-  }, [open, native, onOpenChange]);
+  }, [open, native, fallback, onOpenChange]);
 
-  if (native) {
+  if (native && !fallback) {
     // Native hosts draw the menu themselves; the trigger just needs a contextmenu handler.
     return cloneElement(children as ReactElement<ComponentProps<'div'>>, {
       onContextMenu: (e: React.MouseEvent<HTMLDivElement>) => {
         e.preventDefault();
-        onOpenChange?.(true);
-        const actions = new Map<string, () => void>();
-        const tree = toNative(resolve(), actions);
-        void native(tree, (id) => actions.get(id)?.()).catch(() => undefined);
+        void native(resolve(), e.currentTarget, () => {
+          setFallbackPoint({ clientX: e.clientX, clientY: e.clientY });
+          setFallback(true);
+        });
       },
     });
   }
 
   return (
     <CM.Root modal={false} open={open} onOpenChange={changeOpen}>
-      <CM.Trigger asChild>{children}</CM.Trigger>
+      <CM.Trigger
+        asChild
+        ref={(node) => {
+          fallbackTrigger.current = node;
+        }}
+      >
+        {children}
+      </CM.Trigger>
       <CM.Portal>
         <CM.Content className={content}>{resolve().map((s, i) => render(CM, s, i))}</CM.Content>
       </CM.Portal>

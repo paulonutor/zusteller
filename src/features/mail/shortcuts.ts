@@ -51,7 +51,11 @@ export function useGlobalShortcuts(handlers: {
       }
       if (isEditableTarget(e.target)) return;
       // Don't fire while a menu/dialog owns the keyboard.
-      if (document.querySelector('[role="menu"]')) return;
+      if (
+        document.querySelector('[role="menu"]') ||
+        document.documentElement.hasAttribute('data-native-menu-open')
+      )
+        return;
       if (e.key === '/') {
         e.preventDefault();
         onSearch();
