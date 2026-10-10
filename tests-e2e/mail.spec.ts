@@ -59,12 +59,27 @@ test('search and menus keep destructive shortcuts from reaching mail actions', a
 test('keyboard navigation scrolls the focused virtual row into view', async ({ page }) => {
   await page.goto('/?latency=0&seed=big:5000');
   const list = page.getByRole('listbox');
+  // Load enough pages to activate virtualization, rather than only exercising the initial page.
+  await expect(page.getByRole('option')).toHaveCount(30);
+  for (const count of [60, 90]) {
+    await list.evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+    });
+    await expect(page.getByRole('option')).toHaveCount(count);
+  }
+  await list.evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+  });
+  await expect(page.locator('[role=option][aria-posinset]').first()).toBeVisible();
+  await list.evaluate((el) => {
+    el.scrollTop = 0;
+  });
   await list.focus();
   for (let i = 0; i < 35; i++) await page.keyboard.press('ArrowDown');
   const active = await list.getAttribute('aria-activedescendant');
   const row = page.locator(`[id="${active}"]`);
   await expect(row).toBeInViewport();
-  expect(await page.getByRole('option').count()).toBeLessThan(100);
+  expect(await page.getByRole('option').count()).toBeLessThan(50);
 });
 
 test('window focus events update inactive selection state', async ({ page }) => {
