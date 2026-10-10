@@ -1,0 +1,9 @@
+html:root [data-label-chip] {
+  background: color-mix(in srgb, var(--chip) 80%, var(--chip-base)) !important;
+  color: var(--chip-fg, #fff) !important;
+  font-weight: 600;
+  font-size: 10px;
+  line-height: 15px;
+  border-radius: 4px;
+  padding-inline: 5px;
+}

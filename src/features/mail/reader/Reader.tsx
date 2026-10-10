@@ -38,7 +38,7 @@ function Toolbar({
   return (
     <div
       {...dragRegionProps}
-      className="drag-region flex h-[52px] shrink-0 items-center gap-2 border-b border-border px-4"
+      className="mail-reader-toolbar drag-region flex h-[52px] shrink-0 items-center gap-2 border-b border-border px-4"
     >
       <ActionBar
         actions={actions}
@@ -126,7 +126,7 @@ function ThreadBody({
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <header className="selectable px-5 pb-3 pt-4">
+      <header className="mail-thread-header selectable px-5 pb-3 pt-4">
         <h2 className="text-[20px] font-semibold leading-snug">{thread.subject}</h2>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[12px] text-muted">
           <span>
@@ -154,7 +154,7 @@ function ThreadBody({
           )}
         </div>
       </header>
-      <div className="border-t border-border">
+      <div className="mail-thread-messages border-t border-border">
         {thread.messages.map((m) => (
           <MessageView
             key={m.id}

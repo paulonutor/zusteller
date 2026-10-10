@@ -1,0 +1,71 @@
+/* Row slots (ThreadList): rows collapse out / expand in via the grid-row trick, so the height
+   animates to the row's exact size and nothing jumps when the animation ends (useListMotion). */
+html:root [data-row-slot] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 1fr;
+}
+html:root [data-row-clip] {
+  min-height: 0;
+  min-width: 0;
+}
+html:root [data-row-slot][data-state] > [data-row-clip] {
+  overflow: hidden;
+}
+@keyframes slot-exit {
+  from {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+}
+@keyframes slot-collapse {
+  to {
+    grid-template-rows: 0fr;
+  }
+}
+@keyframes slot-enter {
+  from {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes row-flash {
+  from {
+    background-color: color-mix(in srgb, var(--accent, #0a84ff) 22%, transparent);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+html:root [data-row-slot][data-state='exit'] {
+  pointer-events: none;
+  animation: slot-exit 150ms cubic-bezier(0.3, 0, 0.8, 0.4) forwards;
+}
+/* A copy of the row is flying to a drop target. The (invisible) real row keeps its gap open until
+   the copy is on its way (`wait`), then the gap closes (`go`, once the list has dropped the row). */
+html:root [data-row-slot][data-state='exit'][data-fly='wait'] {
+  animation: none;
+  opacity: 1;
+  transform: none;
+}
+html:root [data-row-slot][data-state='exit'][data-fly='go'] {
+  animation: slot-collapse 280ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+html:root [data-row-slot][data-state='enter'] {
+  animation: slot-enter 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+html:root [data-row-slot][data-state='enter'] [role='option']:not([aria-selected='true']) {
+  animation: row-flash 1.4s ease-out both;
+}

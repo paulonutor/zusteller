@@ -1,0 +1,39 @@
+html:root body {
+  background: var(--window);
+}
+html:root [data-shell] {
+  background: var(--window);
+}
+html:root [data-pane] {
+  border-radius: var(--pane-radius);
+  overflow: hidden;
+  box-shadow: var(--pane-shadow);
+}
+html:root [data-pane='sidebar'] > nav {
+  background: var(--sidebar);
+  -webkit-backdrop-filter: var(--sidebar-blur);
+  backdrop-filter: var(--sidebar-blur);
+}
+/* Toolbars (list header + reader toolbar). */
+html:root .mail-list-header,
+html:root .mail-reader-toolbar {
+  background: var(--toolbar-bg);
+  border-bottom: 1px solid var(--toolbar-line);
+}
+html:root [data-pane='list'] > section > div:not([data-list-scroller]) {
+  border-color: var(--row-line);
+}
+/* Rows */
+html:root [data-shell] {
+  padding: 8px;
+  gap: 0;
+}
+html:root [role='separator'] {
+  width: 8px;
+  background: transparent;
+}
+html:root [role='separator'] > span {
+  inset-inline: 0;
+  left: 0;
+  width: 100%;
+}

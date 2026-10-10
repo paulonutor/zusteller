@@ -28,10 +28,11 @@ definition — keep it in sync with the base config.
 ## What exists
 
 - Window 1280x800, min 900x600, `titleBarStyle: Overlay`, hidden title, traffic lights at (20,28). `withGlobalTauri: true`.
-- Plugins: opener (capability scoped to `https://*`, `http://*`, `mailto:*` only), notification (used from Rust).
+- Plugins: dialog (confirmation sheets), opener (capability scoped to `https://*`, `http://*`, `mailto:*` only), notification (used from Rust).
 - Commands `notify`, `set_badge` (`window.set_badge_count`); native menu App/Edit/Mail/View/Window; Mail items
   (Archive, Move to Trash, Mark Read/Unread, Add/Remove Star, Find=Cmd+F) emit event `zusteller://menu` with the item id.
   No accelerators on plain-key items so they cannot fire while typing.
+- Native popup lifecycle: `show_context_menu(items, requestId)` sends correlated `{ requestId, itemId }` events. A selected id is followed by a close event with `itemId: null`. macOS popup tracking is synchronous; the command runs off the main thread and queues close after selection events. The frontend returns the chosen id or null, restores focus, and removes listeners even if the command fails. Other hosts use the Radix fallback.
 - Capability `default`: only `opener:allow-open-url` with the scope above. No fs/shell/http/core-window permissions.
 - Frontend: `src/platform/tauri.ts` (+ test). Wired via `platform/index.ts` (Tauri -> browser); menu ids (`mail.*`) map to actions in `platform/menuActions.ts` and run through `MailApp`'s shortcut handler.
 
@@ -42,13 +43,11 @@ definition — keep it in sync with the base config.
   `cfg(macos)` code paths were not compiled.
 - Frontend: vitest (platform), eslint, tsc pass.
 
-## NOT verified (needs a Mac)
+## Remaining native verification
 
-- `tauri dev/build`, the dev loop, bundling/signing/notarisation, dmg. Placeholder icon only.
-- Overlay titlebar look, traffic-light position, drag region (the frontend must provide a `data-tauri-drag-region` or equivalent
-  strip; not added since existing frontend files are off limits).
-- Vibrancy: that `sidebar` material renders, that it is window-wide (NOT sidebar-only; per-pane material needs native code),
-  Liquid Glass (not attempted), reduced-transparency behaviour, and that React backgrounds are transparent enough.
+- Release signing, notarisation, updater and dmg distribution. Placeholder icon only.
+- Paul has verified theme, traffic lights, accent live updates/inactive gray and vibrancy. See `mac-test-checklist-tauri.md` for the remaining interaction checks.
+- Liquid Glass and reduced-transparency behavior remain unverified.
 - Notifications (permission prompt; in `tauri dev` macOS attributes them to the terminal), Dock badge, menu rendering/events,
   `plugin:opener|open_url` invoke name and scope matching (the `mailto:*` pattern in particular).
 - CSP in `tauri.conf.json` is a first guess: check the dev server (Vite HMR websocket / inline styles) and the reader iframe.

@@ -24,13 +24,18 @@ export default tseslint.config(
       'test-results',
       'playwright-report',
       'src-tauri',
+      '.claude/**',
+      '.codex/**',
     ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
     files: ['**/*.{ts,tsx}'],
-    languageOptions: { globals: { ...globals.browser } },
+    languageOptions: {
+      globals: { ...globals.browser },
+      parserOptions: { tsconfigRootDir: import.meta.dirname },
+    },
     plugins: { 'react-hooks': reactHooks },
     rules: {
       ...reactHooks.configs.recommended.rules,

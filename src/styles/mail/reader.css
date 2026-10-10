@@ -1,0 +1,49 @@
+html:root .mail-reader-toolbar {
+  background: transparent;
+  height: 56px;
+}
+
+/* Reader toolbar: round icon buttons with a hover circle */
+html:root [role='toolbar'] {
+  gap: 4px;
+}
+html:root [role='toolbar'] button {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  padding: 0;
+}
+html:root [role='toolbar'] button:hover:not(:disabled) {
+  background: var(--fill-2);
+}
+html:root [role='toolbar'] button svg {
+  width: 18px;
+  height: 18px;
+}
+html:root .mail-thread-header {
+  padding: 8px 28px 14px;
+}
+html:root [data-pane='reader'] h2 {
+  font-size: 22px;
+  letter-spacing: -0.01em;
+}
+html:root [data-pane='reader'] article {
+  margin: 0 14px 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card-bg);
+  overflow: hidden;
+}
+html:root [data-pane='reader'] article:last-child {
+  border-bottom: 1px solid var(--border);
+}
+html:root .mail-thread-messages {
+  border-top: 0;
+}
+html:root .mail-message-toggle {
+  padding-block: 12px;
+}
+html:root .mail-attachments li {
+  border-radius: 10px;
+  background: var(--fill-0);
+}

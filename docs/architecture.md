@@ -1,4 +1,4 @@
-# zusteller architecture (Phase 1 reader + Phase 2 hosts)
+# zusteller architecture (Phase 1 reader + Phase 2 Tauri host)
 
 ```
 React UI (features/mail) ──► MailService (domain contract) ◄── MockMailService   (Phase 1)
@@ -10,7 +10,7 @@ React UI (features/mail) ──► MailService (domain contract) ◄── MockM
 
 ## Domain contract
 
-`MailService` follows the plan with **one addition**: `getMailboxCounts(accountId)` returns unread-thread counts per system
+`MailService` extends the plan with provider-level `moveToLabel` and `getMailboxCounts(accountId)` returns unread-thread counts per system
 mailbox and per user label. Correct counts can't be derived from paginated `getThreads`, and the plan requires "proper counts".
 Compose/draft/send methods are intentionally absent until Phase 4.
 
@@ -23,6 +23,7 @@ System mailboxes (`SystemMailbox`) and user labels stay distinct in the UI. Inte
 - Thread unread ⇔ any message unread; starred ⇔ any message starred; labels = union. Mutations apply to every message.
 - Inbox = `INBOX` ∧ ¬`TRASH` ∧ ¬`SPAM`; Sent = `SENT` ∧ ¬`TRASH` ∧ ¬`SPAM`; Starred = starred ∧ ¬`TRASH` ∧ ¬`SPAM`; All = ¬`TRASH` ∧ ¬`SPAM`;
   Junk = `SPAM` ∧ ¬`TRASH`; Trash = `TRASH`. Unread counts follow the same membership.
+- `moveToLabel` adds a user label and removes `INBOX` in one atomic provider operation. Invalid labels, unknown threads and injected failures leave the whole batch unchanged.
 - archive removes `INBOX`; trash adds `TRASH` and removes `INBOX`/`SPAM`; restore ("Move to Inbox") removes `TRASH`/`SPAM` and adds `INBOX`
   (original placement is not remembered). `markJunk` adds `SPAM` and removes `INBOX`/`TRASH`; `notJunk` removes `SPAM` and adds `INBOX`.
 - Junk threads never auto-load remote images in the reader: a banner offers "Load images" for that message only (not remembered).
@@ -45,19 +46,26 @@ reflects mutations.
 - **State**: TanStack Query (lists via `useInfiniteQuery`, `keepPreviousData` so rows stay visible while refetching).
   Selection/focus/pane widths are React state; layout and theme persist best-effort in `localStorage`.
 - **Mutations**: all go through `useMailActions().run`. Read/star update caches optimistically with rollback and an error
-  toast; archive/trash/restore/label wait for the service (their effect on mailbox membership is provider semantics we
-  don't duplicate in the UI). Every mutation then invalidates lists, counts and open threads.
+  toast. Flag writes run in order per account and flag; rollback changes only the touched fields and preserves newer pending intentions. Refetch waits for outstanding actions to settle. Archive/trash/restore/label wait for the service (their effect on mailbox membership is provider semantics we
+  don't duplicate in the UI). Action results reach the caller; drag/drop success feedback waits for the result.
 - **Actions**: `resolveActions(threads, view)` is the single source of what is available (pure, unit-tested).
   Toolbar, context menu and shortcuts all render/execute from it.
 - **Selection** (`selection.ts`, pure): click opens one; ⌘-click toggles; ⇧-click ranges; arrows move the cursor, ⇧+arrows
   extend; Space toggles; Enter opens; ⌘A selects all loaded; Esc clears. One selected row = open in the reader.
   Opening a conversation marks it read once.
-- **Filter tabs** (All / Unread / Starred): client-side over the _loaded_ rows only (not a server query). Selected rows stay
-  visible even if they no longer match, so opening an unread thread doesn't make it vanish. Tab counts are over loaded rows.
+- **List filter menu** (All / Unread / Starred): client-side over the _loaded_ rows only (not a server query). Selected rows stay
+  visible even if they no longer match, so opening an unread thread doesn't make it vanish. Filter counts are over loaded rows.
 - **Shortcuts** (`shortcuts.ts`): `E` archive · `⌫`/`Del`/`#` trash · `⇧Z` move to Inbox · `!` Mark as Junk / Not Junk (toggle, like Gmail) · `⇧I`/`⇧U` read/unread · `S` star toggle ·
   `/` or `⌘F` search. Plain keys only so they never collide with macOS ⌘ shortcuts; ignored while typing or while a menu is open.
 - **Layout**: sidebar (180–320, default 220) · list (300–640, default 410) · reader (flex, min 320). Drag or arrow-key resize.
   A 52 px drag-region header on each pane leaves room for native traffic lights (see Platform layer).
+
+### Coordination
+
+- `MailApp.tsx` composes the panes, query results and visual feedback.
+- `useMailNavigation.ts` owns the mailbox, debounced search, filter and selection reconciliation; the pure transitions stay in `selection.ts`.
+- `useMailCommands.ts` owns confirmation, action completion, mark-on-open, keyboard/native-menu dispatch and provider change notifications.
+- `usePaneLayout.ts` owns validated pane widths and best-effort persistence.
 
 ### Rows and selection look
 
@@ -87,6 +95,8 @@ reflects mutations.
 `ThemeProvider` calls `platform.setWindowTheme?.()` so the native material follows the in-app theme ("System" follows the OS).
 `main.tsx` runs `applyHostChrome`, `trackWindowFocus` and `showAccentDebug` at startup.
 
+Native popup menus return a selected item id or `null` on dismissal. Each popup uses a request id so concurrent listeners cannot consume another menu's result. The macOS host queues its close event after selection events and the adapter always unregisters the listener. `useNativeMenu.ts` shares conversion, shortcut suppression and focus restoration between dropdown and context menus; unsupported hosts fall back to Radix menus.
+
 ## Safe rendering
 
 `features/mail/reader/safe-html`: DOMPurify allow-list; `<style>` dropped, inline CSS filtered; remote images/tracking
@@ -99,20 +109,23 @@ the parent sizes the frame and intercepts link clicks. Attachments are metadata-
 - **Host**: `src-tauri/` (Rust, Tauri 2.12) is a thin shell around the frontend in `src/`;
   no UI code is copied. Native menu items reach the same action layer as toolbar and shortcuts (see Platform layer). Setup, commands
   and verification status are in `docs/tauri-host.md`; why Tauri (Wails was evaluated and removed) in `docs/host-decision.md`.
-  Nothing native has been verified on a Mac yet.
+  Paul has verified theme, accent updates, traffic lights and vibrancy on a Mac. Remaining native checks are in `docs/mac-test-checklist-tauri.md`.
 - **Vibrancy is the default**: transparent window with a macOS sidebar material; the host opens the page with
   `?vibrancy=1`, which sets `data-vibrancy` so `styles/host.css` makes backdrop, gutters and sidebar transparent (list/reader stay opaque).
   Tauri needs `macOSPrivateApi` (a private API). Opaque variant:
   `npm run tauri:dev:opaque` / `tauri:build:opaque`.
-- **Look** (`src/styles/mail.css`): "Gmail-in-glass" in light and dark: floating panes, title + search together, All/Unread/Starred tabs,
+- **Look** (`src/styles/tokens.css`, `src/styles/mail.css` importing `mail/*.css`): "Gmail-in-glass" in light and dark: floating panes, title + search together, an All/Unread/Starred filter menu,
   avatar rows with solid label chips. `?theme=dark` forces dark for one page load.
 
 ## Build and CI
 
 - Reader HTML is code-split: `SafeHtmlFrame` (with DOMPurify) is `lazy()`-loaded from `MessageView` behind `Suspense`. Vite
   `manualChunks` splits `react`, `tanstack` and `radix` vendor chunks. `base: './'` so hosts can load the build from disk.
-- `.github/workflows/frontend.yml` (every push/PR): `npm ci`, typecheck, lint, test, build.
-- `.github/workflows/tauri.yml` (when `src-tauri/**` or `src/platform/**` change): Tauri `cargo check --locked` after a frontend build. Linux only, so darwin code is not compiled in CI.
+- `.github/workflows/frontend.yml` (every push/PR): `npm ci`, typecheck, lint, test, build, Chromium visual regression and functional browser tests.
+- `npm run test:e2e` runs the functional Playwright project in `tests-e2e/`; `npm run test:visual` runs screenshot tests only. Shared platform fixtures and controllable service promises live in `tests/helpers/mail.tsx`.
+- `npm run a11y` checks app controls and iframe elements, including titles. It does not enter script-disabled email bodies; sanitizer and sandbox behavior have separate tests.
+- ESLint excludes nested agent worktrees and resolves TypeScript configuration from the repository root.
+- `.github/workflows/tauri.yml` (when `src-tauri/**` or `src/platform/**` change): Tauri `cargo check --locked` after a frontend build. Linux and macOS jobs compile their respective native code paths. Changes to this workflow also trigger it.
 
 ## Deliberately not built (later phases)
 

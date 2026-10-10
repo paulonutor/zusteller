@@ -73,7 +73,7 @@ export function MessageView({
           type="button"
           aria-expanded={expanded}
           onClick={onToggle}
-          className="flex w-full items-center gap-2 px-5 py-2.5 text-left hover:bg-hover"
+          className="mail-message-toggle flex w-full items-center gap-2 px-5 py-2.5 text-left hover:bg-hover"
         >
           {summary}
         </button>
@@ -155,7 +155,7 @@ export function MessageView({
           )}
 
           {m.attachments.length > 0 && (
-            <ul className="mt-4 flex flex-wrap gap-2" aria-label="Attachments">
+            <ul className="mail-attachments mt-4 flex flex-wrap gap-2" aria-label="Attachments">
               {m.attachments.map((a) => (
                 <li
                   key={a.id}

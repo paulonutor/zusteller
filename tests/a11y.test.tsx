@@ -90,6 +90,7 @@ describe('axe (structure, names, roles)', () => {
   it('offline shows an error screen (not an endless skeleton)', async () => {
     setup({ offline: true });
     await screen.findByText('Can’t load your mail');
+    expect(within(screen.getByRole('main')).getByRole('alert')).toBeInTheDocument();
     await expectNoViolations();
   });
 });

@@ -13,13 +13,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "a11y": "node scripts/a11y-audit.mjs http://localhost:47831",
-    "test:visual": "playwright test",
-    "test:visual:update": "playwright test --update-snapshots",
+    "test:visual": "playwright test --project=chromium",
+    "test:visual:update": "playwright test --project=chromium --update-snapshots",
     "test:visual:docker": "scripts/visual-docker.sh",
     "test:visual:docker:update": "scripts/visual-docker.sh --update-snapshots",
     "tauri": "tauri",
     "tauri:dev:opaque": "tauri dev --config src-tauri/tauri.opaque.conf.json",
-    "tauri:build:opaque": "tauri build --config src-tauri/tauri.opaque.conf.json"
+    "tauri:build:opaque": "tauri build --config src-tauri/tauri.opaque.conf.json",
+    "test:e2e": "playwright test --project=functional"
   },
   "dependencies": {
     "@radix-ui/react-context-menu": "^2.3.8",

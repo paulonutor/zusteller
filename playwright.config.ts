@@ -35,7 +35,10 @@ export default defineConfig({
       ],
     },
   },
-  projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
+  projects: [
+    { name: 'chromium', use: { browserName: 'chromium' } },
+    { name: 'functional', testDir: './tests-e2e', use: { browserName: 'chromium' } },
+  ],
   webServer: {
     command: `npm run dev -- --port ${PORT} --strictPort`,
     url: `http://localhost:${PORT}`,

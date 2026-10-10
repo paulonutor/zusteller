@@ -17,7 +17,13 @@ const browser = await chromium
   .catch(() => chromium.launch({ executablePath: undefined }));
 
 async function audit(page, theme, variant, state) {
-  const res = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+  // Email documents forbid scripts, so axe's recursive frame runner cannot finish there.
+  // Audit app controls and iframe elements (including their titles), without entering email bodies.
+  const res = await new AxeBuilder({ page })
+    .setLegacyMode(true)
+    .options({ iframes: false })
+    .withTags(TAGS)
+    .analyze();
   for (const v of res.violations)
     for (const n of v.nodes) {
       // Radix menu portals sit outside the landmarks by design (role=menu); known axe noise.

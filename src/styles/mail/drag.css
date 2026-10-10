@@ -1,0 +1,63 @@
+/* Drag images (built off-screen by features/mail/dnd.ts). */
+.drag-chip {
+  position: fixed;
+  top: -200px;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  color: var(--foreground);
+  font:
+    500 13px/1.2 -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  white-space: nowrap;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
+}
+.drag-chip-dot {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: 9999px;
+}
+/* A lifted copy of the row; the padding leaves room for the tilted cards behind it. */
+.drag-stack {
+  position: fixed;
+  top: -600px;
+  left: 0;
+  color: var(--foreground);
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+.drag-card {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-raised) !important;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.25);
+}
+.drag-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  box-sizing: border-box;
+  border-radius: 9999px;
+  background: var(--accent);
+  color: #fff;
+  font:
+    600 12px/24px -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  text-align: center;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
+}

@@ -1,0 +1,250 @@
+html:root [role='option'] {
+  height: var(--row-h);
+  border-radius: var(--row-radius);
+  border-bottom-color: var(--row-line);
+}
+/* Selected row text: readable on the (dark/blue) selection fill. */
+html:root [role='listbox']:focus-within [role='option'][aria-selected='true'] {
+  color: var(--on-selection);
+  --muted: var(--on-selection-dim);
+  --faint: var(--on-selection-dim);
+  --unread: var(--on-selection);
+  --star: var(--on-selection);
+}
+html:root [role='option'] [class~='text-foreground/90'] {
+  color: inherit;
+}
+html:root [role='listbox']:focus-within [role='option'][aria-selected='true'] .fill-star {
+  fill: var(--on-selection);
+}
+html:root [role='option'][aria-selected='true'] {
+  outline: none;
+}
+
+html:root [data-pane='list'] :is([role='checkbox'], [data-row-check]) {
+  width: 18px;
+  height: 18px;
+  border-width: 2px;
+  border-radius: 4px;
+  background: transparent;
+}
+html:root [data-pane='list'] [role='checkbox'][aria-checked='true'],
+html:root [data-pane='list'] [role='checkbox'][aria-checked='mixed'],
+html:root [data-pane='list'] [data-row-check][data-checked='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+html:root [data-pane='list'] :is([role='checkbox'], [data-row-check]) svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* Rows: avatar that morphs into a checkbox, two lines, soft tinted selection */
+html:root [role='listbox'] {
+  padding: 2px 0 8px;
+}
+html:root [role='option'] {
+  margin: 1px 8px;
+  padding: 0 12px 0 6px;
+  align-items: center;
+  border-radius: 12px;
+  gap: 8px;
+}
+html:root [role='option'] [data-lead] {
+  width: 32px;
+  height: 32px;
+  padding-top: 0;
+}
+/* Avatar -> checkbox: the avatar is the resting state; the checkbox takes its place
+   on hover / keyboard focus, and everywhere once the list is in selection mode. */
+html:root [role='option'] [data-avatar] {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: hsl(var(--av-h) 40% 88%);
+  background: hsl(var(--av-h) 26% 34%);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+html:root:not(.dark) [role='option'] [data-avatar] {
+  color: hsl(var(--av-h) 45% 24%);
+  background: hsl(var(--av-h) 40% 84%);
+}
+html:root [role='option'] [data-unread-dot] {
+  display: block !important;
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 10px;
+  height: 10px;
+  box-sizing: border-box;
+  border: 2px solid var(--background);
+  background: var(--unread);
+  transition: opacity 120ms ease;
+}
+html:root [role='option'] [data-row-check] {
+  display: flex !important;
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.8);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease,
+    width 120ms ease,
+    height 120ms ease,
+    background-color 120ms ease;
+}
+/* Reveal the checkbox, hide avatar + unread dot. Hover only counts over the avatar itself
+   (not the whole row). */
+html:root [role='option'] [data-lead]:hover [data-row-check],
+html:root [data-kbd='true'] [role='option'][data-focused='true'] [data-row-check],
+html:root [role='listbox'][data-selection-mode='true'] [data-row-check] {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+html:root [role='option'] [data-lead]:hover [data-avatar],
+html:root [data-kbd='true'] [role='option'][data-focused='true'] [data-avatar],
+html:root [role='listbox'][data-selection-mode='true'] [data-avatar] {
+  opacity: 0;
+  transform: scale(0.8);
+}
+html:root [role='option'] [data-lead]:hover [data-unread-dot],
+html:root [data-kbd='true'] [role='option'][data-focused='true'] [data-unread-dot],
+html:root [role='listbox'][data-selection-mode='true'] [data-unread-dot] {
+  opacity: 0;
+}
+/* Checked: round checkmark filling the avatar circle. */
+html:root [role='option'][aria-selected='true'] [data-row-check][data-checked='true'] {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border-color: transparent;
+  background: var(--on-selection, #fff);
+  color: var(--selection, var(--accent));
+}
+html:root [role='option'][aria-selected='true'] [data-row-check][data-checked='true'] svg {
+  width: 17px;
+  height: 17px;
+}
+/* Star: right of the time, only when starred or on hover / focus. Space is always reserved. */
+html:root [role='option'] [data-star] {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-left: 2px;
+  margin-right: -4px;
+  padding: 0;
+  border-radius: 999px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+html:root [role='option']:hover [data-star],
+html:root [data-kbd='true'] [role='option'][data-focused='true'] [data-star],
+html:root [role='option'] [data-star][data-starred='true'] {
+  opacity: 1;
+  pointer-events: auto;
+}
+html:root [role='option'] [data-star]:hover {
+  background: var(--hover);
+}
+html:root [role='option'] [data-star] svg {
+  width: 16px;
+  height: 16px;
+}
+@media (prefers-reduced-motion: reduce) {
+  html:root [role='option'] [data-avatar],
+  html:root [role='option'] [data-unread-dot],
+  html:root [role='option'] [data-row-check],
+  html:root [role='option'] [data-star] {
+    transition: none;
+  }
+}
+html:root [role='option'] .fill-star,
+html:root [role='listbox']:focus-within [role='option'][aria-selected='true'] .fill-star {
+  fill: var(--gm-star);
+  color: var(--gm-star);
+}
+html:root [role='option'][aria-selected='true'] {
+  background: var(--selection);
+  box-shadow: inset 0 0 0 1px var(--sel-ring);
+}
+html:root [role='listbox']:not(:focus-within) [role='option'][aria-selected='true'] {
+  background: var(--selection-inactive);
+  box-shadow: none;
+}
+html:root [role='listbox']:focus-within [role='option'][aria-selected='true'] {
+  --unread: var(--on-selection);
+  --star: var(--gm-star);
+}
+html:root [role='option'] [data-sender] {
+  font-size: 14px;
+}
+html:root [role='option'][data-unread='true'] [data-sender] {
+  font-weight: 700;
+}
+html:root [role='option'][data-unread='false'] [data-sender] {
+  font-weight: 400;
+  color: var(--muted);
+}
+html:root [role='option'][aria-selected='true'][data-unread='false'] [data-sender] {
+  color: inherit;
+}
+/* Three rows: sender + date, subject, snippet + labels. */
+html:root [role='option'] [data-line2] {
+  margin-top: 1px;
+}
+html:root [role='option'] [data-subject] {
+  font-weight: 400;
+}
+html:root [role='option'][data-unread='true'] [data-subject] {
+  font-weight: 600;
+}
+html:root [role='option'] [data-snippet-row] {
+  min-width: 0;
+  margin-top: 1px;
+}
+/* Gmail label chips: solid label colour, white or dark text by luminance (chipTextColor). Same chip in the list, popover and reader. */
+html:root [role='option'] [data-label-overflow] {
+  font-size: 10px;
+  line-height: 15px;
+  padding-inline: 5px;
+}
+
+/* ---- Misc ---- */
+/* Generous hit area: the visible circle is small, so an invisible extension (part of the button,
+   and of its hover zone) turns near-misses into a toggle instead of a row click that would replace
+   the selection. Only active while the checkbox is revealed (it is pointer-events: none otherwise). */
+html:root [role='option'] [data-row-check]::before {
+  content: '';
+  position: absolute;
+  inset: -16px -10px;
+  border-radius: 14px;
+}
+
+/* Mail tints the source-list icons with the system accent colour. */
+/* The list scroller is focusable (it owns the keyboard cursor), but the rows show focus themselves;
+   the global :focus-visible ring around the whole list is noise. */
+html:root [data-list-scroller]:focus-visible {
+  outline: none;
+}
+
+/* Rows used to share a collapsed 1px margin; inside slots margins can't collapse, so keep only the
+   top one (same row pitch as before). Windowed lists wrap rows themselves and are unaffected. */
+html:root [data-row-clip] > [role='option'] {
+  margin-bottom: 0;
+}

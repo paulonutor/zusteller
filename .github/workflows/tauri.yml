@@ -5,12 +5,12 @@ on:
     paths:
       - 'src-tauri/**'
       - 'src/platform/**'
-      - '.github/workflows/hosts.yml'
+      - '.github/workflows/tauri.yml'
   pull_request:
     paths:
       - 'src-tauri/**'
       - 'src/platform/**'
-      - '.github/workflows/hosts.yml'
+      - '.github/workflows/tauri.yml'
 
 permissions:
   contents: read

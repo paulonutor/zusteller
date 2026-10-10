@@ -1,6 +1,6 @@
 /* ---- Native host chrome (Tauri overlay titlebar) ---------------------------------- */
 /* Traffic lights float over the top-left of the sidebar: push its header content below them. */
-:root[data-host] [data-pane='sidebar'] > nav > .drag-region {
+:root[data-host] .mail-sidebar-header {
   height: 84px !important;
   padding-top: 48px !important;
   align-items: flex-end;

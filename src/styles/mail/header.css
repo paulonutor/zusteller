@@ -1,0 +1,46 @@
+/* ---- Layout: search bar on top, category tabs, soft-tinted rows ---- */
+html:root .mail-list-header {
+  background: transparent;
+  height: 64px;
+  padding: 10px 12px 6px;
+  gap: 12px;
+}
+html:root .mail-list-header > div {
+  padding-left: 4px;
+}
+html:root .mail-list-header h1 {
+  font-size: 17px;
+  font-weight: 700;
+}
+html:root [data-pane='list'] input[type='search'] {
+  height: 38px;
+  padding-left: 40px;
+  padding-right: 36px;
+  font-size: 14px;
+  background: var(--fill-1);
+  box-shadow: none;
+  transition:
+    background 0.15s,
+    box-shadow 0.15s;
+}
+html:root [data-pane='list'] input[type='search']:hover {
+  background: var(--fill-2);
+}
+html:root [data-pane='list'] input[type='search']:focus {
+  background: var(--search-focus-bg);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--accent) 70%, transparent),
+    0 4px 14px var(--focus-shadow);
+}
+html:root [data-pane='list'] header label > svg {
+  left: 16px;
+  width: 19px;
+  height: 19px;
+}
+html:root [data-pane='list'] header label button svg {
+  width: 16px;
+  height: 16px;
+}
+html:root [data-pane='list'] header label button {
+  right: 12px;
+}

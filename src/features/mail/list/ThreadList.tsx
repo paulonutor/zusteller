@@ -248,7 +248,7 @@ export function ThreadList(p: Props) {
     <section aria-label={p.title} className="flex h-full min-w-0 flex-col bg-background">
       <header
         {...dragRegionProps}
-        className="drag-region flex h-[52px] shrink-0 items-center gap-2 border-b border-border px-3"
+        className="mail-list-header drag-region flex h-[52px] shrink-0 items-center gap-2 border-b border-border px-3"
       >
         <div className="min-w-0 shrink-0">
           <h1 className="text-[15px] font-semibold leading-tight">{p.title}</h1>
