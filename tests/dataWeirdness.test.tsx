@@ -6,17 +6,10 @@ import { createServices } from '@/app/createServices';
 import type { Message } from '@/domain/mail';
 import { MockMailService, createSeedData } from '@/infrastructure/mail/mock';
 import type { SeedData } from '@/infrastructure/mail/mock/seed';
-import type { PlatformService } from '@/platform';
+import { createTestPlatform } from './helpers/mail';
 
 const A = 'acct-1';
-const platform: PlatformService = {
-  showNotification: vi.fn().mockResolvedValue(undefined),
-  setBadge: vi.fn().mockResolvedValue(undefined),
-  openExternal: vi.fn().mockResolvedValue(undefined),
-  setWindowTheme: vi.fn().mockResolvedValue(undefined),
-  confirm: () => Promise.resolve(true),
-  subscribeMenuActions: () => () => {},
-};
+const platform = createTestPlatform();
 
 const rows = () => screen.queryAllByRole('option');
 const waitForRows = (min = 1) => waitFor(() => expect(rows().length).toBeGreaterThanOrEqual(min));

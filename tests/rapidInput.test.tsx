@@ -3,16 +3,9 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '@/app/App';
 import { MockMailService, createSeedData } from '@/infrastructure/mail/mock';
-import type { PlatformService } from '@/platform';
+import { createTestPlatform } from './helpers/mail';
 
-const platform: PlatformService = {
-  showNotification: vi.fn().mockResolvedValue(undefined),
-  setBadge: vi.fn().mockResolvedValue(undefined),
-  openExternal: vi.fn().mockResolvedValue(undefined),
-  setWindowTheme: vi.fn().mockResolvedValue(undefined),
-  confirm: () => Promise.resolve(true),
-  subscribeMenuActions: () => () => {},
-};
+const platform = createTestPlatform();
 
 const rows = () => screen.queryAllByRole('option');
 const waitForRows = () => waitFor(() => expect(rows().length).toBeGreaterThan(3));

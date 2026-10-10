@@ -7,7 +7,11 @@ import type { MailView } from './view';
 /** Actions that move a conversation between mailboxes: the first group of the context menu. */
 const PRIMARY = new Set<string>(['archive', 'trash', 'restore', 'notJunk', 'deleteForever']);
 
-export type Perform = (action: PerformAction, ids: ID[], opts?: { labelId?: ID }) => void;
+export type Perform = (
+  action: PerformAction,
+  ids: ID[],
+  opts?: { labelId?: ID },
+) => Promise<boolean>;
 
 /**
  * Derives everything a menu or toolbar needs for a set of threads from the one
@@ -19,55 +23,53 @@ export function buildThreadActions(
   labels: Label[],
   perform: Perform,
 ) {
-  {
-    const ids = threads.map((t) => t.id);
-    const actions = resolveActions(threads, view);
-    const states = labelStates(threads, labels);
-    const userLabels = labels.filter((l) => l.type === 'user');
-    const none = threads.length === 0;
-    // Junk and Trash are places to leave, not to organise.
-    const canLabel = !(
-      view.kind === 'mailbox' &&
-      (view.mailbox === 'junk' || view.mailbox === 'trash')
-    );
+  const ids = threads.map((t) => t.id);
+  const actions = resolveActions(threads, view);
+  const states = labelStates(threads, labels);
+  const userLabels = labels.filter((l) => l.type === 'user');
+  const none = threads.length === 0;
+  // Junk and Trash are places to leave, not to organise.
+  const canLabel = !(
+    view.kind === 'mailbox' &&
+    (view.mailbox === 'junk' || view.mailbox === 'trash')
+  );
 
-    const labelItems: MenuItemSpec[] = userLabels.map((l) => ({
-      kind: 'check',
-      label: l.name,
-      color: l.color,
-      state: states.get(l.id) ?? 'none',
-      // 'all' => remove from everything; otherwise add to all.
-      onSelect: () =>
-        perform(states.get(l.id) === 'all' ? 'removeLabel' : 'addLabel', ids, { labelId: l.id }),
-    }));
+  const labelItems: MenuItemSpec[] = userLabels.map((l) => ({
+    kind: 'check',
+    label: l.name,
+    color: l.color,
+    state: states.get(l.id) ?? 'none',
+    // 'all' => remove from everything; otherwise add to all.
+    onSelect: () =>
+      perform(states.get(l.id) === 'all' ? 'removeLabel' : 'addLabel', ids, { labelId: l.id }),
+  }));
 
-    const toItem = (a: ActionDescriptor): MenuItemSpec => ({
-      kind: 'item',
-      label: a.label,
-      shortcut: a.shortcut,
-      disabled: !a.enabled,
-      onSelect: () => perform(a.id, ids),
-    });
+  const toItem = (a: ActionDescriptor): MenuItemSpec => ({
+    kind: 'item',
+    label: a.label,
+    shortcut: a.shortcut,
+    disabled: !a.enabled,
+    onSelect: () => perform(a.id, ids),
+  });
 
-    const contextItems: MenuItemSpec[] = [
-      ...actions.filter((a) => PRIMARY.has(a.id)).map(toItem),
-      { kind: 'separator' },
-      ...actions.filter((a) => !PRIMARY.has(a.id)).map(toItem),
-      ...(canLabel
-        ? ([
-            { kind: 'separator' },
-            {
-              kind: 'sub',
-              label: 'Labels',
-              disabled: none || userLabels.length === 0,
-              items: labelItems,
-            },
-          ] as MenuItemSpec[])
-        : []),
-    ];
+  const contextItems: MenuItemSpec[] = [
+    ...actions.filter((a) => PRIMARY.has(a.id)).map(toItem),
+    { kind: 'separator' },
+    ...actions.filter((a) => !PRIMARY.has(a.id)).map(toItem),
+    ...(canLabel
+      ? ([
+          { kind: 'separator' },
+          {
+            kind: 'sub',
+            label: 'Labels',
+            disabled: none || userLabels.length === 0,
+            items: labelItems,
+          },
+        ] as MenuItemSpec[])
+      : []),
+  ];
 
-    return { actions, labelItems, contextItems, hasLabels: userLabels.length > 0, canLabel, none };
-  }
+  return { actions, labelItems, contextItems, hasLabels: userLabels.length > 0, canLabel, none };
 }
 
 export function useThreadActions(

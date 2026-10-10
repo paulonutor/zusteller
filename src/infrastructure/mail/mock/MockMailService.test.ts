@@ -361,3 +361,34 @@ describe('junk', () => {
     await expect(svc.addLabel(A, ['t1'], 'SPAM')).rejects.toMatchObject({ code: 'invalid' });
   });
 });
+
+describe('move to label', () => {
+  it('labels every message and removes Inbox in one call', async () => {
+    await svc.moveToLabel(A, ['t1', 't2'], 'L2');
+    for (const id of ['t1', 't2']) {
+      const thread = await svc.getThread(A, id);
+      for (const message of thread.messages) {
+        expect(message.labelIds).toContain('L2');
+        expect(message.labelIds).not.toContain('INBOX');
+      }
+    }
+    expect((await svc.getThread(A, 't1')).labelIds).toContain('L1');
+  });
+
+  it.each(['unknown', 'INBOX'])('rejects label %s without changing any messages', async (label) => {
+    const before = await svc.getThread(A, 't2');
+    await expect(svc.moveToLabel(A, ['t2'], label)).rejects.toMatchObject({ code: 'invalid' });
+    expect(await svc.getThread(A, 't2')).toEqual(before);
+  });
+
+  it('validates the entire batch and fails before applying either change', async () => {
+    const before = await svc.getThread(A, 't1');
+    await expect(svc.moveToLabel(A, ['t1', 'missing'], 'L2')).rejects.toMatchObject({
+      code: 'not_found',
+    });
+    expect(await svc.getThread(A, 't1')).toEqual(before);
+    svc.failNext('moveToLabel');
+    await expect(svc.moveToLabel(A, ['t1'], 'L2')).rejects.toMatchObject({ code: 'simulated' });
+    expect(await svc.getThread(A, 't1')).toEqual(before);
+  });
+});

@@ -1,4 +1,5 @@
 import { createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { deferred } from './helpers/mail';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '@/app/App';
 import { MockMailService, createSeedData } from '@/infrastructure/mail/mock';
@@ -143,5 +144,36 @@ describe('dragging a label onto conversations', () => {
     await waitFor(async () => expect(await labelsOf(row.id)).toContain('label-finance'));
     fireEvent.dragStart(side(/^Finance/), { dataTransfer: dataTransfer() });
     await waitFor(() => expect(row).toHaveAttribute('data-drop', 'invalid'));
+  });
+});
+
+describe('drop completion feedback', () => {
+  it('waits for a move to finish before reporting success', async () => {
+    await waitForRows();
+    const row = rows()[0]!;
+    const gate = deferred<void>();
+    const move = mail.moveToLabel.bind(mail);
+    const spy = vi.spyOn(mail, 'moveToLabel').mockImplementationOnce(async (...args) => {
+      await gate.promise;
+      await move(...args);
+    });
+    drag(row, side(/^Finance/));
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/Moved 1 conversation to/)).not.toBeInTheDocument();
+    gate.resolve();
+    expect(await screen.findByText(/Moved 1 conversation to/)).toBeVisible();
+    await waitFor(() => expect(document.getElementById(row.id)).toBeNull());
+  });
+
+  it('reports a failed move without a success toast or partial label change', async () => {
+    await waitForRows();
+    const row = rows()[0]!;
+    const before = await labelsOf(row.id);
+    mail.failNext('moveToLabel');
+    drag(row, side(/^Finance/));
+    expect(await screen.findByText(/Couldn.t move to label/)).toBeVisible();
+    expect(screen.queryByText(/Moved 1 conversation to/)).not.toBeInTheDocument();
+    expect(await labelsOf(row.id)).toEqual(before);
+    expect(document.getElementById(row.id)).not.toBeNull();
   });
 });

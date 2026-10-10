@@ -1,12 +1,11 @@
 import { useCallback, useRef } from 'react';
-import { useQueryClient, type InfiniteData, type QueryClient } from '@tanstack/react-query';
-import { mailKeys, type ID, type Page, type ThreadSummary } from '@/domain/mail';
+import { useQueryClient } from '@tanstack/react-query';
+import { mailKeys, type ID } from '@/domain/mail';
 import { useServices } from '@/app/services';
 import { useToast } from '@/app/toast';
 import type { PerformAction } from './actions';
 
-type ListData = InfiniteData<Page<ThreadSummary>, string | undefined>;
-type Patch = (t: ThreadSummary) => ThreadSummary;
+import { OptimisticFlags, type Flag } from './optimisticFlags';
 
 const VERBS: Record<PerformAction, string> = {
   archive: 'archive',
@@ -24,25 +23,6 @@ const VERBS: Record<PerformAction, string> = {
   deleteForever: 'delete permanently',
 };
 
-/** Optimistically patch flags in every cached list. Only used for trivial, semantics-free flags. */
-async function patchLists(qc: QueryClient, accountId: ID, ids: Set<ID>, patch: Patch) {
-  const key = mailKeys.threads(accountId);
-  await qc.cancelQueries({ queryKey: key });
-  const snapshot = qc.getQueriesData<ListData>({ queryKey: key });
-  qc.setQueriesData<ListData>({ queryKey: key }, (data) =>
-    data && 'pages' in data
-      ? {
-          ...data,
-          pages: data.pages.map((p) => ({
-            ...p,
-            items: p.items.map((t) => (ids.has(t.id) ? patch(t) : t)),
-          })),
-        }
-      : data,
-  );
-  return () => snapshot.forEach(([k, v]) => qc.setQueryData(k, v));
-}
-
 /** Accounts and labels never change in V1; lists, counts and threads do. */
 const isMutable = (q: { queryKey: readonly unknown[] }) =>
   ['threads', 'counts', 'thread'].includes(String(q.queryKey[1]));
@@ -58,26 +38,48 @@ export function useMailActions(accountId: ID | undefined) {
   // Identical action on identical threads already in flight (double-click, key mashing) is one
   // mutation: later callers share the first call's result instead of firing the service again.
   const inFlight = useRef(new Map<string, Promise<boolean>>());
+  const latestIntent = useRef(new Map<string, string>());
+  const flagQueues = useRef(new Map<string, Promise<void>>());
+  const pendingCount = useRef(0);
+  const optimistic = useRef<OptimisticFlags | null>(null);
+  optimistic.current ??= new OptimisticFlags(qc);
 
   const execute = useCallback(
     async (action: PerformAction, threadIds: ID[], opts: RunOptions) => {
       if (!accountId) return false;
-      const ids = new Set(threadIds);
-      let rollback: (() => void) | undefined;
+      let settle: ((success: boolean) => void) | undefined;
+      let success = false;
+      const writeFlag = async (flag: Flag, value: boolean, write: () => Promise<void>) => {
+        const key = JSON.stringify([accountId, flag]);
+        const previous = flagQueues.current.get(key) ?? Promise.resolve();
+        const patch = optimistic.current!.patch(accountId, threadIds, flag, value);
+        const next = (async () => {
+          settle = await patch;
+          await previous;
+          await write();
+        })();
+        const done = next.catch(() => undefined);
+        flagQueues.current.set(key, done);
+        try {
+          await next;
+        } finally {
+          if (flagQueues.current.get(key) === done) flagQueues.current.delete(key);
+        }
+      };
       try {
         switch (action) {
           case 'markRead':
           case 'markUnread': {
             const read = action === 'markRead';
-            rollback = await patchLists(qc, accountId, ids, (t) => ({ ...t, isRead: read }));
-            await mail.markRead(accountId, threadIds, read);
+            await writeFlag('isRead', read, () => mail.markRead(accountId, threadIds, read));
             break;
           }
           case 'star':
           case 'unstar': {
             const starred = action === 'star';
-            rollback = await patchLists(qc, accountId, ids, (t) => ({ ...t, isStarred: starred }));
-            await mail.setStarred(accountId, threadIds, starred);
+            await writeFlag('isStarred', starred, () =>
+              mail.setStarred(accountId, threadIds, starred),
+            );
             break;
           }
           case 'archive':
@@ -102,39 +104,55 @@ export function useMailActions(accountId: ID | undefined) {
             await mail.addLabel(accountId, threadIds, opts.labelId!);
             break;
           case 'moveToLabel':
-            // Gmail's "move to": file under the label and take it out of the Inbox.
-            await mail.addLabel(accountId, threadIds, opts.labelId!);
-            await mail.archive(accountId, threadIds);
+            await mail.moveToLabel(accountId, threadIds, opts.labelId!);
             break;
           case 'removeLabel':
             await mail.removeLabel(accountId, threadIds, opts.labelId!);
             break;
         }
+        success = true;
         return true;
       } catch (e) {
-        rollback?.();
         const reason = e instanceof Error ? e.message : 'Unknown error';
         toast.show(`Couldn't ${VERBS[action]}. ${reason}`, 'error');
         return false;
       } finally {
-        // Counts, lists and open threads may all be affected; refetch them.
-        void qc.invalidateQueries({ queryKey: mailKeys.all, predicate: isMutable });
+        settle?.(success);
       }
     },
-    [accountId, mail, qc, toast],
+    [accountId, mail, toast],
   );
 
   const run = useCallback(
     (action: PerformAction, threadIds: ID[], opts: RunOptions = {}): Promise<boolean> => {
       if (!accountId || threadIds.length === 0) return Promise.resolve(false);
-      const dedupeKey = `${action}|${opts.labelId ?? ''}|${[...new Set(threadIds)].sort().join(',')}`;
+      const ids = [...new Set(threadIds)].sort();
+      const target = JSON.stringify([
+        accountId,
+        action === 'star' || action === 'unstar'
+          ? 'star'
+          : action === 'markRead' || action === 'markUnread'
+            ? 'read'
+            : action,
+        opts.labelId,
+        ids,
+      ]);
+      const dedupeKey = JSON.stringify([target, action]);
       const pending = inFlight.current.get(dedupeKey);
-      if (pending) return pending;
-      const p = execute(action, threadIds, opts).finally(() => inFlight.current.delete(dedupeKey));
+      if (pending && latestIntent.current.get(target) === action) return pending;
+      latestIntent.current.set(target, action);
+      pendingCount.current++;
+      const p = execute(action, ids, opts).finally(() => {
+        if (inFlight.current.get(dedupeKey) === p) inFlight.current.delete(dedupeKey);
+        if (--pendingCount.current === 0) {
+          latestIntent.current.clear();
+          void qc.invalidateQueries({ queryKey: mailKeys.all, predicate: isMutable });
+        }
+      });
       inFlight.current.set(dedupeKey, p);
       return p;
     },
-    [accountId, execute],
+    [accountId, execute, qc],
   );
 
   const refresh = useCallback(

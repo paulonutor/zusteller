@@ -91,6 +91,8 @@ export interface MailService {
    */
   subscribe?(listener: () => void): () => void;
   addLabel(accountId: ID, threadIds: ID[], labelId: ID): Promise<void>;
+  /** File under a user label and remove Inbox membership in one operation. Failure leaves the batch unchanged. */
+  moveToLabel(accountId: ID, threadIds: ID[], labelId: ID): Promise<void>;
   removeLabel(accountId: ID, threadIds: ID[], labelId: ID): Promise<void>;
 }
 

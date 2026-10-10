@@ -294,6 +294,19 @@ export class MockMailService implements MailService {
     );
   }
 
+  moveToLabel(accountId: ID, threadIds: ID[], labelId: ID) {
+    return this.mutate(
+      'moveToLabel',
+      accountId,
+      threadIds,
+      (m) => {
+        this.addId(m, labelId);
+        this.removeId(m, SYSTEM_LABEL.inbox);
+      },
+      () => this.requireUserLabel(accountId, labelId),
+    );
+  }
+
   removeLabel(accountId: ID, threadIds: ID[], labelId: ID) {
     return this.mutate(
       'removeLabel',

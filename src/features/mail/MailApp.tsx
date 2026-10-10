@@ -1,62 +1,23 @@
 import { dragRegionProps } from '@/platform/hostChrome';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { MAILBOXES, type ID, type ThreadSummary } from '@/domain/mail';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { MAILBOXES, type ID } from '@/domain/mail';
 import { useServices } from '@/app/services';
 import { Resizer } from '@/components/ui/Resizer';
 import { flyRowsToTarget } from './dropAnimation';
-import { resolveActions, type MailActionId } from './actions';
 import { WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import { useAccounts, useCounts, useLabels, useThread, useThreadList } from './hooks';
-import { ThreadList, type ListFilter } from './list/ThreadList';
+import { useAccounts, useCounts, useLabels, useThread } from './hooks';
+import { ThreadList } from './list/ThreadList';
 import { Reader } from './reader/Reader';
 import { Sidebar } from './sidebar/Sidebar';
-import {
-  clickRow,
-  emptySelection,
-  moveFocus,
-  nextAfterRemoval,
-  openId,
-  prune,
-  selectAll,
-  toggleRow,
-  type Selection,
-} from './selection';
-import { useGlobalShortcuts } from './shortcuts';
-import { buildThreadActions, type Perform } from './useThreadActions';
-import { useMailActions } from './useMailActions';
+import { clickRow, moveFocus, selectAll, toggleRow } from './selection';
+import { buildThreadActions } from './useThreadActions';
+import { useMailCommands } from './useMailCommands';
+import { useMailNavigation } from './useMailNavigation';
+import { PANE_LIMITS, usePaneLayout } from './usePaneLayout';
 import { planThreadDrop, type DropTarget } from './dnd';
 import { useToast } from '@/app/toast';
 import { prepareExternalUrl } from './links';
-import { toQuery, type MailView } from './view';
-
-const LAYOUT_KEY = 'zusteller.layout';
-const LIMITS = { sidebar: [180, 320], list: [300, 640] } as const;
-const clamp = (v: number, [lo, hi]: readonly [number, number]) => Math.max(lo, Math.min(hi, v));
-
-function loadLayout() {
-  try {
-    const v = JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? '{}') as {
-      sidebar?: number;
-      list?: number;
-    };
-    return {
-      sidebar: clamp(v.sidebar ?? 220, LIMITS.sidebar),
-      list: clamp(v.list ?? 410, LIMITS.list),
-    };
-  } catch {
-    return { sidebar: 220, list: 410 };
-  }
-}
-
-function useDebounced<T>(value: T, ms: number): T {
-  const [v, setV] = useState(value);
-  useEffect(() => {
-    const id = setTimeout(() => setV(value), ms);
-    return () => clearTimeout(id);
-  }, [value, ms]);
-  return v;
-}
 
 const EMPTY: Record<string, string> = {
   inbox: 'Your inbox is empty.',
@@ -68,7 +29,7 @@ const EMPTY: Record<string, string> = {
 };
 
 export function MailApp() {
-  const { platform, mail } = useServices();
+  const { platform } = useServices();
   const toast = useToast();
   const accounts = useAccounts();
   const account = accounts.data?.[0];
@@ -77,182 +38,29 @@ export function MailApp() {
   const labels = useMemo(() => labelsQ.data ?? [], [labelsQ.data]);
   const counts = useCounts(accountId);
 
-  const [view, setViewState] = useState<MailView>({ kind: 'mailbox', mailbox: 'inbox' });
-  const [searchText, setSearchTextState] = useState('');
-  const search = useDebounced(searchText, 250);
-  const [selection, setSelection] = useState<Selection>(emptySelection);
-  const [filter, setFilterState] = useState<ListFilter>('all');
-  const [layout, setLayout] = useState(loadLayout);
+  const navigation = useMailNavigation(accountId);
+  const {
+    view,
+    setView,
+    searchText,
+    search,
+    setSearchText,
+    filter,
+    setFilter,
+    query,
+    list,
+    items,
+    ids,
+    filterCounts,
+    selection,
+    setSelection,
+    selectedSummaries,
+    open,
+  } = navigation;
+  const { layout, setLayout } = usePaneLayout();
   const searchRef = useRef<HTMLInputElement | null>(null);
-
-  // A different view or search shows different rows, so the old selection is meaningless.
-  const setView = (v: MailView) => {
-    setViewState(v);
-    setSelection(emptySelection);
-  };
-  const setFilter = (f: ListFilter) => {
-    setFilterState(f);
-    setSelection(emptySelection);
-  };
-  const setSearchText = (t: string) => {
-    setSearchTextState(t);
-    setSelection(emptySelection);
-  };
-
-  const query = accountId ? toQuery(accountId, view, search) : undefined;
-  const list = useThreadList(query);
-  const loaded = list.items;
-  // Client-side tab filter over the loaded rows. Selected rows stay visible so that opening an
-  // unread thread (which marks it read) or unstarring doesn't make the open conversation vanish.
-  const items = useMemo(
-    () =>
-      filter === 'all'
-        ? loaded
-        : loaded.filter(
-            (t) => selection.selected.has(t.id) || (filter === 'unread' ? !t.isRead : t.isStarred),
-          ),
-    [loaded, filter, selection.selected],
-  );
-  const filterCounts = useMemo(
-    () => ({
-      unread: loaded.filter((t) => !t.isRead).length,
-      starred: loaded.filter((t) => t.isStarred).length,
-    }),
-    [loaded],
-  );
-  const ids = useMemo(() => items.map((t) => t.id), [items]);
-  const { run, refresh } = useMailActions(accountId);
-  // New mail announced by the provider: refetch lists and counts (the list animates the arrivals).
-  useEffect(() => mail.subscribe?.(() => void refresh()), [mail, refresh]);
-
-  // Persist layout (best effort).
-  useEffect(() => {
-    try {
-      localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout));
-    } catch {
-      /* ignore */
-    }
-  }, [layout]);
-
-  // Drop rows that left the list (archived, trashed, filtered out) once fresh data is in.
-  useEffect(() => {
-    // Syncing selection with server-driven list contents is exactly what this effect is for.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (!list.isPlaceholderData && !list.isFetching) setSelection((s) => prune(s, ids));
-  }, [ids, list.isPlaceholderData, list.isFetching]);
-
-  const selectedSummaries = useMemo(
-    () => items.filter((t) => selection.selected.has(t.id)),
-    [items, selection.selected],
-  );
-  const open = openId(selection);
   const thread = useThread(accountId, open);
-
-  // Opening a conversation marks it read (once per open, not on every later state change).
-  const markedFor = useRef<ID | null>(null);
-  useEffect(() => {
-    if (!open) {
-      markedFor.current = null;
-      return;
-    }
-    if (markedFor.current === open) return;
-    markedFor.current = open;
-    const summary = items.find((t) => t.id === open);
-    if (summary && !summary.isRead) void run('markRead', [open]);
-  }, [open, items, run]);
-
-  const perform: Perform = useCallback(
-    async (action, targetIds, opts) => {
-      const removes =
-        action === 'archive' ||
-        action === 'trash' ||
-        action === 'restore' ||
-        action === 'markJunk' ||
-        action === 'notJunk' ||
-        action === 'deleteForever' ||
-        // Moving to a label takes rows out of the Inbox view only.
-        (action === 'moveToLabel' && view.kind === 'mailbox' && view.mailbox === 'inbox');
-      if (action === 'deleteForever') {
-        const n = targetIds.length;
-        const ok = await platform.confirm({
-          title:
-            n === 1
-              ? 'Delete this conversation permanently?'
-              : `Delete ${n} conversations permanently?`,
-          message: "This can't be undone.",
-          confirmLabel: 'Delete',
-          destructive: true,
-        });
-        if (!ok) return;
-      }
-      const next = removes ? nextAfterRemoval(ids, new Set(targetIds)) : null;
-      const ok = await run(action, targetIds, opts);
-      if (ok && removes) {
-        const acted = new Set(targetIds);
-        // Only move the selection if it still refers to the acted-on rows; if the user has
-        // since selected something else, leave their newer selection alone.
-        setSelection((s) => {
-          const stillSame =
-            [...s.selected].every((id) => acted.has(id)) &&
-            (s.focusedId === null || acted.has(s.focusedId));
-          if (!stillSame) return s;
-          // Removing the open conversation opens the next one; bulk removals just move the cursor.
-          const wasOpen = s.selected.size === 1;
-          return {
-            selected: wasOpen && next ? new Set([next]) : new Set(),
-            focusedId: next,
-            anchorId: next,
-          };
-        });
-      }
-    },
-    [run, ids, view, platform],
-  );
-
-  // Targets for shortcuts: the selection, else the keyboard cursor.
-  const shortcutTargets = (): ThreadSummary[] => {
-    if (selectedSummaries.length) return selectedSummaries;
-    const f = items.find((t) => t.id === selection.focusedId);
-    return f ? [f] : [];
-  };
-  const onShortcut = useCallback(
-    (k: MailActionId | 'toggleStar' | 'toggleJunk' | 'find') => {
-      if (k === 'find') {
-        searchRef.current?.focus();
-        return;
-      }
-      const targets = shortcutTargets();
-      if (!targets.length) return;
-      const available = resolveActions(targets, view);
-      const id =
-        k === 'toggleStar'
-          ? available.find((a) => a.id === 'star' || a.id === 'unstar')?.id
-          : k === 'toggleJunk'
-            ? available.find((a) => a.id === 'markJunk' || a.id === 'notJunk')?.id
-            : k;
-      const desc = available.find((a) => a.id === id);
-      if (desc?.enabled)
-        void perform(
-          desc.id,
-          targets.map((t) => t.id),
-        );
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selectedSummaries, selection.focusedId, items, view, perform],
-  );
-  // Native menu (desktop hosts) goes through the same handler as the keyboard shortcuts.
-  const onShortcutRef = useRef(onShortcut);
-  useEffect(() => {
-    onShortcutRef.current = onShortcut;
-  });
-  useEffect(
-    () =>
-      platform.subscribeMenuActions((a) =>
-        onShortcutRef.current(a === 'star' ? 'toggleStar' : a === 'junk' ? 'toggleJunk' : a),
-      ),
-    [platform],
-  );
-  useGlobalShortcuts({ onAction: onShortcut, onSearch: () => searchRef.current?.focus() });
+  const { perform } = useMailCommands({ ...navigation, accountId, searchRef });
 
   const unread =
     view.kind === 'mailbox'
@@ -279,12 +87,12 @@ export function MailApp() {
   const byId = (dragged: ID[]) => items.filter((t) => dragged.includes(t.id));
   const canDropThreads = (target: DropTarget, dragged: ID[]) =>
     planThreadDrop(target, byId(dragged), false) !== null;
-  const dropThreads = (target: DropTarget, dragged: ID[], copy: boolean) => {
+  const dropThreads = async (target: DropTarget, dragged: ID[], copy: boolean) => {
     const plan = planThreadDrop(target, byId(dragged), copy);
     if (!plan) return;
     if (!copy) flyRowsToTarget(dragged, target);
-    void perform(plan.action, dragged, { labelId: plan.labelId });
-    if (target.kind === 'label') {
+    const success = await perform(plan.action, dragged, { labelId: plan.labelId });
+    if (success && target.kind === 'label') {
       const name = labels.find((l) => l.id === target.labelId)?.name ?? 'label';
       const n = `${dragged.length} conversation${dragged.length === 1 ? '' : 's'}`;
       toast.show(copy ? `Added “${name}” to ${n}` : `Moved ${n} to “${name}”`);
@@ -303,7 +111,7 @@ export function MailApp() {
   // Without an account nothing else can load; say so instead of showing skeletons forever.
   if (accounts.isError && !account) {
     return (
-      <div
+      <main
         data-shell
         {...dragRegionProps}
         className="flex h-full items-center justify-center bg-background"
@@ -316,7 +124,7 @@ export function MailApp() {
             Try again
           </Button>
         </div>
-      </div>
+      </main>
     );
   }
 
@@ -330,14 +138,14 @@ export function MailApp() {
           view={view}
           onSelectView={setView}
           canDropThreads={canDropThreads}
-          onDropThreads={dropThreads}
+          onDropThreads={(...args) => void dropThreads(...args)}
         />
       </div>
       <Resizer
         label="Resize sidebar"
         value={layout.sidebar}
-        min={LIMITS.sidebar[0]}
-        max={LIMITS.sidebar[1]}
+        min={PANE_LIMITS.sidebar[0]}
+        max={PANE_LIMITS.sidebar[1]}
         onChange={(sidebar) => setLayout((l) => ({ ...l, sidebar }))}
       />
       <div data-pane="list" style={{ width: layout.list }} className="h-full shrink-0">
@@ -391,8 +199,8 @@ export function MailApp() {
       <Resizer
         label="Resize conversation list"
         value={layout.list}
-        min={LIMITS.list[0]}
-        max={LIMITS.list[1]}
+        min={PANE_LIMITS.list[0]}
+        max={PANE_LIMITS.list[1]}
         onChange={(list) => setLayout((l) => ({ ...l, list }))}
       />
       <main data-pane="reader" className="h-full min-w-[320px] flex-1">

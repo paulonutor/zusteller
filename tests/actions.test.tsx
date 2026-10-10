@@ -3,16 +3,9 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '@/app/App';
 import { MockMailService, createSeedData } from '@/infrastructure/mail/mock';
-import type { PlatformService } from '@/platform';
+import { createTestPlatform, deferred } from './helpers/mail';
 
-const platform: PlatformService = {
-  showNotification: vi.fn().mockResolvedValue(undefined),
-  setBadge: vi.fn().mockResolvedValue(undefined),
-  openExternal: vi.fn().mockResolvedValue(undefined),
-  setWindowTheme: vi.fn().mockResolvedValue(undefined),
-  confirm: () => Promise.resolve(true),
-  subscribeMenuActions: () => () => {},
-};
+const platform = createTestPlatform();
 
 const rows = () => screen.queryAllByRole('option');
 const waitForRows = () => waitFor(() => expect(rows().length).toBeGreaterThan(3));
@@ -57,9 +50,14 @@ describe('action layer keyboard safety', () => {
   });
 
   it('does not wipe a newer selection when an earlier archive resolves', async () => {
-    const { mail, user } = setup(80);
-    await waitFor(() => expect(rows().length).toBeGreaterThan(3));
-    const archive = vi.spyOn(mail, 'archive');
+    const { mail, user } = setup();
+    await waitForRows();
+    const gate = deferred<void>();
+    const realArchive = mail.archive.bind(mail);
+    const archive = vi.spyOn(mail, 'archive').mockImplementationOnce(async (...args) => {
+      await gate.promise;
+      await realArchive(...args);
+    });
     const a = rows()[0]!.textContent!.slice(0, 12);
     await user.click(rows()[0]!);
     key('e');
@@ -67,7 +65,8 @@ describe('action layer keyboard safety', () => {
     await user.click(d);
     const subject = d.id;
     await waitFor(() => expect(archive).toHaveBeenCalledTimes(1));
-    await new Promise((r) => setTimeout(r, 300));
+    gate.resolve();
+    await waitFor(() => expect(rows().some((r) => r.textContent?.startsWith(a))).toBe(false));
     expect(a).toBeTruthy();
     const after = document.getElementById(subject);
     expect(after).not.toBeNull();

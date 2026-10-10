@@ -13,6 +13,8 @@
  *  - User label view: has the label, not TRASH and not SPAM.
  *  - Unread counts follow the same membership; a Junk thread counts only towards Junk.
  *  - archive: removes INBOX from every message.
+ *  - moveToLabel: adds a user label and removes INBOX in one atomic batch. Invalid labels, unknown
+ *    threads and service failures change nothing.
  *  - trash:   adds TRASH, removes INBOX and SPAM on every message (Junk -> Trash leaves Junk).
  *  - restore: "Move to Inbox": removes TRASH and SPAM and (re)adds INBOX. Original placement is not remembered.
  *  - markJunk: adds SPAM, removes INBOX and TRASH. Other labels are kept.
