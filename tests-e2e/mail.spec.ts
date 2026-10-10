@@ -129,3 +129,29 @@ for (const [action, button] of [
     await expect(page.getByRole('option', { selected: true })).toHaveCount(1);
   });
 }
+
+for (const reducedMotion of ['no-preference', 'reduce'] as const) {
+  test(`loading placeholders match rows with motion ${reducedMotion}`, async ({ page }) => {
+    await page.emulateMedia({ reducedMotion });
+    await page.goto('/?latency=1200');
+    const skeleton = page.locator('.mail-skeleton-row').first();
+    await expect(skeleton).toBeVisible();
+    await expect(
+      page.getByRole('status').filter({ hasText: 'Loading conversations' }),
+    ).toBeVisible();
+    const rowBox = (await skeleton.boundingBox())!;
+    const avatarBox = (await skeleton.locator(':scope > .skeleton').boundingBox())!;
+    const animation = await skeleton
+      .locator(':scope > .skeleton')
+      .evaluate((el) => getComputedStyle(el).animationName);
+    expect(animation).toBe(reducedMotion === 'reduce' ? 'none' : 'list-skeleton-wave');
+    const realRow = page.getByRole('option').first();
+    await expect(realRow).toBeVisible();
+    expect(await realRow.boundingBox()).toEqual(rowBox);
+    const realAvatar = (await realRow.locator('[data-avatar]').boundingBox())!;
+    expect(realAvatar.width).toBe(avatarBox.width);
+    expect(realAvatar.height).toBe(avatarBox.height);
+    expect(realAvatar.x).toBe(avatarBox.x);
+    expect(realAvatar.y).toBe(avatarBox.y);
+  });
+}

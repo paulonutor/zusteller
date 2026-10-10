@@ -82,7 +82,7 @@ export const ThreadRow = memo(function ThreadRow(p: Props) {
         data-drop={labelDrop.state === 'idle' ? undefined : labelDrop.state}
         className={cn(
           'data-[drop=over]:bg-accent/20 data-[drop=over]:outline-2 data-[drop=over]:-outline-offset-2 data-[drop=over]:outline-accent',
-          'group relative flex h-[68px] cursor-default gap-2 border-b border-border/70 px-2.5 py-2',
+          'mail-thread-row group relative flex h-[68px] cursor-default gap-2 border-b border-border/70 px-2.5 py-2',
           p.selected
             ? p.listHasFocus
               ? 'bg-selection'

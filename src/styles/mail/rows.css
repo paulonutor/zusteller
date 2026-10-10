@@ -1,4 +1,4 @@
-html:root [role='option'] {
+html:root .mail-thread-row {
   height: var(--row-h);
   border-radius: var(--row-radius);
   border-bottom-color: var(--row-line);
@@ -43,7 +43,7 @@ html:root [data-pane='list'] :is([role='checkbox'], [data-row-check]) svg {
 html:root [role='listbox'] {
   padding: 2px 0 8px;
 }
-html:root [role='option'] {
+html:root .mail-thread-row {
   margin: 1px 8px;
   padding: 0 12px 0 6px;
   align-items: center;
@@ -247,4 +247,48 @@ html:root [data-list-scroller]:focus-visible {
    top one (same row pitch as before). Windowed lists wrap rows themselves and are unaffected. */
 html:root [data-row-clip] > [role='option'] {
   margin-bottom: 0;
+}
+
+/* Loading rows share the real row geometry; only their contents fade. */
+html:root [data-list-skeleton] {
+  padding: 2px 0 8px;
+}
+html:root .mail-skeleton-row {
+  margin-bottom: 0;
+}
+.mail-skeleton-sender {
+  height: 22px;
+}
+.mail-skeleton-subject {
+  height: 19.5px;
+  margin-top: 1px;
+}
+.mail-skeleton-snippet {
+  height: 18.75px;
+  margin-top: 1px;
+}
+html:root .mail-skeleton-row > * {
+  opacity: 0.35;
+  animation: list-skeleton-wave 2s ease-in-out var(--skeleton-delay) infinite;
+}
+.mail-skeleton-row > div .skeleton {
+  animation: none;
+}
+@keyframes list-skeleton-wave {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html:root .mail-skeleton-row > * {
+    animation: none;
+    opacity: 0.65;
+  }
+}
+.mail-skeleton-row > .skeleton {
+  border-radius: 50%;
 }

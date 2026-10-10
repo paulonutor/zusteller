@@ -1,5 +1,5 @@
 import { dragRegionProps } from '@/platform/hostChrome';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { defaultRangeExtractor, useVirtualizer, type Range } from '@tanstack/react-virtual';
 import { AlertCircle, Inbox, ListFilter as FilterIcon, Search, X } from 'lucide-react';
 import type { ID, Label, ThreadSummary } from '@/domain/mail';
@@ -60,14 +60,27 @@ type Props = {
 
 function Skeleton() {
   return (
-    <div aria-hidden>
+    <div data-list-skeleton aria-hidden="true">
       {Array.from({ length: 9 }, (_, i) => (
-        <div key={i} className="flex h-[68px] gap-3 border-b border-border/70 px-3 py-3">
-          <div className="skeleton size-4 shrink-0" />
-          <div className="flex-1 space-y-2">
-            <div className="skeleton h-3 w-2/5" />
-            <div className="skeleton h-3 w-4/5" />
-            <div className="skeleton h-3 w-3/5" />
+        <div
+          key={i}
+          className="mail-thread-row mail-skeleton-row flex border-b"
+          style={{ '--skeleton-delay': `${i * 100}ms` } as CSSProperties}
+        >
+          <div className="skeleton size-8 shrink-0 rounded-full" />
+          <div className="min-w-0 flex-1">
+            <div className="mail-skeleton-sender flex items-center gap-1.5">
+              <div className="skeleton h-3" style={{ width: `${38 + (i % 3) * 9}%` }} />
+              <div className="skeleton ml-auto h-2.5 w-10 shrink-0" />
+              <div className="w-[22px] shrink-0" />
+            </div>
+            <div className="mail-skeleton-subject flex items-center">
+              <div className="skeleton h-3" style={{ width: `${62 + (i % 3) * 8}%` }} />
+            </div>
+            <div className="mail-skeleton-snippet flex items-center gap-1.5">
+              <div className="skeleton h-2.5 min-w-0 flex-1" />
+              <div className="skeleton h-[15px] w-12 shrink-0" />
+            </div>
           </div>
         </div>
       ))}
