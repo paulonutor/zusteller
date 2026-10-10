@@ -12,12 +12,9 @@ export const COLLAPSE_MS = 280;
 /** The gap starts closing this far into the flight, while the copy is still leaving. */
 const GAP_START = 0.3;
 const MAX_FLYERS = 5;
-/** Fallback if the move never removes the row (it failed): put everything back. */
-const RESTORE_AFTER_MS = 1800;
-
-const flights = new Map<ID, number>();
+const flights = new Map<ID, { endsAt: number }>();
 /** When the row's flight ends (epoch ms), or 0. The list keeps a leaving row mounted until then. */
-export const flightEndsAt = (id: ID) => flights.get(id) ?? 0;
+export const flightEndsAt = (id: ID) => flights.get(id)?.endsAt ?? 0;
 
 export const dropTargetKey = (t: DropTarget) =>
   t.kind === 'label' ? `label:${t.labelId}` : `mailbox:${t.mailbox}`;
@@ -29,6 +26,7 @@ export function flyRowsToTarget(ids: ID[], target: DropTarget) {
   if (!dest || !dest.animate) return;
   const to = dest.getBoundingClientRect();
 
+  const finish: ((success: boolean) => void)[] = [];
   ids.slice(0, MAX_FLYERS).forEach((id, i) => {
     const row = document.getElementById(`row-${id}`);
     const slot = row?.closest<HTMLElement>('[data-row-slot]');
@@ -62,7 +60,8 @@ export function flyRowsToTarget(ids: ID[], target: DropTarget) {
     const dx = to.left + 24 - from.left;
     const dy = to.top + to.height / 2 - (from.top + from.height / 2);
     const delay = i * 45;
-    flights.set(id, Date.now() + delay + FLY_MS * GAP_START + COLLAPSE_MS + 60);
+    const flight = { endsAt: Date.now() + delay + FLY_MS * GAP_START + COLLAPSE_MS + 60 };
+    flights.set(id, flight);
     // Close the gap on our own clock, not when the server round trip finishes.
     setTimeout(
       () => {
@@ -87,14 +86,23 @@ export function flyRowsToTarget(ids: ID[], target: DropTarget) {
     fly.onfinish = fly.oncancel = () => {
       clone.remove();
     };
-    // If the move never removes the row (it failed), put it back.
-    setTimeout(() => {
-      flights.delete(id);
-      if (!row.isConnected) return;
+    // Success keeps the source collapsed until query data removes it. Failure restores it
+    // immediately, even if the service settles before the gap animation starts.
+    finish.push((success) => {
+      if (flights.get(id) !== flight) return;
+      const forget = () => {
+        if (flights.get(id) === flight) flights.delete(id);
+      };
+      if (success) {
+        setTimeout(forget, Math.max(0, flight.endsAt - Date.now()));
+        return;
+      }
+      forget();
+      fly.cancel();
       row.style.opacity = '';
       delete slot.dataset.state;
       delete slot.dataset.fly;
-    }, RESTORE_AFTER_MS);
+    });
   });
 
   dest.animate(
@@ -108,4 +116,5 @@ export function flyRowsToTarget(ids: ID[], target: DropTarget) {
     ],
     { duration: 320, delay: FLY_MS - 120, easing: 'ease-out' },
   );
+  return (success: boolean) => finish.forEach((settle) => settle(success));
 }

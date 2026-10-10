@@ -90,8 +90,14 @@ export function MailApp() {
   const dropThreads = async (target: DropTarget, dragged: ID[], copy: boolean) => {
     const plan = planThreadDrop(target, byId(dragged), copy);
     if (!plan) return;
-    if (!copy) flyRowsToTarget(dragged, target);
+    const removes =
+      plan.action !== 'star' &&
+      plan.action !== 'addLabel' &&
+      ((plan.action !== 'archive' && plan.action !== 'moveToLabel') ||
+        (view.kind === 'mailbox' && view.mailbox === 'inbox'));
+    const finishFlight = removes ? flyRowsToTarget(dragged, target) : undefined;
     const success = await perform(plan.action, dragged, { labelId: plan.labelId });
+    finishFlight?.(success);
     if (success && target.kind === 'label') {
       const name = labels.find((l) => l.id === target.labelId)?.name ?? 'label';
       const n = `${dragged.length} conversation${dragged.length === 1 ? '' : 's'}`;

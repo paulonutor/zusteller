@@ -155,3 +155,33 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
     expect(realAvatar.y).toBe(avatarBox.y);
   });
 }
+
+test('a Starred drop leaves the source row visible and only changes its star', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/?latency=1200');
+  const row = page.getByRole('option', { name: /Lunch Thursday/ });
+  await row.dragTo(page.locator('[data-drop-target="mailbox:starred"]'));
+  await expect(row.locator('[data-star]')).toHaveAttribute('data-starred', 'true');
+  await expect(row).toHaveCSS('opacity', '1');
+  await expect(row.locator('..')).not.toHaveAttribute('data-fly');
+  await page.waitForTimeout(1900);
+  await expect(row).toBeVisible();
+  await expect(row).toHaveCSS('opacity', '1');
+});
+
+test('a slow Junk drop stays collapsed until the refreshed list removes it', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/?latency=1200');
+  const row = page.getByRole('option', { name: /Lunch Thursday/ });
+  const id = await row.getAttribute('id');
+  await row.dragTo(page.locator('[data-drop-target="mailbox:junk"]'));
+  const source = page.locator(`[id="${id}"]`);
+  await expect(source).toHaveCSS('opacity', '0');
+  // The old fallback restored the source at 1800ms, before the 2400ms write + refresh.
+  await page.waitForTimeout(1900);
+  if (await source.count()) {
+    await expect(source).toHaveCSS('opacity', '0');
+    expect((await source.locator('..').boundingBox())!.height).toBe(0);
+  }
+  await expect(source).toHaveCount(0);
+});
