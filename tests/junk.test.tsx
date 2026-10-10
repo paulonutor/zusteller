@@ -255,11 +255,14 @@ describe('Junk reader: images never auto-load', () => {
     expect(within(reader()).queryByRole('button', { name: /Load (remote )?images/ })).toBeNull();
   });
 
-  it('outside Junk the existing remote-content banner is unchanged', async () => {
+  it('outside Junk remote images load automatically without a banner', async () => {
     const { user } = setup();
     await waitForRows();
     await user.click(rowFor('Hacker Newsletter #712'));
-    expect(await within(reader()).findByText(/Remote content is blocked/)).toBeInTheDocument();
+    await waitFor(() => expect(srcdoc()).toContain('https://cdn.example.com/banner.jpg'));
+    expect(srcdoc()).toContain('img-src data: cid: https:');
+    expect(within(reader()).queryByRole('button', { name: /Load (remote )?images/ })).toBeNull();
+    expect(reader().querySelector('iframe')).toHaveAttribute('sandbox', 'allow-same-origin');
     expect(within(reader()).queryByText('In Junk')).toBeNull();
   });
 
@@ -271,7 +274,11 @@ describe('Junk reader: images never auto-load', () => {
     await user.click(within(sidebar()).getByRole('button', { name: /^Inbox/ }));
     await waitFor(() => expect(rowFor(PHARMA)).toBeTruthy());
     await user.click(rowFor(PHARMA));
-    expect(await within(reader()).findByText(/Remote content is blocked/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(srcdoc()).toContain('https://images.cheap-meds-outlet.example.biz/hero.jpg'),
+    );
+    expect(srcdoc()).toContain('img-src data: cid: https:');
+    expect(within(reader()).queryByRole('button', { name: /Load (remote )?images/ })).toBeNull();
     expect(within(reader()).queryByText('In Junk')).toBeNull();
   });
 });

@@ -57,6 +57,21 @@ describe('SafeHtmlFrame', () => {
     expect(cb2).toHaveBeenLastCalledWith(false);
   });
 
+  it('loads remote images when enabled while preserving HTML protections', () => {
+    const onBlockedRemoteContent = vi.fn();
+    const { iframe } = setup(
+      '<img src="https://cdn.test/a.png" onerror="alert(1)"><script>alert(1)</script>',
+      { allowRemoteImages: true, onBlockedRemoteContent },
+    );
+    const srcdoc = iframe.getAttribute('srcdoc') ?? '';
+    expect(srcdoc).toContain('src="https://cdn.test/a.png"');
+    expect(srcdoc).toContain('img-src data: cid: https:');
+    expect(srcdoc).not.toMatch(/<script|onerror|alert/);
+    expect(iframe).toHaveAttribute('sandbox', 'allow-same-origin');
+    expect(iframe).toHaveAttribute('referrerpolicy', 'no-referrer');
+    expect(onBlockedRemoteContent).toHaveBeenLastCalledWith(false);
+  });
+
   it('only forwards safe link clicks and always prevents navigation', () => {
     const { iframe, onOpenLink } = setup(
       '<a href="https://example.test/x">a</a><a href="mailto:x@y.test">b</a>' +

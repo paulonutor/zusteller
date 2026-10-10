@@ -34,7 +34,7 @@ Run each item on the debug `.app` (`npm run tauri build -- --debug --bundles app
 
 ## D. Reader / WKWebView
 
-12. Reader iframe renders sanitized HTML; remote images are not loaded; CSP breaks neither Vite HMR (dev) nor the release app.
+12. Reader iframe renders sanitized HTML; HTTPS images load automatically in normal mail and only on request in Junk; CSP breaks neither Vite HMR (dev) nor the release app.
 13. Safe-HTML payload spot check (open any mock message with scripts/forms, or temporarily inject): no script runs, links
     never navigate the app frame.
 

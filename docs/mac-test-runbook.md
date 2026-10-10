@@ -72,7 +72,7 @@ PASS / FAIL / N/A and note the macOS version.
     attributes them to the terminal.
 12. `mailto:` and `https:` open: a mailto link opens the default mail app, https the default browser; `file:`,
     `javascript:`, `ftp:` are refused.
-13. Reader iframe renders sanitized HTML, remote images are not loaded, CSP breaks neither Vite HMR (dev) nor the release app.
+13. Reader iframe renders sanitized HTML, HTTPS images load automatically in normal mail and only on request in Junk, CSP breaks neither Vite HMR (dev) nor the release app.
 14. Fullscreen, minimum size 900x600, move between displays: no layout or vibrancy glitches.
 15. Release build only: no white/solid background where `dev` was transparent.
 16. Run `scripts/measure-host.sh` and paste its table into the `docs/host-decision.md` if useful.

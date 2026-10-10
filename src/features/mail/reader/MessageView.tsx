@@ -33,6 +33,7 @@ export function MessageView({
   const expanded = collapsible ? expandedProp : true;
   const { resolved } = useTheme();
   const [showRemote, setShowRemote] = useState(false);
+  const allowRemoteImages = !junk || showRemote;
   const [blocked, setBlocked] = useState(false);
   const [details, setDetails] = useState(false);
 
@@ -116,18 +117,16 @@ export function MessageView({
 
           {m.html ? (
             <>
-              {blocked && !showRemote && (
+              {blocked && !allowRemoteImages && (
                 <div className="mb-3 flex items-center gap-2 rounded-md bg-hover px-3 py-1.5 text-[12px] text-muted">
                   <ImageOff size={14} />
-                  {junk
-                    ? 'This message is in Junk. Images are not loaded automatically.'
-                    : 'Remote content is blocked to protect your privacy.'}
+                  This message is in Junk. Images are not loaded automatically.
                   <button
                     type="button"
                     className="ml-auto text-[color-mix(in_srgb,var(--accent)_75%,var(--foreground))] hover:underline"
                     onClick={() => setShowRemote(true)}
                   >
-                    {junk ? 'Load images' : 'Load remote images'}
+                    Load images
                   </button>
                 </div>
               )}
@@ -144,7 +143,7 @@ export function MessageView({
                   title={`Message body: ${m.subject}`}
                   html={m.html}
                   dark={resolved === 'dark'}
-                  allowRemoteImages={showRemote}
+                  allowRemoteImages={allowRemoteImages}
                   onOpenLink={onOpenLink}
                   onBlockedRemoteContent={setBlocked}
                 />

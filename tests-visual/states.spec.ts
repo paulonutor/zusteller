@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, pinFrameFont, test } from './fixtures';
+import { NEWSLETTER_IMAGE, serveRemoteImage } from './remoteImages';
 
 // Mirrors the key states of scripts/capture-states.mjs in light + dark.
 // Dates are frozen to the mock seed's "now" so relative timestamps never change.
@@ -62,9 +63,19 @@ for (const scheme of ['light', 'dark'] as const) {
     });
 
     test('thread open (HTML mail)', async ({ page }) => {
+      await serveRemoteImage(page, NEWSLETTER_IMAGE);
       await load(page);
       await openThread(page, /Hacker Newsletter #712/);
       await waitForHtmlBody(page);
+      await expect
+        .poll(() =>
+          page.locator('article iframe').first().evaluate((f) => {
+            const img = (f as HTMLIFrameElement).contentDocument?.querySelector('img');
+            return img?.naturalWidth ?? 0;
+          }),
+        )
+        .toBe(512);
+      await expect(page.getByRole('button', { name: /Load (remote )?images/ })).toHaveCount(0);
       await page.mouse.move(640, 795);
       // The sandboxed iframe's text measures ~2% wider on the CI runner than in the Playwright
       // image (same Inter, same flags; cause unknown), so Docker- and CI-made baselines differ by

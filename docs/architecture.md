@@ -100,7 +100,8 @@ Native popup menus return a selected item id or `null` on dismissal. Each popup 
 ## Safe rendering
 
 `features/mail/reader/safe-html`: DOMPurify allow-list; `<style>` dropped, inline CSS filtered; remote images/tracking
-pixels blocked by default with an explicit "Load remote images" per message; link `href`s limited to http(s)/mailto and opened
+pixels load by default for normal mail, with remote image requests limited to HTTPS by CSP. Junk blocks them until
+"Load images" is requested for that message; link `href`s limited to http(s)/mailto and opened
 only via `PlatformService.openExternal`; rendered in `<iframe sandbox="allow-same-origin" srcdoc>` with a CSP and no scripts;
 the parent sizes the frame and intercepts link clicks. Attachments are metadata-only in V1 (no download).
 
