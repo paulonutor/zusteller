@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '@/app/App';
 import { MockMailService, createSeedData } from '@/infrastructure/mail/mock';
-import { createTestPlatform } from './helpers/mail';
+import { createTestPlatform, deferred } from './helpers/mail';
 
 const platform = createTestPlatform();
 
@@ -106,6 +106,76 @@ describe('selection edge cases', () => {
     expect(await screen.findByText(/No results for/)).toBeInTheDocument();
     expect(screen.queryAllByRole('article')).toHaveLength(0);
     expect(screen.queryByText(/Couldn.t/)).not.toBeInTheDocument();
+  });
+
+  it.each(['filter', 'mailbox'] as const)(
+    'unstarring a selected row hides it from the Starred %s before the service completes',
+    async (mode) => {
+      const { mail, user } = setup();
+      await waitForRows();
+      if (mode === 'filter') {
+        await user.click(screen.getByRole('button', { name: /^Filter:/ }));
+        await user.click(await screen.findByRole('menuitem', { name: /^Starred/ }));
+      } else {
+        await user.click(screen.getByRole('button', { name: 'Starred' }));
+      }
+      const row = await screen.findByRole('option', { name: /Ihre Stromrechnung/ });
+      await user.click(row);
+      await screen.findAllByRole('article');
+      const id = idOf(row).replace(/^row-/, '');
+      const gate = deferred<void>();
+      const real = mail.setStarred.bind(mail);
+      vi.spyOn(mail, 'setStarred').mockImplementationOnce(async (...args) => {
+        await gate.promise;
+        await real(...args);
+      });
+      await user.keyboard('s');
+      await waitFor(() => {
+        expect(screen.queryByRole('option', { name: /Ihre Stromrechnung/ })).toBeNull();
+        expect(listbox()).not.toHaveAttribute('aria-activedescendant', `row-${id}`);
+        expect(selectedCount()).toBe(0);
+      });
+      expect((await mail.getThread('acct-1', id)).isStarred).toBe(true);
+      gate.resolve();
+      await waitFor(async () => expect((await mail.getThread('acct-1', id)).isStarred).toBe(false));
+    },
+  );
+
+  it.each(['filter', 'mailbox'] as const)(
+    'failed unstar restores the row in the Starred %s',
+    async (mode) => {
+      const { mail, user } = setup();
+      await waitForRows();
+      if (mode === 'filter') {
+        await user.click(screen.getByRole('button', { name: /^Filter:/ }));
+        await user.click(await screen.findByRole('menuitem', { name: /^Starred/ }));
+      } else {
+        await user.click(screen.getByRole('button', { name: 'Starred' }));
+      }
+      await user.click(await screen.findByRole('option', { name: /Ihre Stromrechnung/ }));
+      await screen.findAllByRole('article');
+      const gate = deferred<void>();
+      vi.spyOn(mail, 'setStarred').mockImplementationOnce(() => gate.promise);
+      await user.keyboard('s');
+      await waitFor(() =>
+        expect(screen.queryByRole('option', { name: /Ihre Stromrechnung/ })).toBeNull(),
+      );
+      gate.reject(new Error('Unstar failed'));
+      expect(await screen.findByRole('option', { name: /Ihre Stromrechnung/ })).toBeVisible();
+      expect(await screen.findByText(/Couldn't update star/)).toBeInTheDocument();
+    },
+  );
+
+  it('opening a row under Unread keeps it visible after mark-on-open', async () => {
+    const { user } = setup();
+    await waitForRows();
+    await user.click(screen.getByRole('button', { name: /^Filter:/ }));
+    await user.click(await screen.findByRole('menuitem', { name: /^Unread/ }));
+    const row = await screen.findByRole('option', { name: /Lunch Thursday/ });
+    await user.click(row);
+    await waitFor(() => expect(row).toHaveAttribute('data-unread', 'false'));
+    expect(row).toBeVisible();
+    expect(row).toHaveAttribute('aria-selected', 'true');
   });
 
   it('changing the filter clears hidden selected rows, so bulk actions never touch unseen threads', async () => {

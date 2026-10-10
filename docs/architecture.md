@@ -36,7 +36,7 @@ System mailboxes (`SystemMailbox`) and user labels stay distinct in the UI. Inte
 ### Simulation
 
 `MockMailService` takes `latency` (ms or `{min,max}` with a seeded PRNG), `setOffline()`, and `failNext(method?, n)` for
-deterministic failure tests. Dev URL flags: `?latency=0`, `?offline=1`.
+deterministic failure tests. App sessions use zero mock latency by default; `?latency=150` enables a simulated delay and `?offline=1` simulates offline mode.
 Other mock features: deterministic seed (`createSeedData`, fixed `SEED_NOW`) with accounts, labels, multi-message threads, HTML and
 plain-text bodies and attachments (metadata); stateful mutations; keyset-paged `getThreads`; search; `getMailboxCounts` that
 reflects mutations.
@@ -53,8 +53,7 @@ reflects mutations.
 - **Selection** (`selection.ts`, pure): click opens one; ⌘-click toggles; ⇧-click ranges; arrows move the cursor, ⇧+arrows
   extend; Space toggles; Enter opens; ⌘A selects all loaded; Esc clears. One selected row = open in the reader.
   Opening a conversation marks it read once.
-- **List filter menu** (All / Unread / Starred): client-side over the _loaded_ rows only (not a server query). Selected rows stay
-  visible even if they no longer match, so opening an unread thread doesn't make it vanish. Filter counts are over loaded rows.
+- **List filter menu** (All / Unread / Starred): client-side over the _loaded_ rows only (not a server query). Unread keeps selected rows visible after mark-on-open. Unstarring removes a row from the Starred filter or mailbox, even when selected. Filter counts are over loaded rows.
 - **Shortcuts** (`shortcuts.ts`): `E` archive · `⌫`/`Del`/`#` trash · `⇧Z` move to Inbox · `!` Mark as Junk / Not Junk (toggle, like Gmail) · `⇧I`/`⇧U` read/unread · `S` star toggle ·
   `/` or `⌘F` search. Plain keys only so they never collide with macOS ⌘ shortcuts; ignored while typing or while a menu is open.
 - **Layout**: sidebar (180–320, default 220) · list (300–640, default 410) · reader (flex, min 320). Drag or arrow-key resize.

@@ -96,3 +96,21 @@ test('window focus events update inactive selection state', async ({ page }) => 
   });
   await expect(page.locator('html')).not.toHaveAttribute('data-window-inactive');
 });
+
+for (const mode of ['filter', 'mailbox']) {
+  test(`unstarring hides the selected row from the Starred ${mode}`, async ({ page }) => {
+    if (mode === 'filter') {
+      await page.getByRole('button', { name: /^Filter/ }).click();
+      await page.getByRole('menuitem', { name: /^Starred/ }).click();
+    } else {
+      await page.getByRole('button', { name: 'Starred', exact: true }).click();
+    }
+    const row = page.getByRole('option', { name: /Ihre Stromrechnung/ });
+    await row.click();
+    const id = await row.getAttribute('id');
+    await page.keyboard.press('s');
+    await expect(row).toHaveCount(0);
+    await expect(page.getByRole('listbox')).not.toHaveAttribute('aria-activedescendant', id!);
+    await expect(page.getByRole('option', { selected: true })).toHaveCount(0);
+  });
+}

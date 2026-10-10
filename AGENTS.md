@@ -64,7 +64,7 @@ One look, in light and dark: "Gmail-in-glass" (Tahoe-style floating panes, title
   area) or on keyboard focus, and every row shows checkboxes once the user multi-selects. Star shows only when starred or on hover.
 - Selection uses the macOS accent (`-apple-system-control-accent`, else `AccentColor`, else fixed blue; `@supports`-guarded) while list
   and window are active, gray otherwise (`data-window-inactive`). Text on the accent is always white. Debug with `?debug=accent`.
-- The list filter menu is client-side over loaded rows; selected rows stay visible.
+- The list filter menu is client-side over loaded rows. Unread keeps selected rows visible after mark-on-open; Starred removes unstarred rows even when selected.
 - Native hosts: `?vibrancy=1` → `data-vibrancy` makes backdrop/gutters/sidebar transparent; `data-host` insets headers for traffic lights.
 
 ## Layout

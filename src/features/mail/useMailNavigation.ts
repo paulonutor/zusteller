@@ -38,17 +38,18 @@ export function useMailNavigation(accountId: ID | undefined) {
   const query = accountId ? toQuery(accountId, view, search) : undefined;
   const list = useThreadList(query);
   const loaded = list.items;
-  // Client-side tab filter over the loaded rows. Selected rows stay visible so that opening an
-  // unread thread (which marks it read) or unstarring doesn't make the open conversation vanish.
-  const items = useMemo(
-    () =>
-      filter === 'all'
-        ? loaded
-        : loaded.filter(
-            (t) => selection.selected.has(t.id) || (filter === 'unread' ? !t.isRead : t.isStarred),
-          ),
-    [loaded, filter, selection.selected],
-  );
+  // Keep an opened unread conversation visible after mark-on-open. Unstarring always removes
+  // it from Starred, including during an optimistic update before the provider refetch finishes.
+  const items = useMemo(() => {
+    const scoped =
+      view.kind === 'mailbox' && view.mailbox === 'starred'
+        ? loaded.filter((t) => t.isStarred)
+        : loaded;
+    if (filter === 'all') return scoped;
+    return scoped.filter((t) =>
+      filter === 'unread' ? selection.selected.has(t.id) || !t.isRead : t.isStarred,
+    );
+  }, [loaded, filter, selection.selected, view]);
   const filterCounts = useMemo(
     () => ({
       unread: loaded.filter((t) => !t.isRead).length,

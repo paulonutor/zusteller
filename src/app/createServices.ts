@@ -23,17 +23,18 @@ function withBigSeed(seed: SeedData, n: number): SeedData {
 
 /**
  * Composition root. Swapping MockMailService for a real provider happens here
- * (and only here). Dev/test query flags: ?latency=0  ?offline=1  ?seed=big[:N] (dev builds only)  ?newmail=<seconds>
+ * (and only here). Mock calls are immediate by default; simulate delays with ?latency=150.
+ * Other flags: ?offline=1, ?seed=big[:N] (dev builds only), ?newmail=<seconds>.
  */
 export function createServices(search = window.location.search): Services {
   const params = new URLSearchParams(search);
-  const latency = Number(params.get('latency') ?? 150);
+  const latency = Number(params.get('latency') ?? 0);
   let seed = createSeedData();
   const big = params.get('seed');
   if (import.meta.env.DEV && big?.startsWith('big'))
     seed = withBigSeed(seed, Number(big.split(':')[1]) || 3000);
   const mail = new MockMailService(seed, {
-    latency: Number.isFinite(latency) ? latency : 150,
+    latency: Number.isFinite(latency) ? Math.max(0, latency) : 0,
   });
   if (params.get('offline') === '1') mail.setOffline(true);
   // Demo: ?newmail=5 delivers a new message every 5 seconds (exercises the arrival animation).
