@@ -59,7 +59,7 @@ export function useMailCommands({
   const perform: Perform = useCallback(
     async (action, targetIds, opts) => {
       const removes =
-        action === 'archive' ||
+        (action === 'archive' && view.kind === 'mailbox' && view.mailbox === 'inbox') ||
         action === 'trash' ||
         action === 'restore' ||
         action === 'markJunk' ||
@@ -81,8 +81,9 @@ export function useMailCommands({
         if (!ok) return false;
       }
       const next = removes ? nextAfterRemoval(ids, new Set(targetIds)) : null;
-      const ok = await run(action, targetIds, opts);
-      if (ok && removes) {
+      let previousSelection: Selection | undefined;
+      let advancedSelection: Selection | undefined;
+      const advanceSelection = () => {
         const acted = new Set(targetIds);
         // Only move the selection if it still refers to the acted-on rows; if the user has
         // since selected something else, leave their newer selection alone.
@@ -93,12 +94,21 @@ export function useMailCommands({
           if (!stillSame) return s;
           // Removing the open conversation opens the next one; bulk removals just move the cursor.
           const wasOpen = s.selected.size === 1;
-          return {
+          previousSelection = s;
+          advancedSelection = {
             selected: wasOpen && next ? new Set([next]) : new Set(),
             focusedId: next,
             anchorId: next,
           };
+          return advancedSelection;
         });
+      };
+      const optimistic = action === 'archive' || action === 'trash';
+      if (optimistic && removes) advanceSelection();
+      const ok = await run(action, targetIds, opts);
+      if (ok && removes && !optimistic) advanceSelection();
+      if (!ok && optimistic && removes) {
+        setSelection((s) => (s === advancedSelection && previousSelection ? previousSelection : s));
       }
       return ok;
     },

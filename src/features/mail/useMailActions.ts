@@ -6,6 +6,7 @@ import { useToast } from '@/app/toast';
 import type { PerformAction } from './actions';
 
 import { OptimisticFlags, type Flag } from './optimisticFlags';
+import { OptimisticMembership } from './optimisticMembership';
 
 const VERBS: Record<PerformAction, string> = {
   archive: 'archive',
@@ -40,6 +41,9 @@ export function useMailActions(accountId: ID | undefined) {
   const inFlight = useRef(new Map<string, Promise<boolean>>());
   const latestIntent = useRef(new Map<string, string>());
   const flagQueues = useRef(new Map<string, Promise<void>>());
+  const membershipQueues = useRef(new Map<string, Promise<void>>());
+  const membership = useRef<OptimisticMembership | null>(null);
+  membership.current ??= new OptimisticMembership(qc);
   const pendingCount = useRef(0);
   const optimistic = useRef<OptimisticFlags | null>(null);
   optimistic.current ??= new OptimisticFlags(qc);
@@ -83,11 +87,24 @@ export function useMailActions(accountId: ID | undefined) {
             break;
           }
           case 'archive':
-            await mail.archive(accountId, threadIds);
+          case 'trash': {
+            const previous = membershipQueues.current.get(accountId) ?? Promise.resolve();
+            const patch = membership.current!.patch(accountId, threadIds, action);
+            const next = (async () => {
+              settle = await patch;
+              await previous;
+              await mail[action](accountId, threadIds);
+            })();
+            const done = next.catch(() => undefined);
+            membershipQueues.current.set(accountId, done);
+            try {
+              await next;
+            } finally {
+              if (membershipQueues.current.get(accountId) === done)
+                membershipQueues.current.delete(accountId);
+            }
             break;
-          case 'trash':
-            await mail.trash(accountId, threadIds);
-            break;
+          }
           case 'restore':
             await mail.restore(accountId, threadIds);
             break;

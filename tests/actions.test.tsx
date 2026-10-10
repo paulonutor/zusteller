@@ -116,3 +116,54 @@ describe('list header selection state', () => {
     expect(await screen.findByText(/\d+ selected/)).toBeInTheDocument();
   });
 });
+
+describe('optimistic mailbox actions', () => {
+  for (const [action, shortcut] of [
+    ['archive', 'e'],
+    ['trash', '#'],
+  ] as const) {
+    it(`${action} removes the row before the service finishes and restores it on failure`, async () => {
+      const { mail, user } = setup();
+      await waitForRows();
+      const gate = deferred<void>();
+      vi.spyOn(mail, action).mockImplementationOnce(() => gate.promise);
+      const row = rowFor('Lunch Thursday');
+      const id = row.id;
+      await user.click(row);
+      key(shortcut);
+      await waitFor(() => expect(rows().some((r) => r.id === id)).toBe(false));
+      // The provider has not changed yet. The row left through the optimistic cache update.
+      expect(
+        (await mail.getThreads({ accountId: 'acct-1', mailbox: 'inbox' })).items.some((t) =>
+          t.subject.includes('Lunch Thursday'),
+        ),
+      ).toBe(true);
+      const newer = rows()[2]!;
+      await user.click(newer);
+      gate.reject(new Error('Write failed'));
+      expect(await screen.findByText(/Couldn't .*Write failed/)).toBeInTheDocument();
+      await waitFor(() => expect(rows().some((r) => r.id === id)).toBe(true));
+      expect(document.getElementById(newer.id)).toHaveAttribute('aria-selected', 'true');
+    });
+  }
+
+  it('archive keeps the open row in All Mail while the write is pending', async () => {
+    const { mail, user } = setup();
+    await waitForRows();
+    await user.click(screen.getByRole('button', { name: 'All Mail' }));
+    await waitForRows();
+    const row = rowFor('Lunch Thursday');
+    await user.click(row);
+    const gate = deferred<void>();
+    const real = mail.archive.bind(mail);
+    vi.spyOn(mail, 'archive').mockImplementationOnce(async (...args) => {
+      await gate.promise;
+      await real(...args);
+    });
+    key('e');
+    await waitFor(() => expect(mail.archive).toHaveBeenCalled());
+    expect(row).toHaveAttribute('aria-selected', 'true');
+    gate.resolve();
+    await waitFor(() => expect(rowFor('Lunch Thursday')).toHaveAttribute('aria-selected', 'true'));
+  });
+});

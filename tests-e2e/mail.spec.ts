@@ -114,3 +114,18 @@ for (const mode of ['filter', 'mailbox']) {
     await expect(page.getByRole('option', { selected: true })).toHaveCount(0);
   });
 }
+
+for (const [action, button] of [
+  ['archive', 'Archive'],
+  ['trash', 'Move to Trash'],
+] as const) {
+  test(`${action} responds before a delayed service write`, async ({ page }) => {
+    await page.goto('/?latency=1200');
+    const row = page.getByRole('option', { name: /Lunch Thursday/ });
+    await row.click();
+    await page.getByRole('button', { name: button, exact: true }).click();
+    // A service write alone takes 1200ms, followed by refetch. UI removal must precede it.
+    await expect(row).toHaveCount(0, { timeout: 700 });
+    await expect(page.getByRole('option', { selected: true })).toHaveCount(1);
+  });
+}

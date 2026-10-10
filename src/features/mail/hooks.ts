@@ -1,5 +1,11 @@
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { mailKeys, type ID, type ThreadQuery, type ThreadSummary } from '@/domain/mail';
+import {
+  mailKeys,
+  matchesMembership,
+  type ID,
+  type ThreadQuery,
+  type ThreadSummary,
+} from '@/domain/mail';
 import { useServices } from '@/app/services';
 
 export function useAccounts() {
@@ -42,7 +48,10 @@ export function useThreadList(query: Omit<ThreadQuery, 'cursor'> | undefined) {
     // Keep rows on screen while a new search/view/refetch is in flight.
     placeholderData: keepPreviousData,
   });
-  const items: ThreadSummary[] = result.data?.pages.flatMap((p) => p.items) ?? [];
+  const items: ThreadSummary[] =
+    result.data?.pages
+      .flatMap((p) => p.items)
+      .filter((t) => !query || matchesMembership(t, query)) ?? [];
   return { ...result, items };
 }
 

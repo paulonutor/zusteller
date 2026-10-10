@@ -45,9 +45,15 @@ reflects mutations.
 
 - **State**: TanStack Query (lists via `useInfiniteQuery`, `keepPreviousData` so rows stay visible while refetching).
   Selection/focus/pane widths are React state; layout and theme persist best-effort in `localStorage`.
-- **Mutations**: all go through `useMailActions().run`. Read/star update caches optimistically with rollback and an error
-  toast. Flag writes run in order per account and flag; rollback changes only the touched fields and preserves newer pending intentions. Refetch waits for outstanding actions to settle. Archive/trash/restore/label wait for the service (their effect on mailbox membership is provider semantics we
-  don't duplicate in the UI). Action results reach the caller; drag/drop success feedback waits for the result.
+- **Mutations**: all go through `useMailActions().run`. Read/star and archive/trash update list caches
+  optimistically with rollback and an error toast. Flag writes run in order per account and flag;
+  archive/trash writes run in order per account. Rollback changes only touched fields and preserves
+  newer pending intentions. Mailbox rules live in `domain/mail/membership.ts` and are shared with
+  the mock provider. Rows remain cached to preserve page order on rollback; list hooks filter their
+  updated membership. Archive/trash advance selection immediately when the row leaves the view.
+  Counts and thread details reconcile after the service settles. Restore and label changes still
+  wait for the service. Refetch waits for outstanding actions; drag/drop success feedback waits
+  for the result.
 - **Actions**: `resolveActions(threads, view)` is the single source of what is available (pure, unit-tested).
   Toolbar, context menu and shortcuts all render/execute from it.
 - **Selection** (`selection.ts`, pure): click opens one; ⌘-click toggles; ⇧-click ranges; arrows move the cursor, ⇧+arrows

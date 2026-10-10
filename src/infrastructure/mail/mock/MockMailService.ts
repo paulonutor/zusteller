@@ -1,5 +1,7 @@
 import {
   MailServiceError,
+  applyMailboxAction,
+  inMailbox,
   SYSTEM_LABEL,
   isSystemLabelId,
   type Account,
@@ -162,7 +164,7 @@ export class MockMailService implements MailService {
         const s = this.summarize(list);
         if (s.accountId !== accountId || s.isRead) continue;
         for (const box of Object.keys(mailboxes) as SystemMailbox[]) {
-          if (this.inMailbox(s, box)) mailboxes[box]++;
+          if (inMailbox(s, box)) mailboxes[box]++;
         }
         if (!s.labelIds.includes(SYSTEM_LABEL.trash) && !s.labelIds.includes(SYSTEM_LABEL.junk)) {
           for (const id of s.labelIds) if (id in labels) labels[id] = (labels[id] ?? 0) + 1;
@@ -183,7 +185,7 @@ export class MockMailService implements MailService {
       for (const list of this.messages.values()) {
         const summary = this.summarize(list);
         if (summary.accountId !== query.accountId) continue;
-        if (mailbox && !this.inMailbox(summary, mailbox)) continue;
+        if (mailbox && !inMailbox(summary, mailbox)) continue;
         if (query.labelId) {
           const hidden =
             (summary.labelIds.includes(SYSTEM_LABEL.trash) &&
@@ -231,16 +233,17 @@ export class MockMailService implements MailService {
   }
 
   archive(accountId: ID, threadIds: ID[]) {
-    return this.mutate('archive', accountId, threadIds, (m) =>
-      this.removeId(m, SYSTEM_LABEL.inbox),
+    return this.mutate(
+      'archive',
+      accountId,
+      threadIds,
+      (m) => void (m.labelIds = applyMailboxAction(m.labelIds, 'archive')),
     );
   }
 
   trash(accountId: ID, threadIds: ID[]) {
     return this.mutate('trash', accountId, threadIds, (m) => {
-      this.removeId(m, SYSTEM_LABEL.inbox);
-      this.removeId(m, SYSTEM_LABEL.junk);
-      this.addId(m, SYSTEM_LABEL.trash);
+      m.labelIds = applyMailboxAction(m.labelIds, 'trash');
     });
   }
 
@@ -382,26 +385,6 @@ export class MockMailService implements MailService {
   }
   private removeId(m: Message, id: ID) {
     m.labelIds = m.labelIds.filter((x) => x !== id);
-  }
-
-  private inMailbox(s: ThreadSummary, box: SystemMailbox): boolean {
-    const trashed = s.labelIds.includes(SYSTEM_LABEL.trash);
-    const junk = s.labelIds.includes(SYSTEM_LABEL.junk);
-    const live = !trashed && !junk;
-    switch (box) {
-      case 'trash':
-        return trashed;
-      case 'junk':
-        return junk && !trashed;
-      case 'inbox':
-        return live && s.labelIds.includes(SYSTEM_LABEL.inbox);
-      case 'sent':
-        return live && s.labelIds.includes(SYSTEM_LABEL.sent);
-      case 'starred':
-        return live && s.isStarred;
-      case 'all':
-        return live;
-    }
   }
 
   private matchesSearch(list: Message[], terms: string[]): boolean {

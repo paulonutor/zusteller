@@ -4,7 +4,13 @@ import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { ServicesProvider } from '@/app/services';
 import { ToastProvider } from '@/app/toast';
-import { mailKeys, type Page, type ThreadSummary } from '@/domain/mail';
+import {
+  mailKeys,
+  SYSTEM_LABEL,
+  matchesMembership,
+  type Page,
+  type ThreadSummary,
+} from '@/domain/mail';
 import { MockMailService, createSeedData } from '@/infrastructure/mail/mock';
 import { useMailActions } from '@/features/mail/useMailActions';
 import { createTestPlatform, deferred } from './helpers/mail';
@@ -121,5 +127,90 @@ describe('overlapping optimistic actions', () => {
     expect(spy.mock.calls.map((c) => c[2])).toEqual([true, false, true]);
     expect((await mail.getThread('acct-1', row.id)).isStarred).toBe(true);
     expect(cached(row.id).isStarred).toBe(true);
+  });
+});
+
+describe('optimistic mailbox membership', () => {
+  it('a failed archive preserves a pending trash, another row, and read/star/user-label changes', async () => {
+    const { mail, qc, result, cached, flush, rows } = await setup();
+    const [a, b] = rows;
+    const allKey = mailKeys.threadList({ accountId: 'acct-1', mailbox: 'all' });
+    qc.setQueryData(allKey, {
+      pages: [await mail.getThreads({ accountId: 'acct-1', mailbox: 'all' })],
+      pageParams: [undefined],
+    });
+    const archive = deferred<void>();
+    const trash = deferred<void>();
+    vi.spyOn(mail, 'archive').mockImplementationOnce(() => archive.promise);
+    const spy = vi.spyOn(mail, 'trash').mockImplementationOnce(() => trash.promise);
+    let first!: Promise<boolean>;
+    let second!: Promise<boolean>;
+    act(() => {
+      first = result.current.run('archive', [a!.id]);
+      second = result.current.run('trash', [a!.id, b!.id]);
+    });
+    await flush();
+    expect(spy).not.toHaveBeenCalled();
+    expect(cached(a!.id).labelIds).toContain(SYSTEM_LABEL.trash);
+    expect(cached(b!.id).labelIds).toContain(SYSTEM_LABEL.trash);
+    expect(matchesMembership(cached(a!.id), { accountId: 'acct-1', mailbox: 'all' })).toBe(false);
+    const edited = (data: InfiniteData<Page<ThreadSummary>> | undefined) =>
+      data && {
+        ...data,
+        pages: data.pages.map((p) => ({
+          ...p,
+          items: p.items.map((t) =>
+            t.id === a!.id
+              ? { ...t, isRead: true, isStarred: true, labelIds: [...t.labelIds, 'new-label'] }
+              : t,
+          ),
+        })),
+      };
+    qc.setQueriesData({ queryKey: mailKeys.threads('acct-1') }, edited);
+    await act(async () => {
+      archive.reject(new Error('Archive failed'));
+      await first;
+    });
+    expect(cached(a!.id).labelIds).toContain(SYSTEM_LABEL.trash);
+    await act(async () => {
+      trash.reject(new Error('Trash failed'));
+      await second;
+    });
+    expect(cached(a!.id).labelIds).toContain(SYSTEM_LABEL.inbox);
+    expect(cached(a!.id).labelIds).not.toContain(SYSTEM_LABEL.trash);
+    expect(cached(a!.id).labelIds).toContain('new-label');
+    expect(cached(a!.id).isRead).toBe(true);
+    expect(cached(a!.id).isStarred).toBe(true);
+    expect(cached(b!.id).labelIds).toEqual(expect.arrayContaining(b!.labelIds));
+    const all = qc.getQueryData<InfiniteData<Page<ThreadSummary>>>(allKey)!;
+    expect(all.pages[0]!.items.find((t) => t.id === a!.id)!.labelIds).toContain(SYSTEM_LABEL.inbox);
+  });
+
+  it('a failed trash cannot undo a successful archive on the same row', async () => {
+    const { mail, result, cached, flush, rows } = await setup();
+    const row = rows[0]!;
+    const gate = deferred<void>();
+    const realArchive = mail.archive.bind(mail);
+    vi.spyOn(mail, 'archive').mockImplementationOnce(async (...args) => {
+      await gate.promise;
+      await realArchive(...args);
+    });
+    vi.spyOn(mail, 'trash').mockRejectedValueOnce(new Error('Trash failed'));
+    let first!: Promise<boolean>;
+    let second!: Promise<boolean>;
+    act(() => {
+      first = result.current.run('archive', [row.id]);
+      second = result.current.run('trash', [row.id]);
+    });
+    await flush();
+    expect(cached(row.id).labelIds).toContain(SYSTEM_LABEL.trash);
+    await act(async () => {
+      gate.resolve();
+      expect(await first).toBe(true);
+      expect(await second).toBe(false);
+    });
+    expect(cached(row.id).labelIds).not.toContain(SYSTEM_LABEL.inbox);
+    expect(cached(row.id).labelIds).not.toContain(SYSTEM_LABEL.trash);
+    expect((await mail.getThread('acct-1', row.id)).labelIds).toEqual(cached(row.id).labelIds);
   });
 });
