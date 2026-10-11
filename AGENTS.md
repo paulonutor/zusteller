@@ -1,4 +1,4 @@
-# AGENTS.md — zusteller
+# Zusteller agent instructions
 
 Instructions for coding agents (and humans) working in this repo.
 
@@ -22,21 +22,27 @@ The product/engineering plan lives in `zusteller-plan.md` (original spec) and `d
 
 ## Commands (run from the repo root)
 
-| Task                                   | Command                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Install                                | `npm install`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Dev server (browser mode)              | `npm run dev` → http://localhost:47831 (static port, shared with `tauri dev`; `?latency=0`, `?offline=1`, `?theme=dark`, `?debug=accent`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Typecheck / lint / test                | `npm run typecheck` · `npm run lint` · `npm test` (also `npm run test:watch`, `npm run format`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| Production build                       | `npm run build` (typecheck + vite)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| Accessibility audit (needs dev server) | `npm run a11y` (axe via Playwright over many states, light/dark, host+vibrancy, `?seed=big`; `CHROMIUM_PATH=...`, `A11Y_VERBOSE=1`; non-zero exit on violations; known design-token findings are listed, not failing). Audits app controls and iframe titles, not scripts-disabled email bodies. Structure/ARIA also asserted in `tests/a11y.test.tsx`                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| Visual regression                      | `npm run test:visual` (Playwright `toHaveScreenshot`, baselines in `tests-visual/__screenshots__/`, starts its own dev server on :5304, clock frozen to the seed's now). After an intentional visual change run `npm run test:visual:update`, LOOK at the changed PNGs, commit them. Baselines are `-linux`; the tests pin the UI font (`tests-visual/fixtures.ts`, Inter from `@fontsource-variable/inter`, test-only) so local Linux runs match CI. From a Mac use `npm run test:visual:docker` / `npm run test:visual:docker:update` (Playwright image, linux/amd64, needs Docker); everything but the email-iframe text matches CI exactly, which is why the HTML-mail shots allow 1.2% difference. If baselines still differ, run the manual `update-visual-baselines` workflow: it opens a PR with the regenerated PNGs |
-| Screenshots (needs dev server)         | `CHROMIUM_PATH=/opt/pw-browsers/chromium node scripts/screenshots.mjs http://localhost:47831 screenshots`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Desktop app (Tauri)                    | `npm run tauri dev` (vibrancy; `npm run tauri:dev:opaque` for a plain window). Needs Rust; see `docs/tauri-host.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| Tauri `.app` for UI automation         | `npm run tauri build -- --debug --bundles app`, then `open` the `.app` path the build prints (`<cargo target dir>/debug/bundle/macos/zusteller.app`; the target dir is `src-tauri/target` unless `build.target-dir` is set in `~/.cargo/config.toml`, as on Paul's machine). A `tauri dev` binary is attributed to the launching app and cannot be driven by computer use                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Task                         | Command                                                          |
+| ---------------------------- | ---------------------------------------------------------------- |
+| Install                      | `npm install`                                                    |
+| Browser development          | `npm run dev`                                                    |
+| Required frontend checks     | `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` |
+| Accessibility                | `npm run a11y`                                                   |
+| Visual regression            | `npm run test:visual`                                            |
+| Visual regression on macOS   | `npm run test:visual:docker`                                     |
+| Desktop development          | `npm run tauri dev`                                              |
+| App bundle for UI automation | `npm run tauri build -- --debug --bundles app`                   |
+
+Read `docs/agent-guide.md` before accessibility, screenshot, visual-baseline, or
+desktop UI-automation work. It documents prerequisites, platform differences,
+baseline updates, and the app-bundle requirement.
 
 CI (`.github/workflows/`): `frontend.yml` runs typecheck, lint, test and build (job `check`) plus visual regression (job `visual`) on every push/PR; `update-visual-baselines.yml` (manual) regenerates baselines on the runner and opens a PR for review (never pushes to main); `tauri.yml` runs Tauri `cargo check` (Linux and macOS) when `src-tauri/**` or `src/platform/**` change.
 
-Before every push: typecheck, lint, tests and build must all pass. Look at screenshots for any visual change.
+Before every push, typecheck, lint, tests and build must pass. Inspect screenshots
+for visual changes. For documentation-only changes, verify Markdown formatting,
+links, and `git diff --check` instead. Do not update visual baselines without
+looking at the resulting images.
 
 ## Architecture rules (non-negotiable)
 
@@ -108,10 +114,16 @@ Board: **Zusteller** — https://trello.com/b/LJT3FtfE/zusteller (lists: Ideas �
 
 ## Git policy
 
-- Work on the assigned feature branch; pushing to `main` is allowed after finishing work, **fast-forward only** —
-  no merge commits (`git merge --ff-only`, or rebase onto `origin/main` first).
+- Work on the assigned feature branch. Commit completed, validated work in focused
+  commits. Integration into and pushing to `main` are allowed after finishing work,
+  using `git merge --ff-only`. Rebase unpublished task commits onto current main
+  when needed; never create merge commits, including through `git pull`.
+- Preserve unrelated changes and stage only intended files. Do not rewrite
+  published history or force-push without explicit authorization.
 - Commit identity: author/committer **Paul Onutor <paul@onutor.de>** (`git config user.name/user.email` in the repo).
-  Keep the `Co-Authored-By: Claude ... <noreply@anthropic.com>` trailer; do **not** add a `Claude-Session:` line.
+  Keep the `Co-Authored-By: Claude ... <noreply@anthropic.com>` trailer when Claude
+  contributed. Other agents follow their own attribution conventions; never
+  attribute work to an agent that did not contribute. Do not add a `Claude-Session:` line.
   Check `git log --format='%an <%ae>'` before pushing; no other author identity.
-- History is only rewritten when Paul explicitly asks (it needs a force-push; take a backup tag first).
+- Rewriting published history requires Paul's explicit request. Take a backup tag before an authorized force-push.
 - Small, descriptive commits. Never commit `node_modules`, `dist`, ad-hoc screenshots or secrets (exception: the visual-regression baselines in `tests-visual/__screenshots__`, and curated `docs/previews`).
