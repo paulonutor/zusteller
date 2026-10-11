@@ -36,6 +36,28 @@ pub struct Privacy {
 }
 
 impl Privacy {
+    /// Explain known failure categories using fixed text. Never forward arbitrary
+    /// provider, Keychain or response text through a protected window.
+    pub fn error(&self, mut error: Error) -> Error {
+        if self.enabled {
+            error.message = match (error.code.as_str(), error.message.as_str()) {
+                ("auth", "Could not read Gmail credentials from Keychain. Connect again.")
+                | ("auth", "macOS Keychain is unavailable") =>
+                    "Privacy mode could not read Gmail credentials from macOS Keychain. Quit Zusteller, launch without --privacy and allow Keychain access, then restart in privacy mode.",
+                ("auth", "No saved Gmail credentials in Keychain. Connect again.")
+                | ("auth", "Saved Gmail credentials are invalid. Connect again.") =>
+                    "No usable Gmail credentials are saved. Connect Gmail in a normal session, then restart in privacy mode.",
+                ("auth", _) =>
+                    "Gmail authorization needs renewal. Reconnect Gmail in a normal session, then restart in privacy mode.",
+                ("offline", _) => "Could not reach Gmail. Check your connection and try again.",
+                ("rate_limit", _) => "Gmail rate limit reached. Requests are paused until the retry time shown in Gmail activity.",
+                ("permission", _) => "Google denied Gmail access. Check the app's Gmail API permissions in a normal session.",
+                ("not_found", _) => "This Gmail account or conversation is unavailable.",
+                _ => "Gmail request failed in privacy mode. Open Gmail activity for request status.",
+            }.into();
+        }
+        error
+    }
     pub fn new(enabled: bool) -> Self {
         Self {
             enabled,
@@ -337,5 +359,40 @@ mod tests {
                 .unwrap(),
             ("a".into(), json!({"threadId":"t"}))
         );
+    }
+
+    #[test]
+    fn protected_errors_explain_credentials_and_quota_without_leaking_text() {
+        let p = Privacy::new(true);
+        let blocked = p.error(Error::new(
+            "auth",
+            "Could not read Gmail credentials from Keychain. Connect again.",
+        ));
+        assert!(blocked.message.contains("Keychain"));
+        assert!(blocked.message.contains("launch without --privacy"));
+        let missing = p.error(Error::new(
+            "auth",
+            "No saved Gmail credentials in Keychain. Connect again.",
+        ));
+        assert!(missing
+            .message
+            .contains("Connect Gmail in a normal session"));
+        for code in [
+            "auth",
+            "offline",
+            "rate_limit",
+            "permission",
+            "not_found",
+            "invalid",
+        ] {
+            let mut error = Error::new(code, "SECRET-address@example.com SECRET-body");
+            error.retry_after = Some(60);
+            let safe = p.error(error);
+            assert!(!safe.message.contains("SECRET"));
+            assert_eq!(safe.code, code);
+            assert_eq!(safe.retry_after, Some(60));
+        }
+        let original = Error::new("offline", "Original error");
+        assert_eq!(Privacy::default().error(original).message, "Original error");
     }
 }

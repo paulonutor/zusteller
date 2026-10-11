@@ -66,11 +66,11 @@ impl State {
             .unwrap_or_else(|e| e.into_inner())
             .enabled
     }
-    fn public_error(&self, mut error: Error) -> Error {
-        if self.privacy_enabled() {
-            error.message = "Gmail request failed in privacy mode".into();
-        }
-        error
+    fn public_error(&self, error: Error) -> Error {
+        self.privacy
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .error(error)
     }
 }
 
@@ -286,12 +286,7 @@ pub async fn gmail_read<R: tauri::Runtime>(
     let mut privacy = state.privacy.lock().unwrap_or_else(|e| e.into_inner());
     match result {
         Ok(value) => privacy.output(&output_operation, value),
-        Err(mut error) => {
-            if privacy.enabled {
-                error.message = "Gmail request failed in privacy mode".into();
-            }
-            Err(error)
-        }
+        Err(error) => Err(privacy.error(error)),
     }
 }
 

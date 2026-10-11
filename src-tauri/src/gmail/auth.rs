@@ -104,7 +104,13 @@ fn refresh_at(grant: &Grant, endpoint: &str) -> Result<Access> {
 pub fn load(account: &str) -> Result<Grant> {
     let entry = keyring::Entry::new(SERVICE, account)
         .map_err(|_| Error::new("auth", "macOS Keychain is unavailable"))?;
-    let value = entry.get_password().map_err(|_| {
+    let value = entry.get_password().map_err(|error| {
+        if matches!(error, keyring::Error::NoEntry) {
+            return Error::new(
+                "auth",
+                "No saved Gmail credentials in Keychain. Connect again.",
+            );
+        }
         Error::new(
             "auth",
             "Could not read Gmail credentials from Keychain. Connect again.",
