@@ -3,7 +3,9 @@ mod auth;
 mod diagnostics;
 mod model;
 mod quota;
+mod scheduler;
 mod store;
+mod sync;
 
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -38,32 +40,94 @@ pub struct State {
     diagnostics: Arc<diagnostics::Diagnostics>,
     connecting: Arc<AtomicBool>,
     cancelled: Arc<AtomicBool>,
+    scheduler: Arc<scheduler::Scheduler>,
+    syncing: Arc<AtomicBool>,
+}
+
+fn with_worker<R: tauri::Runtime, T>(
+    app: &tauri::AppHandle<R>,
+    state: &Mutex<Option<api::Gmail>>,
+    diagnostics: &Arc<diagnostics::Diagnostics>,
+    task: impl FnOnce(&mut api::Gmail) -> Result<T>,
+) -> Result<T> {
+    let mut guard = state
+        .lock()
+        .map_err(|_| Error::new("invalid", "Gmail worker is unavailable"))?;
+    if guard.is_none() {
+        let path = app
+            .path()
+            .app_data_dir()
+            .map_err(|_| Error::new("invalid", "App data directory is unavailable"))?
+            .join("gmail/cache.sqlite");
+        let mut gmail = api::Gmail::new(store::Store::open(&path)?)?;
+        gmail.diagnostics = diagnostics.clone();
+        *guard = Some(gmail);
+    }
+    task(guard.as_mut().unwrap())
 }
 
 async fn work<R: tauri::Runtime, T: Send + 'static>(
     app: tauri::AppHandle<R>,
-    state: Arc<Mutex<Option<api::Gmail>>>,
-    diagnostics: Arc<diagnostics::Diagnostics>,
+    state: &State,
     task: impl FnOnce(&mut api::Gmail) -> Result<T> + Send + 'static,
 ) -> Result<T> {
+    let ticket = state.scheduler.foreground();
+    let gmail = state.gmail.clone();
+    let diagnostics = state.diagnostics.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let mut guard = state
-            .lock()
-            .map_err(|_| Error::new("invalid", "Gmail worker is unavailable"))?;
-        if guard.is_none() {
-            let path = app
-                .path()
-                .app_data_dir()
-                .map_err(|_| Error::new("invalid", "App data directory is unavailable"))?
-                .join("gmail/cache.sqlite");
-            let mut gmail = api::Gmail::new(store::Store::open(&path)?)?;
-            gmail.diagnostics = diagnostics;
-            *guard = Some(gmail);
-        }
-        task(guard.as_mut().unwrap())
+        let _permit = ticket.enter();
+        with_worker(&app, &gmail, &diagnostics, task)
     })
     .await
     .map_err(|_| Error::new("invalid", "Gmail worker failed"))?
+}
+
+struct Syncing(Arc<AtomicBool>);
+impl Drop for Syncing {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
+}
+
+async fn sync_work<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: &State,
+    account: String,
+) -> Result<bool> {
+    // The frontend coalesces refreshes; also guard against duplicate IPC callers.
+    if state.syncing.swap(true, Ordering::SeqCst) {
+        return Ok(false);
+    }
+    let syncing = Syncing(state.syncing.clone());
+    let scheduler = state.scheduler.clone();
+    let gmail = state.gmail.clone();
+    let diagnostics = state.diagnostics.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let _syncing = syncing;
+        let mut pass = None;
+        loop {
+            let step = {
+                let _permit = scheduler.background();
+                with_worker(&app, &gmail, &diagnostics, |g| {
+                    if pass.is_none() {
+                        pass = Some(sync::Sync::new(g, &account)?);
+                    }
+                    pass.as_mut().unwrap().step(g)
+                })?
+            };
+            match step {
+                sync::Step::Done(changed) => return Ok(changed),
+                sync::Step::Pending(wait) if !wait.is_zero() => {
+                    // Neither the worker nor the scheduling permit is held while
+                    // pacing. Recheck promptly after a disconnect or cooldown.
+                    std::thread::sleep(wait.min(std::time::Duration::from_millis(100)));
+                }
+                sync::Step::Pending(_) => {}
+            }
+        }
+    })
+    .await
+    .map_err(|_| Error::new("invalid", "Gmail sync worker failed"))?
 }
 
 // This lock is independent of the sync worker, so the log stays readable during sync.
@@ -108,13 +172,7 @@ pub async fn gmail_connect(app: tauri::AppHandle, state: tauri::State<'_, State>
     let result = match result {
         Ok(Ok((grant, access))) if !state.cancelled.load(Ordering::SeqCst) => {
             let cancelled = state.cancelled.clone();
-            work(
-                app,
-                state.gmail.clone(),
-                state.diagnostics.clone(),
-                move |g| g.install(grant, access, &cancelled),
-            )
-            .await
+            work(app, &state, move |g| g.install(grant, access, &cancelled)).await
         }
         Ok(Ok(_)) => Err(Error::new("cancelled", "Gmail connection cancelled")),
         Ok(Err(e)) | Err(e) => Err(e),
@@ -138,38 +196,37 @@ pub async fn gmail_read<R: tauri::Runtime>(
 ) -> Result<Value> {
     let account = account_id.unwrap_or_default();
     let input = input.unwrap_or(json!({}));
-    work(
-        app,
-        state.gmail.clone(),
-        state.diagnostics.clone(),
-        move |g| {
-            if operation == "accounts" {
-                return Ok(json!(g.store.accounts()?));
+    if operation == "sync" {
+        return sync_work(app, &state, account)
+            .await
+            .map(|changed| json!(changed));
+    }
+    work(app, &state, move |g| {
+        if operation == "accounts" {
+            return Ok(json!(g.store.accounts()?));
+        }
+        if !g
+            .store
+            .accounts()?
+            .iter()
+            .any(|a| model::text(a, "id") == account)
+        {
+            return Err(Error::new("not_found", "Gmail account is not connected"));
+        }
+        match operation.as_str() {
+            "labels" => g.labels(&account),
+            "counts" => g.counts(&account),
+            "threads" => g.threads(&account, &input),
+            "thread" => g.thread(&account, model::text(&input, "threadId")),
+            "action" => g.action(&account, &input),
+            "reset" => {
+                g.store.reset(&account)?;
+                Ok(Value::Null)
             }
-            if !g
-                .store
-                .accounts()?
-                .iter()
-                .any(|a| model::text(a, "id") == account)
-            {
-                return Err(Error::new("not_found", "Gmail account is not connected"));
-            }
-            match operation.as_str() {
-                "labels" => g.labels(&account),
-                "counts" => g.counts(&account),
-                "threads" => g.threads(&account, &input),
-                "thread" => g.thread(&account, model::text(&input, "threadId")),
-                "action" => g.action(&account, &input),
-                "reset" => {
-                    g.store.reset(&account)?;
-                    Ok(Value::Null)
-                }
-                "disconnect" => g.disconnect(&account),
-                "sync" => Ok(json!(g.sync(&account)?)),
-                _ => Err(Error::new("invalid", "Unknown Gmail operation")),
-            }
-        },
-    )
+            "disconnect" => g.disconnect(&account),
+            _ => Err(Error::new("invalid", "Unknown Gmail operation")),
+        }
+    })
     .await
 }
 
@@ -183,12 +240,9 @@ pub async fn gmail_download(
     attachment_id: String,
     filename: String,
 ) -> Result<()> {
-    let bytes = work(
-        app.clone(),
-        state.gmail.clone(),
-        state.diagnostics.clone(),
-        move |g| g.attachment(&account_id, &message_id, &attachment_id, &thread_id),
-    )
+    let bytes = work(app.clone(), &state, move |g| {
+        g.attachment(&account_id, &message_id, &attachment_id, &thread_id)
+    })
     .await?;
     // Native Save As keeps untrusted attachment filenames from choosing a path.
     tauri::async_runtime::spawn_blocking(move || {

@@ -113,10 +113,17 @@ it; cached mail and local actions remain available. Large initial/history syncs
 take longer because metadata reads are paced. List refreshes reuse metadata
 maintained by history sync and fetch only missing summaries. See Google's
 [quota reference](https://developers.google.com/workspace/gmail/api/reference/quota).
+Opening mail, loading mailbox/search pages, attachments and local actions take
+priority over background sync. Sync releases the native worker between individual
+page/thread requests and during quota waits, and leaves 80 quota units available
+for interactive reads. A request already in flight must finish before the worker
+can switch to a user action. Sustained interaction can delay background sync.
+Diagnostics records `sync waiting_for_quota` when background pacing begins.
 The status bar reports sync errors and the last successful sync. History
 pagination is applied before its cursor is committed; expired history rebuilds
 the recent window and revalidates
 older cached conversations.
+Disconnecting or replacing the connection cancels any uncommitted sync pass.
 
 Unread counts show `~` because Gmail label counts and the preview's thread
 membership rules can differ. Local actions adjust those estimates using known
@@ -140,6 +147,8 @@ src-tauri/Cargo.toml` exercises native local HTTP fixtures and a Tauri mock runt
 It covers PKCE, the actual loopback callback socket, cancellation/timeout, refresh
 and revocation errors, MIME decoding, read/search/page/download requests, offline
 cache fallback, history recovery/transactions and the frontend command payloads.
+It also checks foreground priority, reserved quota, cached reads/local actions
+between sync steps, and cancellation or metadata failure before cursor commit.
 The native CI jobs run these tests without real credentials or desktop interaction.
 
 With `npm run dev` running, `node scripts/gmail-preview-check.mjs` drives a

@@ -55,6 +55,11 @@ and `gmail_download` commands. OAuth tokens never cross IPC. Refresh credentials
 are in Keychain and access tokens are in Rust memory. Server cache and local
 thread-field overrides are separate. SQLite commits each history batch with its
 cursor, and failed pagination/fetches leave the prior cursor intact.
+The native scheduler runs queued interactive work before background sync. A sync
+pass keeps pending changes outside the worker and yields between individual
+requests and quota waits; the cursor is committed only after the full pass.
+Background requests preserve 80 quota units for foreground reads. Connection
+changes invalidate pending passes before they can commit.
 
 Thread read/star flags use any-message aggregation; labels are the message union.
 Preview membership uses the shared mock rules, so a mixed Spam/Trash thread is

@@ -8,6 +8,8 @@ use std::{
 // 80 units/second plus a 400-unit burst uses at most 5,200 units in any minute.
 const UNITS_PER_SECOND: f64 = 80.0;
 const BURST: f64 = 400.0;
+// Keep two full thread reads available while background metadata is being fetched.
+const INTERACTIVE_RESERVE: f64 = 80.0;
 
 pub struct Quota(Mutex<Budget>);
 struct Budget {
@@ -27,6 +29,14 @@ impl Default for Quota {
 }
 
 impl Quota {
+    pub fn background_wait(&self, path: &str) -> Result<Duration> {
+        // A 401 can trigger one retry. Keep the foreground reserve even then.
+        self.0
+            .lock()
+            .map_err(|_| Error::new("invalid", "Gmail request budget is unavailable"))?
+            .wait_for(Instant::now(), 2.0 * cost(path) + INTERACTIVE_RESERVE)
+    }
+
     pub fn acquire(&self, path: &str) -> Result<()> {
         loop {
             let wait = self
@@ -55,6 +65,14 @@ impl Quota {
 
 impl Budget {
     fn reserve(&mut self, now: Instant, cost: f64) -> Result<Duration> {
+        let wait = self.wait_for(now, cost)?;
+        if wait.is_zero() {
+            self.units -= cost;
+        }
+        Ok(wait)
+    }
+
+    fn wait_for(&mut self, now: Instant, cost: f64) -> Result<Duration> {
         if let Some(deadline) = self.cooldown.filter(|deadline| *deadline > now) {
             let mut error = Error::new("rate_limit", "Gmail rate limit reached. Sync will retry.");
             error.retry_after = Some((deadline - now).as_secs_f64().ceil() as u64);
@@ -64,7 +82,6 @@ impl Budget {
             (self.units + (now - self.updated).as_secs_f64() * UNITS_PER_SECOND).min(BURST);
         self.updated = now;
         if self.units >= cost {
-            self.units -= cost;
             Ok(Duration::ZERO)
         } else {
             Ok(Duration::from_secs_f64(
@@ -88,6 +105,40 @@ pub fn cost(path: &str) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn background_pacing_preserves_budget_for_interactive_reads() {
+        let now = Instant::now();
+        let mut budget = Budget {
+            units: BURST,
+            updated: now,
+            cooldown: None,
+        };
+        for _ in 0..7 {
+            assert!(budget
+                .wait_for(now, 2.0 * cost("threads/t") + INTERACTIVE_RESERVE)
+                .unwrap()
+                .is_zero());
+            assert!(budget.reserve(now, cost("threads/t")).unwrap().is_zero());
+        }
+        assert_eq!(
+            budget.wait_for(now, 80.0 + INTERACTIVE_RESERVE).unwrap(),
+            Duration::from_millis(500)
+        );
+        // Even if the last background request needed an authentication retry,
+        // two interactive reads can still start immediately.
+        assert!(budget.reserve(now, cost("threads/t")).unwrap().is_zero());
+        // Checking background availability does not spend the remaining tokens.
+        assert!(budget
+            .reserve(now, cost("threads/opened"))
+            .unwrap()
+            .is_zero());
+        assert!(budget
+            .reserve(now, cost("threads/another"))
+            .unwrap()
+            .is_zero());
+        assert_eq!(budget.units, 0.0);
+    }
 
     #[test]
     fn metadata_bursts_are_bounded_and_tokens_refill_without_accumulating() {

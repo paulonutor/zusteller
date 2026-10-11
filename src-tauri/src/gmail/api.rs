@@ -24,7 +24,8 @@ pub struct Gmail {
     access: HashMap<String, auth::Access>,
     client: Client,
     base: String,
-    quota: Quota,
+    pub(super) quota: Quota,
+    pub(super) generation: u64,
 }
 impl Gmail {
     pub fn new(store: Store) -> Result<Self> {
@@ -35,6 +36,7 @@ impl Gmail {
             client: auth::client()?,
             base: BASE.into(),
             quota: Quota::default(),
+            generation: 0,
         })
     }
     pub fn install(
@@ -74,6 +76,7 @@ impl Gmail {
         auth::save(email, &grant)?;
         self.store.add_account(&account)?;
         self.access.insert(email.to_string(), access);
+        self.generation += 1;
         Ok(account)
     }
     fn token(&mut self, account: &str) -> Result<String> {
@@ -95,7 +98,12 @@ impl Gmail {
         }
         Ok(self.access[account].token.clone())
     }
-    fn get(&mut self, account: &str, path: &str, params: &[(&str, String)]) -> Result<Value> {
+    pub(super) fn get(
+        &mut self,
+        account: &str,
+        path: &str,
+        params: &[(&str, String)],
+    ) -> Result<Value> {
         let token = self.token(account)?;
         match request(
             &self.quota,
@@ -515,151 +523,21 @@ impl Gmail {
         self.store.write_overlays(account, &changes)?;
         Ok(Value::Null)
     }
-    pub fn sync(&mut self, account: &str) -> Result<bool> {
-        self.diagnostics.event("sync", "started", None);
-        let result = self.sync_inner(account);
-        self.diagnostics.event(
-            "sync",
-            if result.is_ok() { "finished" } else { "failed" },
-            None,
-        );
-        result
-    }
-    fn sync_inner(&mut self, account: &str) -> Result<bool> {
-        let cursor = self.store.history(account)?;
-        let Some(cursor) = cursor else {
-            return self.bootstrap(account);
-        };
-        let mut page_token = String::new();
-        let mut changed = BTreeSet::new();
-        let history;
+    #[cfg(test)]
+    fn sync(&mut self, account: &str) -> Result<bool> {
+        let mut pass = super::sync::Sync::new(self, account)?;
         loop {
-            let mut params = vec![
-                ("startHistoryId", cursor.clone()),
-                ("maxResults", "500".into()),
-            ];
-            if !page_token.is_empty() {
-                params.push(("pageToken", page_token));
-            }
-            let page = match self.get(account, "history", &params) {
-                Err(e) if e.code == "not_found" => return self.bootstrap(account),
-                other => other?,
-            };
-            for record in array(&page["history"]) {
-                for m in array(&record["messages"]) {
-                    if !text(m, "threadId").is_empty() {
-                        changed.insert(text(m, "threadId").to_string());
-                    }
-                }
-                for field in [
-                    "messagesAdded",
-                    "messagesDeleted",
-                    "labelsAdded",
-                    "labelsRemoved",
-                ] {
-                    for item in array(&record[field]) {
-                        let id = text(&item["message"], "threadId");
-                        if !id.is_empty() {
-                            changed.insert(id.into());
-                        }
-                    }
-                }
-            }
-            page_token = text(&page, "nextPageToken").into();
-            if page_token.is_empty() {
-                history = text(&page, "historyId").to_string();
-                break;
+            match pass.step(self)? {
+                super::sync::Step::Done(changed) => return Ok(changed),
+                super::sync::Step::Pending(wait) => std::thread::sleep(wait),
             }
         }
-        if history.is_empty() {
-            return Err(Error::new("invalid", "Google returned no sync cursor"));
-        }
-        let ids: Vec<String> = changed.into_iter().collect();
-        let token = self.token(account)?;
-        let changes = parallel(&ids, |id| {
-            match request(
-                &self.quota,
-                &self.diagnostics,
-                &self.client,
-                &self.base,
-                &token,
-                &format!("threads/{}", segment(id)),
-                &summary_params(),
-            ) {
-                Ok(raw) => Ok((id.clone(), Some(model::normalize(account, &raw, false)?))),
-                Err(e) if e.code == "not_found" => Ok((id.clone(), None)),
-                Err(e) => Err(e),
-            }
-        })?;
-        self.store.sync(account, &history, &changes)?;
-        Ok(!changes.is_empty())
-    }
-    fn bootstrap(&mut self, account: &str) -> Result<bool> {
-        let profile = self.get(account, "profile", &[])?;
-        let baseline = text(&profile, "historyId");
-        if baseline.is_empty() {
-            return Err(Error::new("invalid", "Google returned no sync cursor"));
-        }
-        // Capture history BEFORE reading a recent window. Changes during reads remain in history.
-        let page = self.get(
-            account,
-            "threads",
-            &[
-                ("maxResults", "100".into()),
-                ("includeSpamTrash", "true".into()),
-            ],
-        )?;
-        let ids: Vec<String> = array(&page["threads"])
-            .iter()
-            .map(|t| text(t, "id").into())
-            .collect();
-        let token = self.token(account)?;
-        let mut changes = parallel(&ids, |id| {
-            match request(
-                &self.quota,
-                &self.diagnostics,
-                &self.client,
-                &self.base,
-                &token,
-                &format!("threads/{}", segment(id)),
-                &summary_params(),
-            ) {
-                Ok(raw) => Ok((id.clone(), Some(model::normalize(account, &raw, false)?))),
-                Err(e) if e.code == "not_found" => Ok((id.clone(), None)),
-                Err(e) => Err(e),
-            }
-        })?;
-        // Revalidate previously cached/overridden older threads after history expiry.
-        let mut stmt = self
-            .store
-            .0
-            .prepare("SELECT key FROM cache WHERE account=?1 AND key LIKE 'thread:%'")?;
-        let old: Vec<String> = stmt
-            .query_map([account], |r| r.get::<_, String>(0))?
-            .collect::<std::result::Result<_, _>>()?;
-        drop(stmt);
-        for key in old {
-            let id = key.trim_start_matches("thread:");
-            if ids.iter().any(|i| i == id) {
-                continue;
-            }
-            match self.get(
-                account,
-                &format!("threads/{}", segment(id)),
-                &summary_params(),
-            ) {
-                Ok(raw) => changes.push((id.into(), Some(model::normalize(account, &raw, false)?))),
-                Err(e) if e.code == "not_found" => changes.push((id.into(), None)),
-                Err(e) => return Err(e),
-            }
-        }
-        self.store.sync(account, baseline, &changes)?;
-        Ok(true)
     }
     pub fn disconnect(&mut self, account: &str) -> Result<Value> {
         auth::remove(account)?;
         self.access.remove(account);
         self.store.remove(account)?;
+        self.generation += 1;
         Ok(Value::Null)
     }
     pub fn attachment(
@@ -755,7 +633,7 @@ fn mailbox_for(id: &str) -> Option<&'static str> {
         _ => None,
     }
 }
-fn segment(id: &str) -> String {
+pub(super) fn segment(id: &str) -> String {
     url::form_urlencoded::byte_serialize(id.as_bytes()).collect()
 }
 // Bounded network concurrency; credentials remain entirely inside Rust.
@@ -909,7 +787,7 @@ fn request(
     result
 }
 
-fn summary_params() -> Vec<(&'static str, String)> {
+pub(super) fn summary_params() -> Vec<(&'static str, String)> {
     let fields = "partId,mimeType,filename,headers,body(size,attachmentId)";
     let mut payload = fields.to_string();
     for _ in 0..12 {
@@ -1015,6 +893,184 @@ mod tests {
     }
     fn mail(id: &str) -> Value {
         json!({"id":id,"messages":[{"id":"m","internalDate":"1000","labelIds":["INBOX","UNREAD"],"snippet":"A &amp; B","payload":{"headers":[{"name":"Subject","value":"Hello"}]}}]})
+    }
+    #[test]
+    fn sync_worker_yields_to_queued_interaction_after_inflight_request() {
+        use super::super::{scheduler, sync_work, with_worker, State};
+        use std::sync::{mpsc, Mutex};
+        use tauri::{
+            test::{mock_builder, mock_context, noop_assets},
+            Manager,
+        };
+
+        let (mut g, empty_server, dir) = fixture(vec![]);
+        empty_server.join().unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        g.base = format!("http://{}/", listener.local_addr().unwrap());
+        let (requested, received) = mpsc::channel();
+        let (respond, response_allowed) = mpsc::channel();
+        let server = std::thread::spawn(move || {
+            for (index, value) in [
+                json!({"historyId":"11","history":[{"messages":[{"threadId":"t"}]}]}),
+                mail("t"),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                let (mut socket, _) = listener.accept().unwrap();
+                socket
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let mut bytes = [0; 8192];
+                let n = socket.read(&mut bytes).unwrap();
+                let request = String::from_utf8_lossy(&bytes[..n]);
+                if index == 0 {
+                    assert!(request.starts_with("GET /history?"));
+                    requested.send(()).unwrap();
+                    response_allowed
+                        .recv_timeout(Duration::from_secs(5))
+                        .unwrap();
+                } else {
+                    assert!(request.starts_with("GET /threads/t?"));
+                }
+                let body = value.to_string();
+                write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+            }
+        });
+        let cached = model::normalize("a", &mail("t"), true).unwrap();
+        g.store
+            .sync("a", "10", &[("t".into(), Some(cached.clone()))])
+            .unwrap();
+        g.store.put("a", "body:t", &cached).unwrap();
+        let state = State {
+            diagnostics: g.diagnostics.clone(),
+            gmail: Arc::new(Mutex::new(Some(g))),
+            scheduler: Arc::new(scheduler::Scheduler::default()),
+            ..State::default()
+        };
+        let app = mock_builder()
+            .manage(state)
+            .build(mock_context(noop_assets()))
+            .unwrap();
+        let handle = app.handle().clone();
+        let sync = tauri::async_runtime::spawn(async move {
+            sync_work(handle.clone(), &handle.state::<State>(), "a".into()).await
+        });
+        received.recv_timeout(Duration::from_secs(5)).unwrap();
+        let state = app.state::<State>();
+        // Queue an interaction while the history HTTP request is still in flight.
+        let ticket = state.scheduler.foreground();
+        respond.send(()).unwrap();
+        {
+            let _permit = ticket.enter();
+            with_worker(app.handle(), &state.gmail, &state.diagnostics, |g| {
+                assert_eq!(g.store.history("a")?.as_deref(), Some("10"));
+                assert_eq!(g.thread("a", "t")?["isRead"], false);
+                g.action(
+                    "a",
+                    &json!({"action":"markRead","threadIds":["t"],"value":true}),
+                )?;
+                // Background metadata has not started before this interaction.
+                let log = serde_json::to_value(g.diagnostics.snapshot()).unwrap();
+                assert_eq!(log["requests"], 1);
+                Ok(())
+            })
+            .unwrap();
+        }
+        drop(ticket);
+        assert!(tauri::async_runtime::block_on(sync).unwrap().unwrap());
+        assert!(!state.syncing.load(std::sync::atomic::Ordering::SeqCst));
+        let worker = state.gmail.lock().unwrap();
+        let g = worker.as_ref().unwrap();
+        assert_eq!(g.store.history("a").unwrap().as_deref(), Some("11"));
+        assert_eq!(g.store.overlay("a", "t").unwrap()["isRead"], true);
+        drop(worker);
+        drop(state);
+        drop(app);
+        server.join().unwrap();
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn sync_steps_leave_cached_reads_and_actions_available_before_atomic_commit() {
+        use super::super::sync::{Step, Sync};
+        let (mut g, server, dir) = fixture(vec![
+            (
+                200,
+                json!({"historyId":"11","history":[{"messages":[{"threadId":"t"},{"threadId":"z"}]}]}),
+            ),
+            (200, mail("t")),
+            (200, mail("z")),
+        ]);
+        let old = model::normalize("a", &mail("t"), true).unwrap();
+        g.store
+            .sync("a", "10", &[("t".into(), Some(old.clone()))])
+            .unwrap();
+        g.store.put("a", "body:t", &old).unwrap();
+        let mut pass = Sync::new(&g, "a").unwrap();
+        for _ in 0..3 {
+            assert!(matches!(pass.step(&mut g).unwrap(), Step::Pending(wait) if wait.is_zero()));
+            assert_eq!(g.store.history("a").unwrap().as_deref(), Some("10"));
+            // Cached mail stays readable between history and metadata requests.
+            assert_eq!(g.thread("a", "t").unwrap()["isRead"], false);
+            assert!(g.store.get("a", "thread:z").unwrap().is_none());
+        }
+        g.action(
+            "a",
+            &json!({"action":"markRead","threadIds":["t"],"value":true}),
+        )
+        .unwrap();
+        assert!(matches!(pass.step(&mut g).unwrap(), Step::Done(true)));
+        assert_eq!(g.store.history("a").unwrap().as_deref(), Some("11"));
+        assert!(g.store.get("a", "thread:z").unwrap().is_some());
+        assert_eq!(g.store.overlay("a", "t").unwrap()["isRead"], true);
+        assert_eq!(server.join().unwrap().len(), 3);
+        drop(g);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn connection_change_cancels_sync_before_it_can_commit_old_data() {
+        use super::super::sync::{Step, Sync};
+        let (mut g, server, dir) = fixture(vec![
+            (
+                200,
+                json!({"historyId":"11","history":[{"messages":[{"threadId":"t"}]}]}),
+            ),
+            (200, mail("t")),
+        ]);
+        g.store.sync("a", "10", &[]).unwrap();
+        let mut pass = Sync::new(&g, "a").unwrap();
+        for _ in 0..2 {
+            assert!(matches!(pass.step(&mut g).unwrap(), Step::Pending(_)));
+        }
+        g.generation += 1;
+        let error = pass.step(&mut g).err().unwrap();
+        assert_eq!(error.code, "cancelled");
+        assert_eq!(g.store.history("a").unwrap().as_deref(), Some("10"));
+        assert!(g.store.get("a", "thread:t").unwrap().is_none());
+        assert_eq!(server.join().unwrap().len(), 2);
+        drop(g);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn failed_metadata_after_a_yield_discards_the_whole_pass() {
+        let (mut g, server, dir) = fixture(vec![
+            (
+                200,
+                json!({"historyId":"11","history":[{"messages":[{"threadId":"t"},{"threadId":"z"}]}]}),
+            ),
+            (200, mail("t")),
+            (503, json!({})),
+        ]);
+        g.store.sync("a", "10", &[]).unwrap();
+        assert_eq!(g.sync("a").unwrap_err().code, "offline");
+        assert_eq!(g.store.history("a").unwrap().as_deref(), Some("10"));
+        assert!(g.store.get("a", "thread:t").unwrap().is_none());
+        assert_eq!(server.join().unwrap().len(), 3);
+        drop(g);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
