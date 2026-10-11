@@ -17,8 +17,8 @@ The product/engineering plan lives in `zusteller-plan.md` (original spec) and `d
 - **Phase 2** host exists: `src-tauri/` (Rust, Tauri 2.12), the **only** desktop host (Wails was evaluated and removed, see
   `docs/host-decision.md`), wired through `src/platform` (menus, notifications, badge, external links, window theme, system accent
   colour). Vibrancy is the default; an opaque variant exists. Signing/notarisation/updater are open.
-- **Phase 3** (Gmail), **4** (compose/send) and **5** (Apple on-device AI) are **not started** — do not implement them without an explicit request.
-- V1 explicitly excludes: OAuth, network calls, compose/reply/forward/drafts/send, AI, background sync.
+- **Phase 3** has a macOS read-only Gmail preview in `src-tauri/src/gmail/` and `src/infrastructure/mail/gmail/`. See `docs/gmail-preview.md`. Real Gmail writes, **Phase 4** (compose/send) and **Phase 5** (Apple on-device AI) require an explicit request.
+- The browser/mock reader excludes OAuth and network calls. The desktop preview requests only `gmail.readonly`; organization actions remain local. Compose/reply/forward/drafts/send and AI remain excluded.
 
 ## Commands (run from the repo root)
 

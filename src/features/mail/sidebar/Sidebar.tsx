@@ -84,6 +84,7 @@ function Row({
   label,
   count,
   title,
+  estimated,
 }: {
   active: boolean;
   onClick: () => void;
@@ -91,6 +92,7 @@ function Row({
   label: string;
   count?: number;
   title?: string;
+  estimated?: boolean;
 }) {
   return (
     <button
@@ -107,8 +109,14 @@ function Row({
       <span className="flex-1 truncate">{label}</span>
       {!!count && (
         <span className="text-[12px] tabular-nums text-muted">
-          <span aria-hidden="true">{count}</span>
-          <span className="sr-only">, {count} unread</span>
+          <span aria-hidden="true">
+            {estimated ? '~' : ''}
+            {count}
+          </span>
+          <span className="sr-only">
+            , {estimated ? 'approximately ' : ''}
+            {count} unread
+          </span>
         </span>
       )}
     </button>
@@ -161,6 +169,7 @@ export function Sidebar({
                       className={cn(isActive ? 'text-accent' : 'text-muted')}
                     />
                   }
+                  estimated={counts?.estimated}
                   label={m.name}
                   // Only Inbox and Junk show an unread count; the others would be noise.
                   count={m.id === 'inbox' || m.id === 'junk' ? counts?.mailboxes[m.id] : undefined}
@@ -188,6 +197,7 @@ export function Sidebar({
                   active={isActive}
                   onClick={() => onSelectView({ kind: 'label', labelId: l.id })}
                   icon={<span className="size-2.5 rounded-full" style={{ background: l.color }} />}
+                  estimated={counts?.estimated}
                   label={l.name}
                   count={counts?.labels[l.id]}
                 />

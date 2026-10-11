@@ -1,3 +1,4 @@
+import { useServices } from '@/app/services';
 import { useMemo } from 'react';
 import type { ID, Label, ThreadSummary } from '@/domain/mail';
 import type { MenuItemSpec } from '@/components/ui/Menu';
@@ -22,9 +23,12 @@ export function buildThreadActions(
   view: MailView,
   labels: Label[],
   perform: Perform,
+  localPreview = false,
 ) {
   const ids = threads.map((t) => t.id);
-  const actions = resolveActions(threads, view);
+  const actions = resolveActions(threads, view).map((a) =>
+    localPreview && a.id === 'deleteForever' ? { ...a, label: 'Hide locally' } : a,
+  );
   const states = labelStates(threads, labels);
   const userLabels = labels.filter((l) => l.type === 'user');
   const none = threads.length === 0;
@@ -78,8 +82,9 @@ export function useThreadActions(
   labels: Label[],
   perform: Perform,
 ) {
+  const { mail } = useServices();
   return useMemo(
-    () => buildThreadActions(threads, view, labels, perform),
-    [threads, view, labels, perform],
+    () => buildThreadActions(threads, view, labels, perform, mail.localPreview),
+    [threads, view, labels, perform, mail.localPreview],
   );
 }

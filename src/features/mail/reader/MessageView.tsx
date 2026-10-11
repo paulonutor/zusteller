@@ -1,3 +1,5 @@
+import { useServices } from '@/app/services';
+import { useToast } from '@/app/toast';
 import { lazy, Suspense, useState } from 'react';
 import { ChevronDown, ChevronRight, FileText, ImageOff, Paperclip, Star } from 'lucide-react';
 import type { Message } from '@/domain/mail';
@@ -30,6 +32,19 @@ export function MessageView({
   onToggle,
   onOpenLink,
 }: Props) {
+  const { mail } = useServices();
+  const toast = useToast();
+  const [downloading, setDownloading] = useState<string>();
+  const download = async (attachment: Message['attachments'][number]) => {
+    setDownloading(attachment.id);
+    try {
+      await mail.downloadAttachment?.(m.accountId, m.threadId, m.id, attachment);
+    } catch (e) {
+      toast.show(e instanceof Error ? e.message : 'Could not download attachment', 'error');
+    } finally {
+      setDownloading(undefined);
+    }
+  };
   const expanded = collapsible ? expandedProp : true;
   const { resolved } = useTheme();
   const [showRemote, setShowRemote] = useState(false);
@@ -167,6 +182,17 @@ export function MessageView({
                     <span className="block truncate font-medium">{a.filename}</span>
                     <span className="text-muted">{formatSize(a.size)}</span>
                   </span>
+                  {mail.downloadAttachment && (
+                    <button
+                      type="button"
+                      className="ml-2 hover:underline disabled:opacity-50"
+                      disabled={!!downloading}
+                      aria-label={`Save ${a.filename}`}
+                      onClick={() => void download(a)}
+                    >
+                      {downloading === a.id ? 'Saving…' : 'Save'}
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>

@@ -48,10 +48,16 @@ export function useThreadList(query: Omit<ThreadQuery, 'cursor'> | undefined) {
     // Keep rows on screen while a new search/view/refetch is in flight.
     placeholderData: keepPreviousData,
   });
+  const seen = new Set<ID>();
   const items: ThreadSummary[] =
     result.data?.pages
       .flatMap((p) => p.items)
-      .filter((t) => !query || matchesMembership(t, query)) ?? [];
+      .filter((t) => !query || matchesMembership(t, query))
+      .filter((t) => {
+        if (seen.has(t.id)) return false;
+        seen.add(t.id);
+        return true;
+      }) ?? [];
   return { ...result, items };
 }
 

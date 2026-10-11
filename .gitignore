@@ -31,3 +31,7 @@ screenshots/
 
 test-results/
 playwright-report/
+
+# Google Desktop OAuth downloads belong outside the repository
+client_secret*.json
+credentials.json

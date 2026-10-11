@@ -173,7 +173,10 @@ export function useMailActions(accountId: ID | undefined) {
   );
 
   const refresh = useCallback(
-    () => qc.invalidateQueries({ queryKey: mailKeys.all, predicate: isMutable }),
+    () =>
+      pendingCount.current > 0
+        ? Promise.resolve()
+        : qc.invalidateQueries({ queryKey: mailKeys.all, predicate: isMutable }),
     [qc],
   );
   return { run, refresh };

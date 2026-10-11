@@ -1,3 +1,5 @@
+import type { MailConnection } from './connection';
+
 /**
  * Provider-neutral mail domain model. Nothing in here may reference a concrete
  * provider (Gmail), a host (Tauri) or a UI library.
@@ -50,7 +52,7 @@ export type ThreadSummary = {
 };
 
 export type Thread = ThreadSummary & { messages: Message[] };
-export type Page<T> = { items: T[]; nextCursor?: string };
+export type Page<T> = { items: T[]; nextCursor?: string; stale?: boolean };
 
 export type ThreadQuery = {
   accountId: ID;
@@ -68,9 +70,19 @@ export type ThreadQuery = {
 export type MailboxCounts = {
   mailboxes: Record<SystemMailbox, number>;
   labels: Record<ID, number>;
+  /** Provider counts may differ from local preview membership. */
+  estimated?: boolean;
 };
 
 export interface MailService {
+  readonly localPreview?: boolean;
+  readonly connection?: MailConnection;
+  downloadAttachment?(
+    accountId: ID,
+    threadId: ID,
+    messageId: ID,
+    attachment: Attachment,
+  ): Promise<void>;
   getAccounts(): Promise<Account[]>;
   getLabels(accountId: ID): Promise<Label[]>;
   getMailboxCounts(accountId: ID): Promise<MailboxCounts>;

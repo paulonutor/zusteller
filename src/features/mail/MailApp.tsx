@@ -29,7 +29,7 @@ const EMPTY: Record<string, string> = {
 };
 
 export function MailApp() {
-  const { platform } = useServices();
+  const { platform, mail } = useServices();
   const toast = useToast();
   const accounts = useAccounts();
   const account = accounts.data?.[0];
@@ -79,7 +79,7 @@ export function MailApp() {
     const targets = selection.selected.has(id)
       ? selectedSummaries
       : items.filter((t) => t.id === id);
-    return buildThreadActions(targets, view, labels, perform).contextItems;
+    return buildThreadActions(targets, view, labels, perform, mail.localPreview).contextItems;
   };
 
   // Drag & drop. Validity and the plan come from one pure function so the highlight and the drop
@@ -158,6 +158,7 @@ export function MailApp() {
         <ThreadList
           title={title}
           unreadCount={unread}
+          estimatedCounts={counts.data?.estimated}
           items={items}
           labels={labels}
           accountEmail={account?.email}

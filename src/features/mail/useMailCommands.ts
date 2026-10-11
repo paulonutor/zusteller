@@ -72,10 +72,16 @@ export function useMailCommands({
         const ok = await platform.confirm({
           title:
             n === 1
-              ? 'Delete this conversation permanently?'
-              : `Delete ${n} conversations permanently?`,
-          message: "This can't be undone.",
-          confirmLabel: 'Delete',
+              ? mail.localPreview
+                ? 'Hide this conversation locally?'
+                : 'Delete this conversation permanently?'
+              : mail.localPreview
+                ? `Hide ${n} conversations locally?`
+                : `Delete ${n} conversations permanently?`,
+          message: mail.localPreview
+            ? 'This hides the conversation on this Mac. Reset local changes restores it. Gmail is unchanged.'
+            : "This can't be undone.",
+          confirmLabel: mail.localPreview ? 'Hide locally' : 'Delete',
           destructive: true,
         });
         if (!ok) return false;
@@ -112,7 +118,7 @@ export function useMailCommands({
       }
       return ok;
     },
-    [run, ids, view, platform, setSelection],
+    [run, ids, view, platform, mail.localPreview, setSelection],
   );
 
   // Targets for shortcuts: the selection, else the keyboard cursor.

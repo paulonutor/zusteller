@@ -45,6 +45,7 @@ jobs:
       - run: npm ci && npm run build
         working-directory: .
       - run: cargo check --locked
+      - run: cargo test --locked
 
   # The macOS code paths (private APIs, cfg(macos) Rust) are what the host exists for.
   tauri-macos:
@@ -66,3 +67,4 @@ jobs:
       - run: npm ci && npm run build
         working-directory: .
       - run: cargo check --locked
+      - run: cargo test --locked

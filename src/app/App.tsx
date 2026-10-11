@@ -1,3 +1,4 @@
+import { MailConnectionGate } from './MailConnectionGate';
 import { useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MailApp } from '@/features/mail/MailApp';
@@ -18,7 +19,13 @@ export function App({ services, queryClient }: { services: Services; queryClient
       <QueryClientProvider client={qc}>
         <ThemeProvider>
           <ToastProvider>
-            <MailApp />
+            {services.mail.connection ? (
+              <MailConnectionGate>
+                <MailApp />
+              </MailConnectionGate>
+            ) : (
+              <MailApp />
+            )}
           </ToastProvider>
         </ThemeProvider>
       </QueryClientProvider>

@@ -1,8 +1,8 @@
-# zusteller architecture (Phase 1 reader + Phase 2 Tauri host)
+# zusteller architecture
 
 ```
 React UI (features/mail) ──► MailService (domain contract) ◄── MockMailService   (Phase 1)
-        │                                                  ◄── GmailMailService  (Phase 3, future)
+        │                                                  ◄── GmailMailService  (Phase 3, read-only preview)
         └────────────────► PlatformService ◄── browser impl ◄── Tauri adapter (Phase 2, wired)
 ```
 
@@ -40,6 +40,34 @@ deterministic failure tests. App sessions use zero mock latency by default; `?la
 Other mock features: deterministic seed (`createSeedData`, fixed `SEED_NOW`) with accounts, labels, multi-message threads, HTML and
 plain-text bodies and attachments (metadata); stateful mutations; keyset-paged `getThreads`; search; `getMailboxCounts` that
 reflects mutations.
+
+## Gmail read-only preview
+
+Desktop sessions select `GmailMailService` in `createServices.ts`; browser sessions
+and desktop `?provider=mock` select the mock. The optional `MailService.connection`
+contract drives account setup/reset/disconnect without provider imports in features.
+`localPreview` distinguishes reversible simulations, and `downloadAttachment` is
+an optional provider capability.
+
+`src-tauri/src/gmail/` owns OAuth, requests, MIME normalization, SQLite and actions.
+The frontend invokes narrow `gmail_read`, `gmail_connect`, `gmail_cancel_connect`
+and `gmail_download` commands. OAuth tokens never cross IPC. Refresh credentials
+are in Keychain and access tokens are in Rust memory. Server cache and local
+thread-field overrides are separate. SQLite commits each history batch with its
+cursor, and failed pagination/fetches leave the prior cursor intact.
+
+Thread read/star flags use any-message aggregation; labels are the message union.
+Preview membership uses the shared mock rules, so a mixed Spam/Trash thread is
+excluded from ordinary mailboxes even if Gmail returns it there. Local actions
+apply only to intended fields and never replay as server writes. Label unread
+counts use `threadsUnread`, then estimated adjustments for known local overrides;
+the UI marks them as approximate. Search uses Gmail syntax over server state.
+
+The cache is bounded and bodies load on open. Provider subscriptions poll history
+and invalidate lists/counts/details after changes, deferring refresh during local
+actions. Setup, security boundaries and user-facing limits are in
+[gmail-preview.md](gmail-preview.md). Trello continues to track delivery and
+real-account validation.
 
 ## UI architecture
 
@@ -108,7 +136,7 @@ Native popup menus return a selected item id or `null` on dismissal. Each popup 
 pixels load by default for normal mail, with remote image requests limited to HTTPS by CSP. Junk blocks them until
 "Load images" is requested for that message; link `href`s limited to http(s)/mailto and opened
 only via `PlatformService.openExternal`; rendered in `<iframe sandbox="allow-same-origin" srcdoc>` with a CSP and no scripts;
-the parent sizes the frame and intercepts link clicks. Attachments are metadata-only in V1 (no download).
+the parent sizes the frame and intercepts link clicks. Mock attachments remain metadata-only. Gmail attachments download explicitly through a bounded Rust request and native Save As dialog.
 
 ## Host and look
 
@@ -135,4 +163,4 @@ the parent sizes the frame and intercepts link clicks. Attachments are metadata-
 
 ## Deliberately not built (later phases)
 
-Gmail/OAuth/cache (3), compose/reply/send (4), on-device AI (5), app packaging/signing/notarisation, Liquid Glass in Tauri.
+Real Gmail writes and full offline mirroring (3), compose/reply/send (4), on-device AI (5), app packaging/signing/notarisation, Liquid Glass in Tauri.

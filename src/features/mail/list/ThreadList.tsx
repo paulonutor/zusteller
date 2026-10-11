@@ -29,6 +29,7 @@ type Props = {
   onFilterChange: (f: ListFilter) => void;
   title: string;
   unreadCount?: number;
+  estimatedCounts?: boolean;
   items: ThreadSummary[];
   labels: Label[];
   accountEmail: string | undefined;
@@ -271,8 +272,10 @@ export function ThreadList(p: Props) {
               : p.searchText
                 ? 'Search results'
                 : p.unreadCount
-                  ? `${p.unreadCount} unread`
-                  : 'No unread'}
+                  ? `${p.estimatedCounts ? '~' : ''}${p.unreadCount} unread`
+                  : p.estimatedCounts
+                    ? 'Unread count is approximate'
+                    : 'No unread'}
           </p>
         </div>
         <label className="no-drag relative ml-auto min-w-0 flex-1">

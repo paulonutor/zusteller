@@ -138,3 +138,8 @@ export function onTauriMenuAction(handler: (itemId: string) => void): () => void
     off?.();
   };
 }
+
+/** Typed IPC seam for infrastructure adapters; feature code uses service contracts. */
+export function invokeHost<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  return requireTauri().core.invoke(command, args) as Promise<T>;
+}

@@ -1,3 +1,5 @@
+import { GmailMailService } from '@/infrastructure/mail/gmail/GmailMailService';
+import { invokeHost, isTauriHost } from '@/platform/tauri';
 import { MockMailService, createSeedData } from '@/infrastructure/mail/mock';
 import type { SeedData } from '@/infrastructure/mail/mock/seed';
 import { createPlatformService } from '@/platform';
@@ -28,6 +30,9 @@ function withBigSeed(seed: SeedData, n: number): SeedData {
  */
 export function createServices(search = window.location.search): Services {
   const params = new URLSearchParams(search);
+  if (isTauriHost() && params.get('provider') !== 'mock') {
+    return { mail: new GmailMailService(invokeHost), platform: createPlatformService() };
+  }
   const latency = Number(params.get('latency') ?? 0);
   let seed = createSeedData();
   const big = params.get('seed');

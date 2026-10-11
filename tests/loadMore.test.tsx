@@ -53,4 +53,25 @@ describe('load more', () => {
     // initial page + at most MAX_AUTO_PAGES per (filter) context
     expect(settled).toBeLessThanOrEqual(1 + MAX_AUTO_PAGES * 2);
   });
+  it('deduplicates provider rows repeated across page boundaries', async () => {
+    const mail = new MockMailService(createSeedData(), { latency: 0 });
+    const first = await mail.getThreads({
+      accountId: (await mail.getAccounts())[0]!.id,
+      mailbox: 'inbox',
+      limit: 2,
+    });
+    const repeated = { ...first.items[0]!, subject: 'Duplicate boundary conversation' };
+    const next = { ...first.items[1]!, subject: 'Next page conversation' };
+    const calls = vi
+      .spyOn(mail, 'getThreads')
+      .mockImplementation(async (q) =>
+        q.cursor ? { items: [repeated, next] } : { items: [repeated], nextCursor: 'next' },
+      );
+    render(<App services={{ mail, platform }} />);
+    await screen.findByRole('option', { name: /Next page conversation/ });
+    expect(screen.getAllByRole('option', { name: /Duplicate boundary conversation/ })).toHaveLength(
+      1,
+    );
+    expect(calls).toHaveBeenCalledTimes(2);
+  });
 });
