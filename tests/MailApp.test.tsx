@@ -10,8 +10,22 @@ let mail: MockMailService;
 let platform: PlatformService;
 let menu: ((a: MenuAction) => void) | undefined;
 
-function setup() {
+function setup(estimatedUnreadCount?: number) {
   mail = new MockMailService(createSeedData(), { latency: 0 });
+  if (estimatedUnreadCount !== undefined) {
+    const getCounts = mail.getMailboxCounts.bind(mail);
+    vi.spyOn(mail, 'getMailboxCounts').mockImplementation(async (accountId) => {
+      const counts = await getCounts(accountId);
+      return {
+        ...counts,
+        estimated: true,
+        mailboxes: { ...counts.mailboxes, inbox: estimatedUnreadCount, junk: estimatedUnreadCount },
+        labels: Object.fromEntries(
+          Object.keys(counts.labels).map((id) => [id, estimatedUnreadCount]),
+        ),
+      };
+    });
+  }
   platform = {
     showNotification: vi.fn().mockResolvedValue(undefined),
     setBadge: vi.fn().mockResolvedValue(undefined),
@@ -52,6 +66,23 @@ beforeEach(() => {
 });
 
 describe('browsing', () => {
+  it.each([0, 7])('shows estimated unread count %i without qualifiers', async (count) => {
+    setup(count);
+    await waitForRows();
+    const navigation = screen.getByRole('navigation', { name: 'Mailboxes' });
+    await waitFor(() =>
+      expect(inboxUnread()).toHaveAccessibleName(count ? `Inbox, ${count} unread` : 'Inbox'),
+    );
+    for (const label of ['Inbox', 'Junk', 'Finance']) {
+      const button = within(navigation).getByRole('button', { name: new RegExp(`^${label}`) });
+      expect(button).toHaveAccessibleName(count ? `${label}, ${count} unread` : label);
+      expect(button.textContent).not.toContain('~');
+    }
+    const header = screen.getByRole('heading', { name: 'Inbox' }).parentElement!;
+    expect(within(header).getByText(count ? `${count} unread` : 'No unread')).toBeInTheDocument();
+    expect(screen.queryByText(/approximate/i)).not.toBeInTheDocument();
+  });
+
   it('shows the inbox with an unread count and switches mailboxes and labels', async () => {
     const user = setup();
     await waitForRows();

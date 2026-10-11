@@ -158,7 +158,6 @@ export function MailApp() {
         <ThreadList
           title={title}
           unreadCount={unread}
-          estimatedCounts={counts.data?.estimated}
           items={items}
           labels={labels}
           accountEmail={account?.email}
