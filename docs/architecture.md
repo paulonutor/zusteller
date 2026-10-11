@@ -60,6 +60,12 @@ pass keeps pending changes outside the worker and yields between individual
 requests and quota waits; the cursor is committed only after the full pass.
 Background requests preserve 80 quota units for foreground reads. Connection
 changes invalidate pending passes before they can commit.
+The reusable Gmail Activity webview renders the same frontend in `?view=activity`
+mode. It mounts no mail reader or provider subscription, so it starts no sync loop.
+The main connection gate publishes status into independent native session memory;
+the activity window reads that snapshot and diagnostics without waiting for the
+mail worker. Correlated native events route its connection actions through the
+main gate, including query cancellation/invalidation and action results.
 
 Thread read/star flags use any-message aggregation; labels are the message union.
 Preview membership uses the shared mock rules, so a mixed Spam/Trash thread is

@@ -52,6 +52,12 @@ let nextMenuRequest = 0;
 
 export function createTauriPlatformService(): Omit<PlatformService, 'subscribeMenuActions'> {
   return {
+    async openMailActivityWindow() {
+      await invokeHost('open_mail_activity');
+    },
+    async closeMailActivityWindow() {
+      await invokeHost('close_mail_activity');
+    },
     async showNotification({ title, body }) {
       await requireTauri().core.invoke('notify', { title, body });
     },
@@ -142,4 +148,11 @@ export function onTauriMenuAction(handler: (itemId: string) => void): () => void
 /** Typed IPC seam for infrastructure adapters; feature code uses service contracts. */
 export function invokeHost<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   return requireTauri().core.invoke(command, args) as Promise<T>;
+}
+
+/** Infrastructure event seam; features use typed service contracts. */
+export function listenHost(event: string, handler: (payload: unknown) => void): Promise<Unlisten> {
+  const listen = requireTauri().event?.listen;
+  if (!listen) return Promise.reject(new Error('Tauri events not available'));
+  return listen(event, (e) => handler(e.payload));
 }

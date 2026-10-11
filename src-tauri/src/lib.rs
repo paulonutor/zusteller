@@ -181,6 +181,8 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .minimize()
         .maximize()
         .separator()
+        .item(&MenuItemBuilder::with_id("window.gmailActivity", "Gmail Activity").build(app)?)
+        .separator()
         .close_window()
         .build()?;
 
@@ -248,10 +250,7 @@ fn set_badge(app: AppHandle, count: Option<i64>) -> Result<(), String> {
 /// Pin the window (and so the native vibrancy material) to light/dark, or follow the system with
 /// `None`. The page's own theme and the native material must agree, otherwise text loses contrast.
 #[tauri::command]
-fn set_window_theme(app: AppHandle, theme: Option<String>) -> Result<(), String> {
-    let window = app
-        .get_webview_window("main")
-        .ok_or_else(|| "main window not found".to_string())?;
+fn set_window_theme(window: Window, theme: Option<String>) -> Result<(), String> {
     let theme = match theme.as_deref() {
         Some("dark") => Some(tauri::Theme::Dark),
         Some("light") => Some(tauri::Theme::Light),
@@ -302,6 +301,12 @@ pub fn run() {
             gmail::gmail_read,
             gmail::gmail_download,
             gmail::gmail_diagnostics,
+            gmail::activity::open_mail_activity,
+            gmail::activity::close_mail_activity,
+            gmail::activity::gmail_activity_snapshot,
+            gmail::activity::gmail_activity_publish,
+            gmail::activity::gmail_activity_action,
+            gmail::activity::gmail_activity_result,
             notify,
             set_badge,
             set_window_theme,
@@ -329,7 +334,12 @@ pub fn run() {
         .menu(|app| build_menu(app))
         .on_menu_event(|app, event| {
             let id = event.id().as_ref();
-            if let Some(ctx) = id.strip_prefix(CONTEXT_PREFIX) {
+            if id == "window.gmailActivity" {
+                let handle = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = gmail::activity::open_mail_activity(handle).await;
+                });
+            } else if let Some(ctx) = id.strip_prefix(CONTEXT_PREFIX) {
                 if let Some((request_id, item_id)) = ctx.split_once(':') {
                     let _ = app.emit(
                         CONTEXT_MENU_EVENT,
@@ -340,7 +350,12 @@ pub fn run() {
                     );
                 }
             } else if id.starts_with("mail.") {
-                let _ = app.emit(MENU_EVENT, id);
+                if app
+                    .get_webview_window("main")
+                    .is_some_and(|w| w.is_focused().unwrap_or(false))
+                {
+                    let _ = app.emit_to("main", MENU_EVENT, id);
+                }
             }
         })
         .run(tauri::generate_context!())

@@ -14,6 +14,7 @@ import {
 import type { Account, ID, Label, MailboxCounts, SystemMailbox } from '@/domain/mail';
 import { MAILBOXES, userLabels } from '@/domain/mail';
 import { useTheme, type ThemePreference } from '@/app/theme';
+import { MailActivityButton } from '@/app/MailActivityButton';
 import { cn } from '@/lib/cn';
 import { dropTargetKey } from '../dropAnimation';
 import { beginLabelDrag, endDrag, useDropZone, type DropTarget } from '../dnd';
@@ -222,6 +223,7 @@ function ThemeSwitch() {
   const { preference, setPreference } = useTheme();
   return (
     <div className="shrink-0 border-t border-border p-2">
+      <MailActivityButton />
       <div
         role="radiogroup"
         aria-label="Appearance"

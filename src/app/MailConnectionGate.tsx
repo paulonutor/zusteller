@@ -1,9 +1,16 @@
-import { useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { mailKeys } from '@/domain/mail';
 import { Button } from '@/components/ui/Button';
 import { useServices } from './services';
-import { MailDiagnosticsPanel } from './MailDiagnosticsPanel';
+import { MailActivityButton } from './MailActivityButton';
 
 /** Shared account UI depends only on the optional provider lifecycle contract. */
 export function MailConnectionGate({ children }: { children: ReactNode }) {
@@ -19,28 +26,47 @@ export function MailConnectionGate({ children }: { children: ReactNode }) {
   const account = accounts.data?.[0];
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
-  const diagnosticsButton = useRef<HTMLButtonElement>(null);
-  const closeDiagnostics = () => {
-    setDiagnosticsOpen(false);
-    diagnosticsButton.current?.focus();
-  };
-  const run = async (task: () => Promise<void>, clear = false) => {
-    setBusy(true);
-    setError(undefined);
-    try {
-      await task();
-      if (clear) {
-        await qc.cancelQueries({ queryKey: mailKeys.all });
-        qc.removeQueries({ queryKey: mailKeys.all });
+  const busyRef = useRef(false);
+  const run = useCallback(
+    async (task: () => Promise<void>, clear = false) => {
+      if (busyRef.current) throw new Error('A Gmail connection action is already running');
+      busyRef.current = true;
+      setBusy(true);
+      setError(undefined);
+      try {
+        await task();
+        if (clear) {
+          await qc.cancelQueries({ queryKey: mailKeys.all });
+          qc.removeQueries({ queryKey: mailKeys.all });
+        }
+        await qc.invalidateQueries({ queryKey: mailKeys.all });
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Could not update the Gmail connection');
+        throw e;
+      } finally {
+        busyRef.current = false;
+        setBusy(false);
       }
-      await qc.invalidateQueries({ queryKey: mailKeys.all });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not update the Gmail connection');
-    } finally {
-      setBusy(false);
-    }
-  };
+    },
+    [qc],
+  );
+  useEffect(() => {
+    void connection.activity
+      ?.publish({ account, status, busy, message: error })
+      .catch(() => undefined);
+  }, [connection, account, status, busy, error]);
+  useEffect(
+    () =>
+      connection.activity?.subscribeActions(async (action) => {
+        if (action === 'cancelConnect') return connection.cancelConnect();
+        if (action === 'connect') return run(() => connection.connect(), true);
+        if (action === 'refresh') return run(() => connection.refresh());
+        if (!account) throw new Error('No Gmail account is connected');
+        if (action === 'reset') return run(() => connection.resetLocalChanges(account.id));
+        return run(() => connection.disconnect(account.id), true);
+      }),
+    [connection, account, run],
+  );
   const connecting = status.state === 'connecting';
   const feedback = error ?? status.message;
 
@@ -72,7 +98,7 @@ export function MailConnectionGate({ children }: { children: ReactNode }) {
           <div className="flex flex-wrap gap-2">
             <Button
               disabled={busy || accounts.isPending}
-              onClick={() => void run(() => connection.connect(), true)}
+              onClick={() => void run(() => connection.connect(), true).catch(() => undefined)}
             >
               {connecting
                 ? 'Waiting for Google…'
@@ -99,78 +125,15 @@ export function MailConnectionGate({ children }: { children: ReactNode }) {
               </Button>
             )}
           </div>
+          <MailActivityButton />
         </div>
       </main>
     );
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div key={account.id} className="min-h-0 flex-1">
-        {children}
-      </div>
-      <div
-        role="region"
-        aria-label="Gmail connection"
-        className="no-drag flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-t border-border bg-sidebar px-3 py-1 text-[11px]"
-      >
-        <span>Read-only Gmail · actions are local</span>
-        <span className="text-muted" role="status">
-          {status.state === 'syncing'
-            ? 'Syncing…'
-            : (feedback ??
-              (status.lastSyncedAt
-                ? 'Synced · unread counts are estimates'
-                : 'Cached mail · connecting to Google…'))}
-        </span>
-        <div className="ml-auto flex gap-3">
-          {connection.getDiagnostics && (
-            <button
-              ref={diagnosticsButton}
-              aria-expanded={diagnosticsOpen}
-              aria-controls={diagnosticsOpen ? 'gmail-diagnostics' : undefined}
-              className="hover:underline"
-              onClick={() => setDiagnosticsOpen((open) => !open)}
-            >
-              Diagnostics
-            </button>
-          )}
-          <button
-            disabled={busy}
-            className="hover:underline disabled:opacity-50"
-            onClick={() => void run(() => connection.refresh())}
-          >
-            Refresh Gmail
-          </button>
-          <button
-            disabled={busy}
-            className="hover:underline disabled:opacity-50"
-            onClick={() => void run(() => connection.resetLocalChanges(account.id))}
-          >
-            Reset local changes
-          </button>
-          <button
-            disabled={busy}
-            className="hover:underline disabled:opacity-50"
-            onClick={() => void run(() => connection.connect(), true)}
-          >
-            Reconnect
-          </button>
-          <button
-            disabled={busy}
-            className="hover:underline disabled:opacity-50"
-            onClick={() => void run(() => connection.disconnect(account.id), true)}
-          >
-            Disconnect
-          </button>
-          {connecting && (
-            <button onClick={() => void connection.cancelConnect()}>Cancel sign-in</button>
-          )}
-        </div>
-      </div>
-      {diagnosticsOpen && connection.getDiagnostics && (
-        <MailDiagnosticsPanel connection={connection} onClose={closeDiagnostics} />
-      )}
+    <div key={account.id} className="h-full min-h-0">
+      {children}
     </div>
   );
 }

@@ -15,6 +15,11 @@ trackNativeAccent(services.platform);
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App services={services} />
+    <App
+      services={services}
+      view={
+        new URLSearchParams(window.location.search).get('view') === 'activity' ? 'activity' : 'mail'
+      }
+    />
   </StrictMode>,
 );

@@ -1,3 +1,4 @@
+pub mod activity;
 mod api;
 mod auth;
 mod diagnostics;
@@ -36,6 +37,7 @@ impl Error {
 
 #[derive(Default)]
 pub struct State {
+    activity: activity::Activity,
     gmail: Arc<Mutex<Option<api::Gmail>>>,
     diagnostics: Arc<diagnostics::Diagnostics>,
     connecting: Arc<AtomicBool>,

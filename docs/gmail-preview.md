@@ -74,10 +74,17 @@ the desktop host for visual tests.
 
 ## Inspect Gmail activity
 
-Click **Diagnostics** in the Gmail connection bar to open the live request log.
-It refreshes every two seconds while open, including while sync is running.
+Click **Gmail activity** in the sidebar, or choose **Window → Gmail Activity**,
+to open a separate, resizable window. Opening it again brings the same window
+forward. Connection status, last sync/retry times, Refresh Gmail, Reset local
+changes, Reconnect and Disconnect live here alongside the request log.
+The mail reader has no bottom connection bar or embedded log.
+The log refreshes every two seconds while open, including while sync is running.
 Use **Copy log** to copy the session totals and retained events for troubleshooting.
-Close the panel with **Close** or Escape while focused inside it.
+Close the window with **Close**, Escape, the native close button or Command-W.
+Closing/reopening the window keeps the current session log. The main app owns
+the connection and its sync loop; this window only observes status and routes
+actions back to it. Opening the window starts no extra Gmail polling.
 
 The panel shows request counts, estimated quota units, cache reuse, sync events,
 HTTP status, timing and quota pacing, Google's recognized rate-limit reason,
@@ -153,7 +160,8 @@ The native CI jobs run these tests without real credentials or desktop interacti
 
 With `npm run dev` running, `node scripts/gmail-preview-check.mjs` drives a
 synthetic desktop-provider UI in Chromium, checks connect/read/save/reset/disconnect
-in light/dark, runs axe and writes screenshots under `/tmp/zusteller-gmail-preview`.
+and activity window copy/close/reopen in light/dark at regular and compact sizes,
+runs axe and writes screenshots under `/tmp/zusteller-gmail-preview`.
 `npm run a11y` runs the existing broader reader audit. The synthetic check reports
 known token contrast findings separately from failing structural findings.
 

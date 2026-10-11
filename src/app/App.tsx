@@ -1,4 +1,5 @@
 import { MailConnectionGate } from './MailConnectionGate';
+import { MailActivityWindow } from './MailActivityWindow';
 import { useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MailApp } from '@/features/mail/MailApp';
@@ -12,14 +13,24 @@ function makeQueryClient() {
   });
 }
 
-export function App({ services, queryClient }: { services: Services; queryClient?: QueryClient }) {
+export function App({
+  services,
+  queryClient,
+  view = 'mail',
+}: {
+  services: Services;
+  queryClient?: QueryClient;
+  view?: 'mail' | 'activity';
+}) {
   const [qc] = useState(() => queryClient ?? makeQueryClient());
   return (
     <ServicesProvider services={services}>
       <QueryClientProvider client={qc}>
         <ThemeProvider>
           <ToastProvider>
-            {services.mail.connection ? (
+            {view === 'activity' ? (
+              <MailActivityWindow />
+            ) : services.mail.connection ? (
               <MailConnectionGate>
                 <MailApp />
               </MailConnectionGate>

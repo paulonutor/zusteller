@@ -15,13 +15,7 @@ function formatEntry(entry: MailDiagnosticEntry) {
   return parts.join(' · ');
 }
 
-export function MailDiagnosticsPanel({
-  connection,
-  onClose,
-}: {
-  connection: MailConnection;
-  onClose: () => void;
-}) {
+export function MailDiagnosticsPanel({ connection }: { connection: MailConnection }) {
   const log = useQuery({
     queryKey: ['mail-diagnostics'],
     queryFn: () => connection.getDiagnostics!(),
@@ -52,23 +46,13 @@ export function MailDiagnosticsPanel({
     <section
       id="gmail-diagnostics"
       aria-label="Gmail diagnostics"
-      className="no-drag shrink-0 border-t border-border bg-background px-3 py-2 text-[12px]"
-      onKeyDown={(event) => {
-        // Keep mail shortcuts from acting on the selected thread while reading the log.
-        event.stopPropagation();
-        if (event.key === 'Escape') {
-          onClose();
-        }
-      }}
+      className="no-drag flex min-h-[220px] flex-1 flex-col rounded-xl border border-border bg-background p-4 text-[12px]"
     >
       <div className="flex items-center gap-2">
         <h2 className="font-semibold">Gmail diagnostics</h2>
         <div className="ml-auto flex gap-2">
           <Button size="sm" variant="subtle" disabled={!data} onClick={() => void copy()}>
             Copy log
-          </Button>
-          <Button size="sm" onClick={onClose}>
-            Close
           </Button>
         </div>
       </div>
@@ -90,7 +74,7 @@ export function MailDiagnosticsPanel({
       <pre
         aria-label="Gmail diagnostic events"
         tabIndex={0}
-        className="mt-2 max-h-[25vh] overflow-auto whitespace-pre-wrap break-words rounded-md bg-hover p-2 font-mono text-[11px] leading-5"
+        className="mt-3 min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words rounded-md bg-hover p-3 font-mono text-[11px] leading-5"
       >
         {data?.entries.length
           ? [...data.entries].reverse().map(formatEntry).join('\n')

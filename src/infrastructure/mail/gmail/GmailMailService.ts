@@ -11,7 +11,12 @@ import {
   type ThreadQuery,
   type ThreadSummary,
 } from '@/domain/mail';
-import type { MailConnection, ConnectionStatus, MailDiagnostics } from '@/domain/mail/connection';
+import type {
+  MailConnection,
+  ConnectionStatus,
+  MailDiagnostics,
+  MailActivity,
+} from '@/domain/mail/connection';
 
 export type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 
@@ -30,7 +35,10 @@ export class GmailMailService implements MailService, MailConnection {
   private generation = 0;
   private requestAgain = false;
 
-  constructor(private readonly invoke: Invoke) {}
+  constructor(
+    private readonly invoke: Invoke,
+    readonly activity?: MailActivity,
+  ) {}
 
   getStatus = () => this.status;
   getDiagnostics = async (): Promise<MailDiagnostics> => {
@@ -186,13 +194,14 @@ export class GmailMailService implements MailService, MailConnection {
           Math.min(300_000, 3_000 * 2 ** Math.min(this.failures, 7)),
           (error.retryAfter ?? 0) * 1_000,
         );
+        if (error.providerCode === 'auth' || error.providerCode === 'permission') delay = 300_000;
+        this.retryAt = Date.now() + delay;
         this.setStatus({
           ...this.status,
           state: error.providerCode === 'auth' ? 'reauth' : 'error',
           message: error.message,
+          retryAt: this.retryAt,
         });
-        if (error.providerCode === 'auth' || error.providerCode === 'permission') delay = 300_000;
-        this.retryAt = Date.now() + delay;
       } finally {
         this.polling = undefined;
         if (generation === this.generation) {

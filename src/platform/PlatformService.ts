@@ -23,6 +23,8 @@ export type ConfirmOptions = {
 };
 
 export interface PlatformService {
+  openMailActivityWindow?(): Promise<void>;
+  closeMailActivityWindow?(): Promise<void>;
   /** Ask the user to confirm. Native sheet on desktop hosts, `window.confirm` in the browser. Resolves false on cancel. */
   confirm(options: ConfirmOptions): Promise<boolean>;
   showNotification(notification: { title: string; body?: string }): Promise<void>;

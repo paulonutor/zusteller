@@ -1,5 +1,5 @@
 // Synthetic native-provider UI checks; no OAuth tokens or real Gmail data.
-/* global document, innerWidth */
+/* global window, location, document, innerWidth */
 import { chromium } from 'playwright';
 import AxeBuilder from '@axe-core/playwright';
 import fs from 'node:fs';
@@ -15,9 +15,18 @@ for (const scheme of ['light', 'dark']) {
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.addInitScript(() => {
+  await context.addInitScript(() => {
     let connected = false;
     globalThis.__gmailActions = 0;
+    globalThis.__gmailCalls = [];
+    const handlers = new Map();
+    const bridge = new BroadcastChannel('gmail-preview');
+    bridge.onmessage = ({ data }) => {
+      const role =
+        new URLSearchParams(location.search).get('view') === 'activity' ? 'activity' : 'mail';
+      if (data.target === role)
+        for (const handler of handlers.get(data.event) ?? []) handler({ payload: data.payload });
+    };
     const account = {
       id: 'preview@example.com',
       email: 'preview@example.com',
@@ -55,6 +64,44 @@ for (const scheme of ['light', 'dark']) {
     globalThis.__TAURI__ = {
       core: {
         invoke: async (command, args) => {
+          globalThis.__gmailCalls.push({ command, args });
+          if (command === 'open_mail_activity') {
+            window.open(
+              `/?view=activity&theme=${new URLSearchParams(location.search).get('theme')}`,
+              'gmail-activity',
+              'width=820,height=660',
+            );
+            return;
+          }
+          if (command === 'close_mail_activity') {
+            window.close();
+            return;
+          }
+          if (command === 'gmail_activity_publish') {
+            localStorage.setItem('gmail-preview-activity', JSON.stringify(args.snapshot));
+            return;
+          }
+          if (command === 'gmail_activity_snapshot')
+            return JSON.parse(
+              localStorage.getItem('gmail-preview-activity') ??
+                '{"status":{"state":"idle"},"busy":false}',
+            );
+          if (command === 'gmail_activity_action') {
+            bridge.postMessage({
+              target: 'mail',
+              event: 'zusteller://gmail-activity-action',
+              payload: args,
+            });
+            return;
+          }
+          if (command === 'gmail_activity_result') {
+            bridge.postMessage({
+              target: 'activity',
+              event: 'zusteller://gmail-activity-result',
+              payload: args,
+            });
+            return;
+          }
           if (command === 'gmail_connect') {
             connected = true;
             return account;
@@ -147,7 +194,13 @@ for (const scheme of ['light', 'dark']) {
           if (command === 'accent_color') return '#007aff';
         },
       },
-      event: { listen: async () => () => {} },
+      event: {
+        listen: async (event, handler) => {
+          if (!handlers.has(event)) handlers.set(event, new Set());
+          handlers.get(event).add(handler);
+          return () => handlers.get(event).delete(handler);
+        },
+      },
     };
   });
   await page.goto(`http://127.0.0.1:47831/?theme=${scheme}`);
@@ -167,38 +220,56 @@ for (const scheme of ['light', 'dark']) {
   await page.getByRole('button', { name: 'Save preview.txt' }).waitFor();
   await page.screenshot({ path: `${out}/${scheme}-reader.png` });
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-  for (const width of [1280, 600]) {
-    await page.setViewportSize({ width, height: 800 });
-    await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
-    const panel = page.getByRole('region', { name: 'Gmail diagnostics', exact: true });
+  let activity;
+  const openActivity = async () => {
+    const popup = page.waitForEvent('popup');
+    await page.getByRole('button', { name: 'Gmail activity', exact: true }).click();
+    const window = await popup;
+    window.on('pageerror', (e) => errors.push(e.message));
+    await window.getByRole('heading', { name: 'Gmail activity', exact: true }).waitFor();
+    return window;
+  };
+  for (const width of [820, 480]) {
+    activity = await openActivity();
+    await activity.setViewportSize({ width, height: width === 480 ? 520 : 660 });
+    const panel = activity.getByRole('region', { name: 'Gmail diagnostics', exact: true });
     await panel.getByText(/userRateLimitExceeded/).waitFor();
+    await activity.getByRole('heading', { name: 'preview@example.com' }).waitFor();
+    if (await page.getByRole('region', { name: 'Gmail connection' }).count())
+      throw new Error('Main window still has the connection bar');
     await panel.getByRole('button', { name: 'Copy log' }).click();
     await panel.getByText('Log copied', { exact: true }).waitFor();
-    const copied = await page.evaluate(() => navigator.clipboard.readText());
+    const copied = await activity.evaluate(() => navigator.clipboard.readText());
     if (!copied.includes('HTTP 429') || !copied.includes('retry in 60 s'))
       throw new Error('Diagnostics did not copy the request details');
-    const overflows = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
-    if (overflows) throw new Error(`Diagnostics overflow at ${width}px`);
-    await page.screenshot({ path: `${out}/${scheme}-diagnostics-${width}.png` });
-    const diagnosticsAudit = await new AxeBuilder({ page }).analyze();
-    const violations = diagnosticsAudit.violations.filter((v) => v.id !== 'color-contrast');
+    const overflows = await activity.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    );
+    if (overflows) throw new Error(`Activity window overflow at ${width}px`);
+    await activity.screenshot({ path: `${out}/${scheme}-activity-${width}.png` });
+    const audit = await new AxeBuilder({ page: activity }).analyze();
+    const violations = audit.violations.filter((v) => v.id !== 'color-contrast');
     if (violations.length)
-      throw new Error(`Diagnostics accessibility: ${JSON.stringify(violations.map((v) => v.id))}`);
+      throw new Error(`Activity accessibility: ${JSON.stringify(violations.map((v) => v.id))}`);
     await panel.getByLabel('Gmail diagnostic events').focus();
     const before = await page.evaluate(() => globalThis.__gmailActions);
-    await page.keyboard.press('s');
+    await activity.keyboard.press('s');
     if ((await page.evaluate(() => globalThis.__gmailActions)) !== before)
-      throw new Error('Mail shortcuts fired while reading diagnostics');
-    await page.keyboard.press('Escape');
-    await panel.waitFor({ state: 'hidden' });
-    const restored = await page
-      .getByRole('button', { name: 'Diagnostics', exact: true })
-      .evaluate((el) => document.activeElement === el);
-    if (!restored) throw new Error('Diagnostics did not restore keyboard focus');
+      throw new Error('Mail shortcuts fired in the activity window');
+    const reads = await activity.evaluate(() =>
+      globalThis.__gmailCalls.filter(({ command }) => command === 'gmail_read'),
+    );
+    if (reads.length) throw new Error('Activity window started mail polling');
+    const closed = activity.waitForEvent('close');
+    await activity.keyboard.press('Escape').catch((error) => {
+      if (!activity.isClosed()) throw error;
+    });
+    await closed;
   }
-  await page.setViewportSize({ width: 1280, height: 800 });
   await page.getByRole('button', { name: 'Save preview.txt' }).click();
-  await page.getByRole('button', { name: 'Reset local changes' }).click();
+  activity = await openActivity();
+  await activity.getByRole('button', { name: 'Reset local changes' }).click();
+  await activity.getByRole('button', { name: 'Refresh Gmail' }).click();
   results = await new AxeBuilder({ page }).analyze();
   const readerContrast = results.violations.filter((v) => v.id === 'color-contrast');
   if (readerContrast.length)
@@ -208,10 +279,13 @@ for (const scheme of ['light', 'dark']) {
   const readerFailing = results.violations.filter((v) => !['color-contrast'].includes(v.id));
   if (readerFailing.length)
     throw new Error(`Reader accessibility: ${JSON.stringify(readerFailing.map((v) => v.id))}`);
-  await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
+  await activity.getByRole('button', { name: 'Disconnect', exact: true }).click();
+  await activity.getByRole('button', { name: 'Connect Gmail', exact: true }).waitFor();
   await page.getByRole('heading', { name: 'Connect your Gmail account' }).waitFor();
   if (errors.length) throw new Error(errors.join('\n'));
-  console.log(`${scheme}: connect, read, save, reset, disconnect and accessibility checks passed`);
+  console.log(
+    `${scheme}: connect, read, save, separate activity window, copy/close/reopen, reset, refresh, disconnect and accessibility checks passed`,
+  );
   await context.close();
 }
 await browser.close();

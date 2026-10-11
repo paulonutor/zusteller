@@ -41,8 +41,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     const on = () => setSysDark(mq.matches);
+    const stored = (event: StorageEvent) => {
+      if (event.key === KEY) setPref(readStored());
+    };
     mq.addEventListener('change', on);
-    return () => mq.removeEventListener('change', on);
+    window.addEventListener('storage', stored);
+    return () => {
+      mq.removeEventListener('change', on);
+      window.removeEventListener('storage', stored);
+    };
   }, []);
 
   const resolved = preference === 'system' ? (sysDark ? 'dark' : 'light') : preference;
