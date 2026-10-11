@@ -78,6 +78,58 @@ describe('Gmail desktop adapter', () => {
     off();
   });
 
+  it('keeps the retry deadline through manual refresh, wake events and resubscription', async () => {
+    vi.useFakeTimers();
+    const invoke = vi.fn(async (_command, args) => {
+      if (args?.operation === 'accounts') return [account];
+      throw { code: 'rate_limit', message: 'Slow down', retryAfter: 60 };
+    });
+    const mail = provider(invoke);
+    await mail.getAccounts();
+    let off = mail.subscribe(vi.fn());
+    await vi.advanceTimersByTimeAsync(0);
+    const syncCount = () => invoke.mock.calls.filter((c) => c[1]?.operation === 'sync').length;
+    expect(syncCount()).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    await mail.refresh();
+    window.dispatchEvent(new Event('focus'));
+    window.dispatchEvent(new Event('online'));
+    window.dispatchEvent(new Event('blur'));
+    document.dispatchEvent(new Event('visibilitychange'));
+    off();
+    off = mail.subscribe(vi.fn());
+    await mail.getAccounts();
+    await vi.advanceTimersByTimeAsync(49_999);
+    expect(syncCount()).toBe(1);
+    expect(mail.getStatus()).toMatchObject({ state: 'error', message: 'Slow down' });
+    await vi.advanceTimersByTimeAsync(1);
+    expect(syncCount()).toBe(2);
+    off();
+  });
+
+  it('does not immediately repeat a failed in-flight sync after overlapping triggers', async () => {
+    vi.useFakeTimers();
+    let rejectSync!: (reason: unknown) => void;
+    const invoke = vi.fn(async (_command, args) => {
+      if (args?.operation === 'accounts') return [account];
+      return new Promise<boolean>((_resolve, reject) => {
+        rejectSync = reject;
+      });
+    });
+    const mail = provider(invoke);
+    await mail.getAccounts();
+    const off = mail.subscribe(vi.fn());
+    const first = mail.refresh();
+    expect(mail.refresh()).toBe(first);
+    rejectSync({ code: 'rate_limit', message: 'Slow down', retryAfter: 60 });
+    await first;
+    await mail.refresh();
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(invoke.mock.calls.filter((c) => c[1]?.operation === 'sync')).toHaveLength(1);
+    off();
+  });
+
   it('does not publish a sync result after disconnect and clears local connection state', async () => {
     let resolveSync!: (v: boolean) => void;
     const invoke = vi.fn(async (_command, args) => {

@@ -88,10 +88,19 @@ separate and survive cache eviction. This is not a full offline mirror.
 
 The initial sync covers 100 recent conversations. Older pages load on demand.
 Polling targets three seconds while active and fifteen seconds when inactive,
-with immediate checks on focus, reconnect and manual refresh. Failures back off
-up to five minutes and honor numeric Retry-After. The status bar reports sync
-errors and the last successful sync. History pagination is applied before its
-cursor is committed; expired history rebuilds the recent window and revalidates
+with immediate checks on focus, reconnect and manual refresh outside a retry
+cooldown. Failures back off up to five minutes and honor Retry-After, including
+HTTP dates. Focus and manual refresh preserve the retry deadline. Native requests
+share an 80-quota-unit/second budget with a 400-unit burst, below the current
+6,000-unit/user/minute default for new Google projects. Rate-limit responses pause
+all Gmail reads for at least sixty seconds, or longer when Retry-After requires
+it; cached mail and local actions remain available. Large initial/history syncs
+take longer because metadata reads are paced. List refreshes reuse metadata
+maintained by history sync and fetch only missing summaries. See Google's
+[quota reference](https://developers.google.com/workspace/gmail/api/reference/quota).
+The status bar reports sync errors and the last successful sync. History
+pagination is applied before its cursor is committed; expired history rebuilds
+the recent window and revalidates
 older cached conversations.
 
 Unread counts show `~` because Gmail label counts and the preview's thread

@@ -1,6 +1,7 @@
 mod api;
 mod auth;
 mod model;
+mod quota;
 mod store;
 
 use serde::Serialize;

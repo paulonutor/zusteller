@@ -26,6 +26,7 @@ export class GmailMailService implements MailService, MailConnection {
   private timer?: ReturnType<typeof setTimeout>;
   private polling?: Promise<void>;
   private failures = 0;
+  private retryAt = 0;
   private generation = 0;
   private requestAgain = false;
 
@@ -115,6 +116,8 @@ export class GmailMailService implements MailService, MailConnection {
     clearTimeout(this.timer);
     try {
       await this.read('disconnect', accountId);
+      this.retryAt = 0;
+      this.failures = 0;
       this.setStatus({ state: 'idle' });
     } catch (e) {
       this.accountId = accountId;
@@ -143,7 +146,10 @@ export class GmailMailService implements MailService, MailConnection {
       (document.hidden || document.documentElement.hasAttribute('data-window-inactive'))
         ? 15_000
         : 3_000;
-    this.timer = setTimeout(() => void this.refresh(), delay ?? cadence);
+    this.timer = setTimeout(
+      () => void this.refresh(),
+      Math.max(delay ?? cadence, this.retryAt - Date.now()),
+    );
   }
   refresh = (): Promise<void> => {
     clearTimeout(this.timer);
@@ -152,6 +158,10 @@ export class GmailMailService implements MailService, MailConnection {
       return this.polling;
     }
     if (!this.accountId) return Promise.resolve();
+    if (Date.now() < this.retryAt) {
+      this.schedule(0);
+      return Promise.resolve();
+    }
     const accountId = this.accountId;
     const generation = this.generation;
     this.setStatus({ ...this.status, state: 'syncing' });
@@ -161,6 +171,7 @@ export class GmailMailService implements MailService, MailConnection {
         const changed = await this.read<boolean>('sync', accountId);
         if (generation !== this.generation) return;
         this.failures = 0;
+        this.retryAt = 0;
         this.setStatus({ state: 'idle', lastSyncedAt: Date.now() });
         if (changed) this.listeners.forEach((listener) => listener());
       } catch (e) {
@@ -177,6 +188,7 @@ export class GmailMailService implements MailService, MailConnection {
           message: error.message,
         });
         if (error.providerCode === 'auth' || error.providerCode === 'permission') delay = 300_000;
+        this.retryAt = Date.now() + delay;
       } finally {
         this.polling = undefined;
         if (generation === this.generation) {

@@ -1,6 +1,7 @@
 use super::{
     auth,
     model::{self, array, text},
+    quota::Quota,
     store::Store,
     Error, Result,
 };
@@ -20,6 +21,7 @@ pub struct Gmail {
     access: HashMap<String, auth::Access>,
     client: Client,
     base: String,
+    quota: Quota,
 }
 impl Gmail {
     pub fn new(store: Store) -> Result<Self> {
@@ -28,6 +30,7 @@ impl Gmail {
             access: HashMap::new(),
             client: auth::client()?,
             base: BASE.into(),
+            quota: Quota::default(),
         })
     }
     pub fn install(
@@ -36,7 +39,14 @@ impl Gmail {
         access: auth::Access,
         cancelled: &std::sync::atomic::AtomicBool,
     ) -> Result<Value> {
-        let profile = request(&self.client, &self.base, &access.token, "profile", &[])?;
+        let profile = request(
+            &self.quota,
+            &self.client,
+            &self.base,
+            &access.token,
+            "profile",
+            &[],
+        )?;
         let email = text(&profile, "emailAddress");
         if email.is_empty() {
             return Err(Error::new("auth", "Google did not return a Gmail account"));
@@ -82,11 +92,11 @@ impl Gmail {
     }
     fn get(&mut self, account: &str, path: &str, params: &[(&str, String)]) -> Result<Value> {
         let token = self.token(account)?;
-        match request(&self.client, &self.base, &token, path, params) {
+        match request(&self.quota, &self.client, &self.base, &token, path, params) {
             Err(e) if e.code == "auth" => {
                 self.access.remove(account);
                 let token = self.token(account)?;
-                request(&self.client, &self.base, &token, path, params)
+                request(&self.quota, &self.client, &self.base, &token, path, params)
             }
             other => other,
         }
@@ -121,6 +131,7 @@ impl Gmail {
         };
         let fetched = parallel(&ids, |id| {
             request(
+                &self.quota,
                 &self.client,
                 &self.base,
                 &token,
@@ -181,6 +192,7 @@ impl Gmail {
         Ok(counts)
     }
     pub fn threads(&mut self, account: &str, query: &Value) -> Result<Value> {
+        self.store.evict(account)?;
         let key = format!("page:{}", query);
         let mut params = vec![
             (
@@ -234,9 +246,22 @@ impl Gmail {
             .iter()
             .map(|t| text(t, "id").into())
             .collect();
+        // History sync maintains metadata. List invalidations after opening or
+        // changing a thread locally must not download every summary again.
+        let mut summaries = HashMap::new();
+        let mut missing = Vec::new();
+        for id in &ids {
+            match self.store.get(account, &format!("thread:{id}"))? {
+                Some(thread) => {
+                    summaries.insert(id.clone(), thread);
+                }
+                None => missing.push(id.clone()),
+            }
+        }
         let token = self.token(account)?;
-        let fetched = parallel(&ids, |id| {
+        let fetched = parallel(&missing, |id| {
             let raw = request(
+                &self.quota,
                 &self.client,
                 &self.base,
                 &token,
@@ -244,12 +269,25 @@ impl Gmail {
                 &summary_params(),
             )?;
             model::normalize(account, &raw, false)
-        })?;
-        for thread in &fetched {
+        });
+        let fetched = match fetched {
+            Ok(threads) => threads,
+            Err(e) if e.code == "offline" || e.code == "rate_limit" => {
+                let mut page = cached(&self.store, account, &key, e)?;
+                page["stale"] = json!(true);
+                return self.page_overlay(account, page, query);
+            }
+            Err(e) => return Err(e),
+        };
+        for thread in fetched {
+            summaries.insert(text(&thread, "id").to_string(), thread);
+        }
+        let items: Vec<Value> = ids.iter().filter_map(|id| summaries.remove(id)).collect();
+        for thread in &items {
             self.store
                 .put(account, &format!("thread:{}", text(thread, "id")), thread)?;
         }
-        let page = json!({"items":fetched,"nextCursor":page["nextPageToken"],"stale":false});
+        let page = json!({"items":items,"nextCursor":page["nextPageToken"],"stale":false});
         self.store.put(account, &key, &page)?;
         self.store.evict(account)?;
         self.page_overlay(account, page, query)
@@ -503,6 +541,7 @@ impl Gmail {
         let token = self.token(account)?;
         let changes = parallel(&ids, |id| {
             match request(
+                &self.quota,
                 &self.client,
                 &self.base,
                 &token,
@@ -539,6 +578,7 @@ impl Gmail {
         let token = self.token(account)?;
         let mut changes = parallel(&ids, |id| {
             match request(
+                &self.quota,
                 &self.client,
                 &self.base,
                 &token,
@@ -710,12 +750,14 @@ fn parallel<T: Send, F: Fn(&String) -> Result<T> + Sync>(
     Ok(values)
 }
 fn request(
+    quota: &Quota,
     client: &Client,
     base: &str,
     token: &str,
     path: &str,
     params: &[(&str, String)],
 ) -> Result<Value> {
+    quota.acquire(path)?;
     let mut response = client
         .get(format!("{base}{path}"))
         .bearer_auth(token)
@@ -777,6 +819,9 @@ fn request(
                     Some(target.saturating_sub(now).max(0) as u64)
                 })
             });
+        if error.code == "rate_limit" {
+            quota.limited(&mut error);
+        }
         return Err(error);
     }
     if response.content_length().is_some_and(|n| n > MAX_RESPONSE) {
@@ -825,6 +870,18 @@ mod tests {
         std::thread::JoinHandle<Vec<String>>,
         std::path::PathBuf,
     ) {
+        fixture_with_headers(replies, "")
+    }
+
+    fn fixture_with_headers(
+        replies: Vec<(u16, Value)>,
+        headers: &str,
+    ) -> (
+        Gmail,
+        std::thread::JoinHandle<Vec<String>>,
+        std::path::PathBuf,
+    ) {
+        let headers = headers.to_string();
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let base = format!("http://{}/", listener.local_addr().unwrap());
         let server = std::thread::spawn(move || {
@@ -866,7 +923,7 @@ mod tests {
                 let (status, value) = replies.remove(index);
 
                 let body = value.to_string();
-                write!(socket,"HTTP/1.1 {status} Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
+                write!(socket,"HTTP/1.1 {status} Test\r\nContent-Type: application/json\r\n{headers}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
             }
             requests
         });
@@ -1027,6 +1084,121 @@ mod tests {
         drop(g);
         std::fs::remove_dir_all(dir).unwrap();
     }
+
+    #[test]
+    fn list_refreshes_reuse_metadata_and_history_sync_updates_it() {
+        let mut updated = mail("t");
+        updated["messages"][0]["payload"]["headers"][0]["value"] = json!("Updated");
+        let (mut g, server, dir) = fixture(vec![
+            (200, json!({"threads":[{"id":"t"}]})),
+            (
+                200,
+                json!({"history":[{"messages":[{"threadId":"t"}]}],"historyId":"11"}),
+            ),
+            (200, updated),
+            (200, json!({"threads":[{"id":"t"}]})),
+        ]);
+        g.store
+            .sync(
+                "a",
+                "10",
+                &[(
+                    "t".into(),
+                    Some(model::normalize("a", &mail("t"), false).unwrap()),
+                )],
+            )
+            .unwrap();
+        let query = json!({"accountId":"a","mailbox":"inbox"});
+        g.action(
+            "a",
+            &json!({"action":"setStarred","threadIds":["t"],"value":true}),
+        )
+        .unwrap();
+        let page = g.threads("a", &query).unwrap();
+        assert_eq!(page["items"][0]["subject"], "Hello");
+        assert_eq!(page["items"][0]["isStarred"], true);
+        assert!(g.sync("a").unwrap());
+        let page = g.threads("a", &query).unwrap();
+        assert_eq!(page["items"][0]["subject"], "Updated");
+        assert_eq!(page["items"][0]["isStarred"], true);
+        let requests = server.join().unwrap();
+        assert_eq!(requests.len(), 4);
+        assert_eq!(
+            requests
+                .iter()
+                .filter(|r| r.contains("/threads/t?"))
+                .count(),
+            1
+        );
+        drop(g);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn rate_limit_cooldown_is_shared_across_reads_sync_and_downloads() {
+        for status in [403, 429] {
+            let (mut g, server, dir) = fixture_with_headers(
+                vec![(
+                    status,
+                    json!({"error":{"errors":[{"reason":"userRateLimitExceeded"}]}}),
+                )],
+                "Retry-After: 120\r\n",
+            );
+            let error = g.labels("a").unwrap_err();
+            assert_eq!(error.code, "rate_limit");
+            assert_eq!(error.retry_after, Some(120));
+            assert_eq!(g.sync("a").unwrap_err().code, "rate_limit");
+            assert_eq!(g.thread("a", "uncached").unwrap_err().code, "rate_limit");
+            g.store
+                .put(
+                    "a",
+                    "body:t",
+                    &json!({"messages":[{"id":"m","attachments":[{"id":"file","size":5}]}]}),
+                )
+                .unwrap();
+            assert_eq!(
+                g.attachment("a", "m", "file", "t").unwrap_err().code,
+                "rate_limit"
+            );
+            g.store.put("a", "labels", &json!([])).unwrap();
+            assert_eq!(g.labels("a").unwrap(), json!([]));
+            assert_eq!(server.join().unwrap().len(), 1);
+            drop(g);
+            std::fs::remove_dir_all(dir).unwrap();
+        }
+    }
+
+    #[test]
+    fn metadata_rate_limit_preserves_the_cached_page_and_local_overlay() {
+        let (mut g, server, dir) = fixture(vec![
+            (200, json!({"threads":[{"id":"new"}]})),
+            (429, json!({})),
+        ]);
+        let query = json!({"accountId":"a","mailbox":"inbox"});
+        let thread = model::normalize("a", &mail("t"), false).unwrap();
+        g.store.put("a", "thread:t", &thread).unwrap();
+        g.store
+            .put(
+                "a",
+                &format!("page:{query}"),
+                &json!({"items":[thread],"nextCursor":"older"}),
+            )
+            .unwrap();
+        g.action(
+            "a",
+            &json!({"action":"setStarred","threadIds":["t"],"value":true}),
+        )
+        .unwrap();
+        let page = g.threads("a", &query).unwrap();
+        assert_eq!(page["stale"], true);
+        assert_eq!(page["items"][0]["id"], "t");
+        assert_eq!(page["items"][0]["isStarred"], true);
+        assert_eq!(page["nextCursor"], "older");
+        assert_eq!(server.join().unwrap().len(), 2);
+        drop(g);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
     #[test]
     fn attachment_download_is_explicit_scoped_and_size_limited() {
         let (mut g, server, dir) = fixture(vec![(200, json!({"data":"aGVsbG8"}))]);
