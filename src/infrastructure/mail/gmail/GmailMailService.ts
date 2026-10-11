@@ -63,6 +63,7 @@ export class GmailMailService implements MailService, MailConnection {
       const mapped = new MailServiceError(
         error.code === 'offline' ? 'offline' : error.code === 'not_found' ? 'not_found' : 'invalid',
         error.message ?? 'Gmail request failed',
+        error.retryAfter,
       );
       Object.assign(mapped, { providerCode: error.code, retryAfter: error.retryAfter });
       throw mapped;
@@ -91,6 +92,7 @@ export class GmailMailService implements MailService, MailConnection {
     signal?: AbortSignal;
   }[] = [];
   private summaryTimer?: ReturnType<typeof setTimeout>;
+  private summaryLoading = false;
   getThreadSummary = (accountId: ID, threadId: ID, signal?: AbortSignal): Promise<ThreadSummary> =>
     new Promise((resolve, reject) => {
       const abort = () => reject(new DOMException('Conversation loading cancelled', 'AbortError'));
@@ -117,11 +119,16 @@ export class GmailMailService implements MailService, MailConnection {
     });
 
   private async flushSummaries() {
-    const pending = this.summaryQueue.splice(0);
-    for (const accountId of new Set(pending.map((p) => p.accountId))) {
-      const requests = pending.filter((p) => p.accountId === accountId);
-      while (requests.length) {
-        const batch = requests.splice(0, 4).filter((p) => !p.signal?.aborted);
+    // Scroll/resize callbacks can enqueue another flush while a batch is in flight.
+    // Keep one metadata request active so it cannot flood the native worker queue.
+    if (this.summaryLoading) return;
+    this.summaryLoading = true;
+    try {
+      while (this.summaryQueue.length) {
+        const accountId = this.summaryQueue[0]!.accountId;
+        const queued = this.summaryQueue.filter((p) => p.accountId === accountId).slice(0, 4);
+        this.summaryQueue = this.summaryQueue.filter((p) => !queued.includes(p));
+        const batch = queued.filter((p) => !p.signal?.aborted);
         if (!batch.length) continue;
         try {
           const summaries = await this.read<ThreadSummary[]>('summaries', accountId, {
@@ -136,6 +143,8 @@ export class GmailMailService implements MailService, MailConnection {
           batch.forEach((p) => p.reject(error));
         }
       }
+    } finally {
+      this.summaryLoading = false;
     }
   }
 

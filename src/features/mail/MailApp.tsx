@@ -6,7 +6,7 @@ import { Resizer } from '@/components/ui/Resizer';
 import { flyRowsToTarget } from './dropAnimation';
 import { WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import { useAccounts, useCounts, useLabels, useThread } from './hooks';
+import { mailRetryAfter, useAccounts, useCounts, useLabels, useThread } from './hooks';
 import { ThreadList } from './list/ThreadList';
 import { Reader } from './reader/Reader';
 import { Sidebar } from './sidebar/Sidebar';
@@ -216,6 +216,7 @@ export function MailApp() {
           thread={thread.data}
           isLoading={thread.isLoading}
           error={thread.error}
+          retryAfter={mailRetryAfter(thread.failureReason)}
           onRetry={() => void thread.refetch()}
           view={view}
           labels={labels}

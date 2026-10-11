@@ -59,6 +59,7 @@ try {
         ],
       };
       let snapshot = { status: { state: 'idle' }, busy: false };
+      let bodyAttempts = 0;
       window.__TAURI__ = {
         core: {
           invoke: async (command, args) => {
@@ -81,6 +82,8 @@ try {
                 case 'summaries':
                   return [summary];
                 case 'thread':
+                  if (++bodyAttempts === 1)
+                    throw { code: 'rate_limit', message: 'Synthetic cooldown', retryAfter: 1 };
                   return thread;
                 case 'sync':
                   return false;
@@ -116,6 +119,8 @@ try {
       .getByText('Privacy mode', { exact: true })
       .waitFor();
     await page.getByRole('option').filter({ hasText: 'Private conversation 2' }).click();
+    await page.getByRole('status', { name: 'Waiting for request limit' }).waitFor();
+    await page.screenshot({ path: `${out}/${theme}-cooldown.png` });
     await page.getByText('Private attachment.bin', { exact: true }).waitFor();
     const reader = page.frameLocator('iframe[title="Message body: Private conversation 2"]');
     await reader.getByText('Private test message', { exact: true }).waitFor();

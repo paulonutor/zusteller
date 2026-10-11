@@ -120,6 +120,10 @@ Sender, subject, date and flags require this separate read because Google's
 [list endpoint](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.threads/list)
 omits messages. Bodies and inline images load only when a conversation is opened.
 Unchanged opened conversations reuse SQLite; unchanged row metadata reuses memory.
+Only one row-metadata batch runs at a time, including while scrolling. A rate-limit
+response leaves visible rows and the selected reader waiting until Retry-After,
+then retries automatically. Leaving the viewport cancels a row's retry. Opening
+a conversation resolves its pending row and cancels redundant metadata work.
 During an offline or rate-limit failure, a previously completed ID list and opened
 conversations remain available. A partially fetched list never replaces a complete
 cached list. Client-side Unread/Starred filters resolve pending rows as they enter

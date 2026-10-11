@@ -8,7 +8,7 @@ import { beginThreadDrag, endDrag, useDropZone } from '../dnd';
 import { LabelChip } from '../LabelChip';
 import { LabelOverflow } from './LabelOverflow';
 import { avatarHue, displayName, formatListDate, initials } from '../format';
-import { useLazySummary } from '../hooks';
+import { mailRetryAfter, useLazySummary } from '../hooks';
 
 type Props = {
   thread: ThreadSummary;
@@ -133,9 +133,11 @@ export const ThreadRow = memo(function ThreadRow(p: Props) {
             >
               {!t.isRead && <span className="sr-only">Unread, </span>}
               {t.metadataPending
-                ? metadata.isError
-                  ? 'Could not load conversation'
-                  : 'Loading conversation…'
+                ? mailRetryAfter(metadata.failureReason)
+                  ? 'Waiting for request limit…'
+                  : metadata.isError
+                    ? 'Could not load conversation'
+                    : 'Loading conversation…'
                 : senders(t, p.accountEmail)}
             </span>
             {t.messageCount > 1 && (

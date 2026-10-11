@@ -123,9 +123,11 @@ export type MailErrorCode = 'offline' | 'simulated' | 'not_found' | 'invalid';
 
 export class MailServiceError extends Error {
   readonly code: MailErrorCode;
-  constructor(code: MailErrorCode, message: string) {
+  readonly retryAfter?: number;
+  constructor(code: MailErrorCode, message: string, retryAfter?: number) {
     super(message);
     this.name = 'MailServiceError';
     this.code = code;
+    this.retryAfter = retryAfter;
   }
 }

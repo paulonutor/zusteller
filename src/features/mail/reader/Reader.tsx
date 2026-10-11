@@ -16,6 +16,7 @@ type Props = {
   thread: Thread | undefined;
   isLoading: boolean;
   error: Error | null;
+  retryAfter?: number;
   onRetry: () => void;
   view: MailView;
   labels: Label[];
@@ -63,10 +64,22 @@ export function Reader(p: Props) {
         <Placeholder>No conversation selected</Placeholder>
       ) : multi ? (
         <Placeholder>{p.selected.length} conversations selected</Placeholder>
-      ) : p.error ? (
+      ) : p.retryAfter && !p.thread ? (
+        <div
+          className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-muted"
+          role="status"
+          aria-label="Waiting for request limit"
+        >
+          <p className="text-[13px]">Waiting for Gmail’s request limit.</p>
+          <p className="text-[12px]">
+            This conversation will load automatically when requests resume.
+          </p>
+        </div>
+      ) : p.error && !p.thread ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 text-muted">
           <AlertCircle size={22} />
           <p className="text-[13px]">Couldn’t open this conversation.</p>
+          <p className="max-w-sm px-4 text-center text-[12px]">{p.error.message}</p>
           <Button variant="subtle" onClick={p.onRetry}>
             Try again
           </Button>

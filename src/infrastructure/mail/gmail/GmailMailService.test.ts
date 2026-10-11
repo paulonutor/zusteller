@@ -8,6 +8,33 @@ afterEach(() => {
 });
 
 describe('Gmail desktop adapter', () => {
+  it('keeps newly visible rows queued behind one active batch while an open can proceed', async () => {
+    vi.useFakeTimers();
+    let finish!: (v: unknown) => void;
+    const invoke = vi.fn(async (_command, args) => {
+      if (args?.operation === 'thread') return { id: 'opened' };
+      if (invoke.mock.calls.filter((c) => c[1]?.operation === 'summaries').length === 1)
+        return new Promise((resolve) => {
+          finish = resolve;
+        });
+      return [{ id: 'later' }];
+    });
+    const mail = provider(invoke);
+    const first = mail.getThreadSummary(account.id, 'first');
+    await vi.advanceTimersByTimeAsync(0);
+    const later = mail.getThreadSummary(account.id, 'later');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(invoke).toHaveBeenCalledOnce();
+    await mail.getThread(account.id, 'opened');
+    expect(invoke.mock.calls[1]![1]?.operation).toBe('thread');
+    finish([{ id: 'first' }]);
+    await Promise.all([first, later]);
+    expect(invoke.mock.calls.map((c) => c[1]?.operation)).toEqual([
+      'summaries',
+      'thread',
+      'summaries',
+    ]);
+  });
   it('pages Gmail search and sends all actions to the local Rust overlay', async () => {
     const invoke = vi.fn(async (_command, args) =>
       args?.operation === 'threads' ? { items: [], nextCursor: null } : undefined,

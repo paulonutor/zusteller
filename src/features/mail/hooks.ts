@@ -8,6 +8,7 @@ import {
 } from '@tanstack/react-query';
 import {
   mailKeys,
+  MailServiceError,
   matchesMembership,
   type ID,
   type ThreadQuery,
@@ -15,6 +16,18 @@ import {
   type Page,
 } from '@/domain/mail';
 import { useServices } from '@/app/services';
+
+export function mailRetryAfter(error: unknown) {
+  return error instanceof MailServiceError &&
+    Number.isFinite(error.retryAfter) &&
+    (error.retryAfter ?? 0) > 0
+    ? error.retryAfter
+    : undefined;
+}
+const cooldownRetry = {
+  retry: (_count: number, error: Error) => mailRetryAfter(error) !== undefined,
+  retryDelay: (_count: number, error: Error) => (mailRetryAfter(error) ?? 1) * 1_000,
+};
 
 export function useAccounts() {
   const { mail } = useServices();
@@ -76,6 +89,7 @@ export function useThread(accountId: ID | undefined, threadId: ID | null) {
     queryKey: mailKeys.thread(accountId ?? '', threadId ?? ''),
     queryFn: () => mail.getThread(accountId!, threadId!),
     enabled: !!accountId && !!threadId,
+    ...cooldownRetry,
   });
   useEffect(() => {
     if (result.data) replaceSummary(client, result.data);
@@ -124,13 +138,13 @@ export function useLazySummary(
     // The provider checks history before returning cached metadata. Avoid replaying stale
     // query data when a later list response marks this conversation as changed.
     staleTime: 0,
-    retry: false,
+    ...cooldownRetry,
   });
   useEffect(() => {
-    if (!visible && thread.metadataPending) {
+    if (mail.getThreadSummary && (!visible || !thread.metadataPending)) {
       void client.cancelQueries({ queryKey: mailKeys.summary(thread.accountId, thread.id) });
     }
-  }, [client, visible, thread.accountId, thread.id, thread.metadataPending]);
+  }, [client, mail.getThreadSummary, visible, thread.accountId, thread.id, thread.metadataPending]);
   useEffect(() => {
     if (visible && result.data && !result.isFetching && !result.isError && thread.metadataPending) {
       replaceSummary(client, result.data);

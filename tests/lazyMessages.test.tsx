@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '@/app/App';
-import { mailKeys, type MailService, type ThreadSummary } from '@/domain/mail';
+import { mailKeys, MailServiceError, type MailService, type ThreadSummary } from '@/domain/mail';
 import { MockMailService, createSeedData } from '@/infrastructure/mail/mock';
 import { createTestPlatform, deferred } from './helpers/mail';
 
@@ -32,7 +32,10 @@ beforeEach(() => {
     },
   );
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 async function setup() {
   const mail = new MockMailService(createSeedData(), { latency: 0 }) as MockMailService &
@@ -62,6 +65,66 @@ async function setup() {
 }
 
 describe('lazy conversation rows', () => {
+  it('waits through a rate limit and resumes visible headers without another click', async () => {
+    const { originals, headers } = await setup();
+    vi.useFakeTimers();
+    headers.mockRejectedValueOnce(new MailServiceError('invalid', 'Request limit', 60));
+    const first = document.getElementById(`row-${originals[0]!.id}`)!;
+    intersect(first, true);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(first).toHaveTextContent('Waiting for request limit');
+    expect(first).not.toHaveTextContent('Could not load');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(59_000);
+    });
+    expect(headers).toHaveBeenCalledOnce();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_010);
+    });
+    expect(headers).toHaveBeenCalledTimes(2);
+    expect(first).toHaveTextContent(originals[0]!.subject);
+  });
+
+  it('cancels cooldown retries when a row leaves the viewport', async () => {
+    const { originals, headers } = await setup();
+    vi.useFakeTimers();
+    headers.mockRejectedValueOnce(new MailServiceError('invalid', 'Request limit', 60));
+    const first = document.getElementById(`row-${originals[0]!.id}`)!;
+    intersect(first, true);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(first).toHaveTextContent('Waiting for request limit');
+    intersect(first, false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(61_000);
+    });
+    expect(headers).toHaveBeenCalledOnce();
+  });
+
+  it('opens a selected body automatically after cooldown instead of leaving a permanent error', async () => {
+    const { originals, bodies } = await setup();
+    vi.useFakeTimers();
+    bodies.mockRejectedValueOnce(new MailServiceError('invalid', 'Request limit', 60));
+    const first = document.getElementById(`row-${originals[0]!.id}`)!;
+    // A pointer click without userEvent's wait timers keeps this clock entirely deterministic.
+    await act(async () => {
+      first.click();
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(screen.getByRole('status', { name: 'Waiting for request limit' })).toBeInTheDocument();
+    expect(screen.queryByText('Couldn’t open this conversation.')).not.toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(59_000);
+    });
+    expect(bodies).toHaveBeenCalledOnce();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_010);
+    });
+    expect(screen.getByRole('heading', { name: originals[0]!.subject })).toBeInTheDocument();
+  });
   it('loads only intersecting rows and keeps bodies unopened until clicked', async () => {
     const { originals, headers, bodies } = await setup();
     expect(headers).not.toHaveBeenCalled();
