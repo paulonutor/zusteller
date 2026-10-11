@@ -6,6 +6,20 @@ Instructions for coding agents (and humans) working in this repo.
 The product/engineering plan lives in `zusteller-plan.md` (original spec) and `docs/architecture.md` (what is built).
 **The plan describes intent; Trello tracks execution.** Never use Markdown/TODO files as the source of truth for progress.
 
+## Local repository memory
+
+- Read `~/.agents/memory/zusteller/MEMORY.md` at task start and follow relevant
+  topic links. Use this same external directory in Codex, Claude, and all worktrees.
+- Follow the global working agreements for recording and promoting lessons.
+  Keep entries concise, dated, and supported by evidence. Recheck stale facts;
+  current requests, project instructions, and verified source take precedence.
+- Keep learned memory outside Git. It holds reusable agent lessons, while tasks,
+  progress, and product decisions stay in the existing project tracker or docs.
+- Promote stable, verified lessons through small, reviewed `AGENTS.md` changes.
+  Factual path or command corrections may be made independently; changes to
+  permissions or behavioral rules require user approval. If memory is missing,
+  continue the task and create the local index when a useful lesson is learned.
+
 ## Communication style
 
 - Be concise: short, scannable answers with minimal prose, easy to read and react to.
