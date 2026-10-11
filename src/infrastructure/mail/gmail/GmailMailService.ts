@@ -83,6 +83,62 @@ export class GmailMailService implements MailService, MailConnection {
   }
   getThread = (accountId: ID, threadId: ID) => this.read<Thread>('thread', accountId, { threadId });
 
+  private summaryQueue: {
+    accountId: ID;
+    threadId: ID;
+    resolve: (summary: ThreadSummary) => void;
+    reject: (error: unknown) => void;
+    signal?: AbortSignal;
+  }[] = [];
+  private summaryTimer?: ReturnType<typeof setTimeout>;
+  getThreadSummary = (accountId: ID, threadId: ID, signal?: AbortSignal): Promise<ThreadSummary> =>
+    new Promise((resolve, reject) => {
+      const abort = () => reject(new DOMException('Conversation loading cancelled', 'AbortError'));
+      if (signal?.aborted) return abort();
+      signal?.addEventListener('abort', abort, { once: true });
+      const clean = () => signal?.removeEventListener('abort', abort);
+      this.summaryQueue.push({
+        accountId,
+        threadId,
+        signal,
+        resolve: (value) => {
+          clean();
+          resolve(value);
+        },
+        reject: (error) => {
+          clean();
+          reject(error);
+        },
+      });
+      this.summaryTimer ??= setTimeout(() => {
+        this.summaryTimer = undefined;
+        void this.flushSummaries();
+      }, 0);
+    });
+
+  private async flushSummaries() {
+    const pending = this.summaryQueue.splice(0);
+    for (const accountId of new Set(pending.map((p) => p.accountId))) {
+      const requests = pending.filter((p) => p.accountId === accountId);
+      while (requests.length) {
+        const batch = requests.splice(0, 4).filter((p) => !p.signal?.aborted);
+        if (!batch.length) continue;
+        try {
+          const summaries = await this.read<ThreadSummary[]>('summaries', accountId, {
+            threadIds: batch.map((p) => p.threadId),
+          });
+          batch.forEach((p) => {
+            const summary = summaries.find((s) => s.id === p.threadId);
+            if (summary) p.resolve(summary);
+            else p.reject(new MailServiceError('not_found', 'Conversation is unavailable'));
+          });
+        } catch (error) {
+          batch.forEach((p) => p.reject(error));
+        }
+      }
+    }
+  }
+
   private action(accountId: ID, threadIds: ID[], action: string, value?: boolean, labelId?: ID) {
     return this.read<void>('action', accountId, { threadIds, action, value, labelId });
   }

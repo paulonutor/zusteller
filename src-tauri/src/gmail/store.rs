@@ -131,7 +131,48 @@ impl Store {
                 r.get(0)
             })?)
     }
+    // History changes invalidate cached mail; fetching its replacement is user-driven.
+    // Keep the cursor and invalidations atomic, including after an expired cursor.
+    pub fn invalidate(
+        &mut self,
+        account: &str,
+        history: &str,
+        ids: &std::collections::BTreeSet<String>,
+        all: bool,
+    ) -> Result<()> {
+        let tx = self.0.transaction()?;
+        if all {
+            tx.execute(
+                "DELETE FROM cache WHERE account=?1 AND key LIKE 'body:%'",
+                [account],
+            )?;
+            tx.execute("UPDATE cache SET value=json_set(value,'$.metadataPending',json('true')) WHERE account=?1 AND key LIKE 'thread:%'", [account])?;
+            tx.execute("UPDATE overlay SET value=json_set(value,'$.source.metadataPending',json('true')) WHERE account=?1 AND json_type(value,'$.source')='object'", [account])?;
+        } else {
+            for id in ids {
+                tx.execute(
+                    "DELETE FROM cache WHERE account=?1 AND key=?2",
+                    params![account, format!("body:{id}")],
+                )?;
+                tx.execute("UPDATE cache SET value=json_set(value,'$.metadataPending',json('true')) WHERE account=?1 AND key=?2",params![account,format!("thread:{id}")])?;
+                tx.execute("UPDATE overlay SET value=json_set(value,'$.source.metadataPending',json('true')) WHERE account=?1 AND thread=?2 AND json_type(value,'$.source')='object'",params![account,id])?;
+            }
+        }
+        if all || !ids.is_empty() {
+            tx.execute(
+                "DELETE FROM cache WHERE account=?1 AND key LIKE 'page:%'",
+                [account],
+            )?;
+        }
+        tx.execute(
+            "UPDATE account SET history=?2 WHERE id=?1",
+            params![account, history],
+        )?;
+        tx.commit()?;
+        self.evict(account)
+    }
     // Commit all history changes and the cursor together. Failed fetches never advance it.
+    #[cfg(test)]
     pub fn sync(
         &mut self,
         account: &str,
@@ -222,6 +263,27 @@ mod tests {
 #[cfg(test)]
 mod transaction_tests {
     use super::*;
+    #[test]
+    fn interrupted_invalidation_rolls_back_body_removal_and_cursor() {
+        let mut s = Store::init(Connection::open_in_memory().unwrap()).unwrap();
+        s.add_account(&json!({"id":"a"})).unwrap();
+        s.sync("a", "1", &[]).unwrap();
+        s.put("a", "thread:t", &json!({"subject":"Original"}))
+            .unwrap();
+        s.put("a", "body:t", &json!({"messages":[]})).unwrap();
+        s.0.execute_batch("CREATE TRIGGER fail_invalidation BEFORE UPDATE ON cache BEGIN SELECT RAISE(ABORT,'failure'); END;").unwrap();
+        assert!(s
+            .invalidate(
+                "a",
+                "2",
+                &std::collections::BTreeSet::from(["t".into()]),
+                false
+            )
+            .is_err());
+        assert_eq!(s.history("a").unwrap().as_deref(), Some("1"));
+        assert!(s.get("a", "body:t").unwrap().is_some());
+        assert!(s.get("a", "thread:t").unwrap().unwrap()["metadataPending"].is_null());
+    }
     #[test]
     fn interrupted_sync_rolls_back_cursor_deletions_and_insertions() {
         let mut s = Store::init(Connection::open_in_memory().unwrap()).unwrap();

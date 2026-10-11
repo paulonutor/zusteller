@@ -31,6 +31,37 @@ describe('Gmail desktop adapter', () => {
     expect(mail.localPreview).toBe(true);
   });
 
+  it('batches visible headers in groups of four and skips rows that left the viewport', async () => {
+    vi.useFakeTimers();
+    const invoke = vi.fn(async (_command, args) => {
+      const ids = (args?.input as { threadIds: string[] }).threadIds;
+      return ids.map((id) => ({ id, subject: id }));
+    });
+    const mail = provider(invoke);
+    const cancelled = new AbortController();
+    const pending = Array.from({ length: 9 }, (_, i) =>
+      mail.getThreadSummary(account.id, `t${i}`, i === 8 ? cancelled.signal : undefined),
+    );
+    const settled = Promise.allSettled(pending);
+    cancelled.abort();
+    await vi.advanceTimersByTimeAsync(0);
+    const results = await settled;
+    expect(results.slice(0, 8).every((r) => r.status === 'fulfilled')).toBe(true);
+    expect(results[8]!.status).toBe('rejected');
+    expect(invoke.mock.calls.map((call) => call[1])).toEqual([
+      {
+        operation: 'summaries',
+        accountId: account.id,
+        input: { threadIds: ['t0', 't1', 't2', 't3'] },
+      },
+      {
+        operation: 'summaries',
+        accountId: account.id,
+        input: { threadIds: ['t4', 't5', 't6', 't7'] },
+      },
+    ]);
+  });
+
   it('starts sync after accounts load, coalesces triggers and stops after unsubscribe', async () => {
     vi.useFakeTimers();
     let resolveSync!: (v: boolean) => void;

@@ -10,4 +10,6 @@ export const mailKeys = {
     [...mailKeys.threads(query.accountId), query] as const,
   thread: (accountId: ID, threadId: ID) =>
     [...mailKeys.all, 'thread', accountId, threadId] as const,
+  summary: (accountId: ID, threadId: ID) =>
+    [...mailKeys.all, 'summary', accountId, threadId] as const,
 };

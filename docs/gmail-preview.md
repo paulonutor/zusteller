@@ -103,12 +103,36 @@ Neither token kind is returned to React or stored in SQLite or logs.
 
 SQLite lives under Tauri's app data directory at `gmail/cache.sqlite`. The
 parent directory is mode 0700 and the file is 0600. Cache content relies on OS
-permissions and FileVault, rather than application encryption. Recent metadata,
-requested pages and opened bodies are limited to 32 MiB or 2,000 entries per
-account, and evicted after 30 days during reads/sync. Local simulations are
-separate and survive cache eviction. This is not a full offline mirror.
+permissions and FileVault, rather than application encryption. Requested ID lists
+and opened conversations are limited to 32 MiB or 2,000 entries per account, and
+evicted after 30 days during reads/sync. Unopened row metadata stays only in memory,
+bounded to 2,000 conversations. Local simulations are separate and survive cache
+eviction; they retain a small metadata snapshot to preserve local moves after
+restart. Older versions' cached metadata remains reusable until history marks it
+changed. This is not a full offline mirror.
 
-The initial sync covers 100 recent conversations. Older pages load on demand.
+Opening a mailbox, label or search drains every `threads.list` page at 500 IDs per
+request, deduplicates IDs and preserves Google's order. It fetches no thread
+metadata during this pass. Rows load metadata only when they intersect the list
+viewport, including in short lists. Virtualizer overscan and offscreen selected
+rows do not trigger reads. Queued reads are cancelled when rows leave the viewport.
+Sender, subject, date and flags require this separate read because Google's
+[list endpoint](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.threads/list)
+omits messages. Bodies and inline images load only when a conversation is opened.
+Unchanged opened conversations reuse SQLite; unchanged row metadata reuses memory.
+During an offline or rate-limit failure, a previously completed ID list and opened
+conversations remain available. A partially fetched list never replaces a complete
+cached list. Client-side Unread/Starred filters resolve pending rows as they enter
+the viewport, so their counts cover metadata loaded so far.
+
+The initial sync captures only a profile history ID. Later sync reads all history
+pages and atomically marks changed metadata stale and removes changed bodies.
+It never downloads replacement messages, including for previously unknown IDs.
+An expired history cursor captures a fresh baseline and invalidates cached mail;
+its replacement loads on demand. Partial failures never advance the cursor.
+Deleting a message does not erase local overrides for its whole conversation.
+Disconnecting or replacing the connection cancels any uncommitted sync pass.
+
 Polling targets three seconds while active and fifteen seconds when inactive,
 with immediate checks on focus, reconnect and manual refresh outside a retry
 cooldown. Failures back off up to five minutes and honor Retry-After, including
@@ -116,50 +140,47 @@ HTTP dates. Focus and manual refresh preserve the retry deadline. Native request
 share an 80-quota-unit/second budget with a 400-unit burst, below the current
 6,000-unit/user/minute default for new Google projects. Rate-limit responses pause
 all Gmail reads for at least sixty seconds, or longer when Retry-After requires
-it; cached mail and local actions remain available. Large initial/history syncs
-take longer because metadata reads are paced. List refreshes reuse metadata
-maintained by history sync and fetch only missing summaries. See Google's
+it; cached mail and known local actions remain available. See Google's
 [quota reference](https://developers.google.com/workspace/gmail/api/reference/quota).
-Opening mail, loading mailbox/search pages, attachments and local actions take
-priority over background sync. Sync releases the native worker between page
-requests or small metadata batches and during quota waits, and leaves 80 quota units available
-for interactive reads. A request already in flight must finish before the worker
-can switch to a user action. Sustained interaction can delay background sync.
+Opening mail, loading mailbox/search lists, attachments and local actions take
+priority over background sync. Sync releases the native worker between history
+requests and during quota waits, and leaves 80 quota units available for interactive
+reads. A request already in flight must finish before the worker can switch to a
+user action. Sustained interaction can delay background sync.
 Diagnostics records `sync waiting_for_quota` when background pacing begins.
-The Gmail Activity window reports sync errors and the last successful sync. History
-pagination is applied before its cursor is committed; expired history rebuilds
-the recent window and revalidates
-older cached conversations.
-Disconnecting or replacing the connection cancels any uncommitted sync pass.
+The Gmail Activity window reports sync errors and the last successful sync.
 
-Independent thread-metadata reads use Gmail multipart batches of up to four
-calls. Label-count reads use batches of up to fifty. One remaining read is sent
-normally. The endpoint is `/batch` on Gmail's API host, as specified by its
+Visible row metadata uses Gmail multipart batches of up to four calls. Label-count
+reads use batches of up to fifty. One remaining read is sent normally. The endpoint
+is `/batch` on Gmail's API host, as specified by its
 [discovery document](https://gmail.googleapis.com/$discovery/rest?version=v1).
-Small metadata batches keep sync able to yield and fit a full authentication
-retry plus the interactive reserve in the 400-unit burst.
 
-| Read work                           | HTTP requests before batching | HTTP requests now | Quota units |
-| ----------------------------------- | ----------------------------: | ----------------: | ----------: |
-| Initial sync of 100 threads         |                           102 |                27 |       4,011 |
-| List page with 30 missing summaries |                            31 |                 9 |       1,210 |
-| Counts for 30 already-listed labels |                            30 |                 1 |          30 |
+| Read work                               | HTTP requests | Quota units |
+| --------------------------------------- | ------------: | ----------: |
+| Initial sync baseline                   |             1 |           1 |
+| Sync with one history page              |             1 |           2 |
+| Complete list of 1,000 thread IDs       |             2 |          20 |
+| Metadata for 12 uncached visible rows   |             3 |         480 |
+| Counts for 30 already-listed labels     |             1 |          30 |
+| Reopen an unchanged cached conversation |             0 |           0 |
 
+These are successful reads without authentication retries or attachment downloads.
+The previous 100-thread bootstrap spent 4,011 quota units; the baseline now spends
+one. The reduction comes from removing eager reads, rather than batching alone.
 Batching reduces HTTP overhead, not quota use. Every inner call spends its normal
 quota cost and has its own diagnostic entry; `batch sent` records the grouped
 call count. Responses are correlated by Content-ID. Missing, duplicate or invalid
-parts fail the pass without committing its cursor. Inner and outer rate limits
-share the existing cooldown; expired-token parts are retried once without
-replaying successful reads. See Google's
-[batching guide](https://developers.google.com/workspace/gmail/api/guides/batch).
+parts fail the request. Inner and outer rate limits share the existing cooldown;
+expired-token parts are retried once without replaying successful reads. See
+Google's [batching guide](https://developers.google.com/workspace/gmail/api/guides/batch).
 
 Unread counts show `~` because Gmail label counts and the preview's thread
 membership rules can differ. Local actions adjust those estimates using known
 thread metadata. Search evaluates Gmail's server state; local simulations then
 filter the returned rows. A locally moved conversation can be added to an
 unsearched destination mailbox from cached metadata. Search does not index local
-simulations. Results retain Gmail pagination, so concurrent changes and injected
-local rows can produce duplicate IDs across pages; the UI deduplicates IDs.
+simulations. All ID pages load before metadata; duplicate IDs from concurrent changes are
+removed. Local moves are applied before rows reach the UI.
 
 Bodies are decoded from Gmail's base64url MIME parts with their declared charset.
 Encoded headers and address groups are parsed, and small raster CID images are
@@ -176,7 +197,9 @@ It covers PKCE, the actual loopback callback socket, cancellation/timeout, refre
 and revocation errors, MIME decoding, read/search/page/download requests, offline
 cache fallback, history recovery/transactions and the frontend command payloads.
 It also checks foreground priority, reserved quota, cached reads/local actions
-between sync steps, and cancellation or metadata failure before cursor commit.
+between sync steps, cancellation before cursor commit, and atomic history invalidation.
+Lazy-loading tests cover viewport-only metadata, unopened bodies, stale query data,
+complete list pagination and reuse of unchanged opened mail after restart.
 Batch fixtures check encoded nested GETs, response correlation, malformed parts,
 inner/outer rate limits, per-call quota totals and cache fallback on partial failure.
 The native CI jobs run these tests without real credentials or desktop interaction.
@@ -185,6 +208,10 @@ With `npm run dev` running, `node scripts/gmail-preview-check.mjs` drives a
 synthetic desktop-provider UI in Chromium, checks connect/read/save/reset/disconnect
 and activity window copy/close/reopen in light/dark at regular and compact sizes,
 runs axe and writes screenshots under `/tmp/zusteller-gmail-preview`.
+`node scripts/gmail-lazy-check.mjs` checks 40-row and 1,500-row lists, viewport-only
+metadata, unopened bodies and cache reuse across label navigation and reopening in
+light/dark at regular and compact sizes. Screenshots go to
+`/tmp/zusteller-gmail-lazy`.
 `npm run a11y` runs the existing broader reader audit. The synthetic check reports
 known token contrast findings separately from failing structural findings.
 

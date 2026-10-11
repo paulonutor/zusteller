@@ -221,6 +221,16 @@ pub async fn gmail_read<R: tauri::Runtime>(
             "counts" => g.counts(&account),
             "threads" => g.threads(&account, &input),
             "thread" => g.thread(&account, model::text(&input, "threadId")),
+            "summaries" => {
+                let ids: Vec<String> = model::array(&input["threadIds"])
+                    .iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect();
+                if ids.len() > batch::METADATA_LIMIT {
+                    return Err(Error::new("invalid", "Too many visible conversations"));
+                }
+                g.summaries(&account, &ids)
+            }
             "action" => g.action(&account, &input),
             "reset" => {
                 g.store.reset(&account)?;

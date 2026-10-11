@@ -27,6 +27,7 @@ pub struct Gmail {
     base: String,
     pub(super) quota: Quota,
     pub(super) generation: u64,
+    summaries: HashMap<(String, String), Value>,
 }
 impl Gmail {
     pub fn new(store: Store) -> Result<Self> {
@@ -38,6 +39,7 @@ impl Gmail {
             base: BASE.into(),
             quota: Quota::default(),
             generation: 0,
+            summaries: HashMap::new(),
         })
     }
     pub fn install(
@@ -258,7 +260,7 @@ impl Gmail {
     }
     fn counts_overlay(&self, account: &str, mut counts: Value) -> Result<Value> {
         for (id, overlay) in self.store.overlays(account)? {
-            if let Some(before) = self.store.get(account, &format!("thread:{id}"))? {
+            if let Some(before) = self.cached_summary(account, &id)? {
                 let after = model::apply(before.clone(), &overlay);
                 let views: Vec<(String, Value, bool)> =
                     ["inbox", "starred", "sent", "junk", "trash", "all"]
@@ -288,14 +290,7 @@ impl Gmail {
         self.store.evict(account)?;
         let key = format!("page:{}", query);
         let mut params = vec![
-            (
-                "maxResults",
-                query["limit"]
-                    .as_u64()
-                    .unwrap_or(25)
-                    .clamp(1, 50)
-                    .to_string(),
-            ),
+            ("maxResults", "500".into()),
             ("includeSpamTrash", "true".into()),
         ];
         let mailbox = text(query, "mailbox");
@@ -323,79 +318,146 @@ impl Gmail {
             "-in:spam -in:trash"
         };
         params.push(("q", format!("{search} {exclude}").trim().into()));
-        if !text(query, "cursor").is_empty() {
-            params.push(("pageToken", text(query, "cursor").into()));
-        }
-        let page = match self.get(account, "threads", &params) {
-            Ok(page) => page,
-            Err(e) if e.code == "offline" || e.code == "rate_limit" => {
-                let mut page = cached(&self.store, account, &key, e)?;
-                page["stale"] = json!(true);
-                return self.page_overlay(account, page, query);
-            }
-            Err(e) => return Err(e),
-        };
-        let ids: Vec<String> = array(&page["threads"])
-            .iter()
-            .map(|t| text(t, "id").into())
-            .collect();
-        // History sync maintains metadata. List invalidations after opening or
-        // changing a thread locally must not download every summary again.
-        let mut summaries = HashMap::new();
-        let mut missing = Vec::new();
-        for id in &ids {
-            match self.store.get(account, &format!("thread:{id}"))? {
-                Some(thread) => {
-                    summaries.insert(id.clone(), thread);
+        // Finish the ID list before loading any row details. Do not cache unread bodies.
+        let mut refs = Vec::new();
+        let mut seen = BTreeSet::new();
+        let mut tokens = BTreeSet::new();
+        loop {
+            let page = match self.get(account, "threads", &params) {
+                Ok(page) => page,
+                Err(e) if e.code == "offline" || e.code == "rate_limit" => {
+                    let mut page = cached(&self.store, account, &key, e)?;
+                    page["stale"] = json!(true);
+                    return self.page_overlay(account, page, query);
                 }
-                None => missing.push(id.clone()),
-            }
-        }
-        if !summaries.is_empty() {
-            self.diagnostics
-                .event("cache", "reused", Some(summaries.len()));
-        }
-        let fetched: Result<Vec<Value>> = (|| {
-            let mut values = Vec::new();
-            for chunk in missing.chunks(batch::METADATA_LIMIT) {
-                let reads: Vec<_> = chunk
-                    .iter()
-                    .map(|id| BatchRead::new(format!("threads/{}", segment(id)), summary_params()))
-                    .collect();
-                for raw in self.get_many(account, &reads)? {
-                    values.push(model::normalize(account, &raw?, false)?);
+                Err(e) => return Err(e),
+            };
+            for thread in array(&page["threads"]) {
+                let id = text(thread, "id");
+                if !id.is_empty() && seen.insert(id.to_string()) {
+                    refs.push(thread.clone());
                 }
             }
-            Ok(values)
-        })();
-        let fetched = match fetched {
-            Ok(threads) => threads,
-            Err(e) if e.code == "offline" || e.code == "rate_limit" => {
-                let mut page = cached(&self.store, account, &key, e)?;
-                page["stale"] = json!(true);
-                return self.page_overlay(account, page, query);
+            let token = text(&page, "nextPageToken");
+            if token.is_empty() {
+                break;
             }
-            Err(e) => return Err(e),
-        };
-        for thread in fetched {
-            summaries.insert(text(&thread, "id").to_string(), thread);
+            if !tokens.insert(token.to_string()) {
+                return Err(Error::new("invalid", "Google repeated a list page token"));
+            }
+            params.retain(|(name, _)| *name != "pageToken");
+            params.push(("pageToken", token.into()));
         }
-        let items: Vec<Value> = ids.iter().filter_map(|id| summaries.remove(id)).collect();
-        for thread in &items {
-            self.store
-                .put(account, &format!("thread:{}", text(thread, "id")), thread)?;
-        }
-        let page = json!({"items":items,"nextCursor":page["nextPageToken"],"stale":false});
+        let page = json!({"threads":refs,"nextCursor":null,"stale":false});
         self.store.put(account, &key, &page)?;
         self.store.evict(account)?;
         self.page_overlay(account, page, query)
     }
+
+    fn cached_summary(&self, account: &str, id: &str) -> Result<Option<Value>> {
+        Ok(self
+            .known_summary(account, id)?
+            .filter(|v| v["metadataPending"] != true))
+    }
+
+    fn known_summary(&self, account: &str, id: &str) -> Result<Option<Value>> {
+        if let Some(value) = self.summaries.get(&(account.into(), id.into())) {
+            return Ok(Some(value.clone()));
+        }
+        if let Some(value) = self.store.get(account, &format!("thread:{id}"))? {
+            if value["metadataPending"] != true {
+                return Ok(Some(value));
+            }
+        }
+        let overlay = self.store.overlay(account, id)?;
+        Ok(overlay["source"]
+            .as_object()
+            .map(|_| overlay["source"].clone()))
+    }
+
+    pub(super) fn invalidate_summaries(
+        &mut self,
+        account: &str,
+        ids: &BTreeSet<String>,
+        all: bool,
+    ) {
+        self.summaries
+            .retain(|(a, id), _| a != account || (!all && !ids.contains(id)));
+    }
+
+    fn listed_summary(&self, account: &str, id: &str) -> Result<Option<Value>> {
+        let mut stmt = self
+            .store
+            .0
+            .prepare("SELECT key,value FROM cache WHERE account=?1 AND key LIKE 'page:%'")?;
+        let rows = stmt.query_map([account], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })?;
+        for row in rows {
+            let (key, value) = row?;
+            let query: Value = serde_json::from_str(&key[5..])
+                .map_err(|_| Error::new("invalid", "Local list cache is invalid"))?;
+            let page: Value = serde_json::from_str(&value)
+                .map_err(|_| Error::new("invalid", "Local list cache is invalid"))?;
+            if let Some(reference) = array(&page["threads"]).iter().find(|r| text(r, "id") == id) {
+                return Ok(Some(pending_summary(account, reference, &query)));
+            }
+        }
+        Ok(None)
+    }
+
+    pub fn summaries(&mut self, account: &str, ids: &[String]) -> Result<Value> {
+        let mut missing = Vec::new();
+        for id in ids {
+            if self.cached_summary(account, id)?.is_none() && !missing.contains(id) {
+                missing.push(id.clone());
+            }
+        }
+        let reused = ids.len().saturating_sub(missing.len());
+        if reused > 0 {
+            self.diagnostics.event("cache", "reused", Some(reused));
+        }
+        for chunk in missing.chunks(batch::METADATA_LIMIT) {
+            let reads: Vec<_> = chunk
+                .iter()
+                .map(|id| BatchRead::new(format!("threads/{}", segment(id)), summary_params()))
+                .collect();
+            for (id, response) in chunk.iter().zip(self.get_many(account, &reads)?) {
+                let mut value = model::normalize(account, &response?, false)?;
+                value.as_object_mut().unwrap().remove("messages");
+                // Row metadata lives only in memory. Persistent mail is opened-only.
+                if self.summaries.len() >= 2000 {
+                    self.summaries.clear();
+                }
+                self.summaries.insert((account.into(), id.clone()), value);
+            }
+        }
+        ids.iter()
+            .map(|id| {
+                let value = self.cached_summary(account, id)?.ok_or_else(|| {
+                    Error::new("not_found", "Conversation metadata is unavailable")
+                })?;
+                Ok(model::apply(value, &self.store.overlay(account, id)?))
+            })
+            .collect::<Result<Vec<_>>>()
+            .map(|values| json!(values))
+    }
+
     fn page_overlay(&self, account: &str, mut page: Value, query: &Value) -> Result<Value> {
         let mut items = Vec::new();
         let mut seen = BTreeSet::new();
-        for thread in array(&page["items"]) {
-            let id = text(thread, "id");
-            let changed = model::apply(thread.clone(), &self.store.overlay(account, id)?);
+        let mut reused = 0;
+        let refs = if page["threads"].is_array() {
+            &page["threads"]
+        } else {
+            &page["items"]
+        };
+        for reference in array(refs) {
+            let id = text(reference, "id");
+            let cached = self.cached_summary(account, id)?;
+            reused += usize::from(cached.is_some());
+            let thread = cached.unwrap_or_else(|| pending_summary(account, reference, query));
+            let changed = model::apply(thread, &self.store.overlay(account, id)?);
             seen.insert(id.to_string());
             if model::matches(&changed, query) {
                 items.push(changed);
@@ -408,7 +470,7 @@ impl Gmail {
                 if seen.contains(&id) {
                     continue;
                 }
-                if let Some(thread) = self.store.get(account, &format!("thread:{id}"))? {
+                if let Some(thread) = self.known_summary(account, &id)? {
                     let changed = model::apply(thread, &overlay);
                     if model::matches(&changed, query) {
                         items.push(changed);
@@ -416,13 +478,18 @@ impl Gmail {
                 }
             }
         }
-        items.sort_by(|a, b| text(b, "lastMessageAt").cmp(text(a, "lastMessageAt")));
+        // Preserve Gmail list order while rows have unknown dates.
+        if reused > 0 {
+            self.diagnostics.event("cache", "reused", Some(reused));
+        }
+        page.as_object_mut().unwrap().remove("threads");
         page["items"] = json!(items);
         Ok(page)
     }
     pub fn thread(&mut self, account: &str, id: &str) -> Result<Value> {
         let key = format!("body:{id}");
         let mut thread = if let Some(value) = self.store.get(account, &key)? {
+            self.diagnostics.event("cache", "reused", Some(1));
             value
         } else {
             let raw = self.get(
@@ -489,6 +556,10 @@ impl Gmail {
                     "Conversation is too large for this preview",
                 ));
             }
+            let mut summary = value.clone();
+            summary.as_object_mut().unwrap().remove("messages");
+            self.store.put(account, &format!("thread:{id}"), &summary)?;
+            self.summaries.insert((account.into(), id.into()), summary);
             self.store.put(account, &key, &value)?;
             self.store.evict(account)?;
             value
@@ -519,16 +590,20 @@ impl Gmail {
             let id = id
                 .as_str()
                 .ok_or_else(|| Error::new("invalid", "Invalid conversation id"))?;
-            let source = self
-                .store
-                .get(account, &format!("thread:{id}"))?
-                .ok_or_else(|| {
-                    Error::new(
-                        "not_found",
-                        "Load this conversation before changing it locally",
-                    )
-                })?;
+            let source = match self.known_summary(account, id)? {
+                Some(value) => Some(value),
+                None => self.listed_summary(account, id)?,
+            }
+            .ok_or_else(|| {
+                Error::new(
+                    "not_found",
+                    "Load this conversation before changing it locally",
+                )
+            })?;
             let mut overlay = self.store.overlay(account, id)?;
+            // Local moves need their original membership after restart. Keep this
+            // small snapshot with the explicit simulation, not the message cache.
+            overlay["source"] = source.clone();
             let current = model::apply(source, &overlay);
             let mut set = |name: &str, on: bool| {
                 if !overlay["labels"].is_object() {
@@ -597,6 +672,7 @@ impl Gmail {
         }
     }
     pub fn disconnect(&mut self, account: &str) -> Result<Value> {
+        self.invalidate_summaries(account, &BTreeSet::new(), true);
         auth::remove(account)?;
         self.access.remove(account);
         self.store.remove(account)?;
@@ -656,6 +732,25 @@ impl Gmail {
         Ok(bytes)
     }
 }
+fn pending_summary(account: &str, reference: &Value, query: &Value) -> Value {
+    let label = text(query, "labelId");
+    let mailbox_label = match text(query, "mailbox") {
+        "inbox" => "INBOX",
+        "starred" => "STARRED",
+        "sent" => "SENT",
+        "junk" => "SPAM",
+        "trash" => "TRASH",
+        _ => "",
+    };
+    let labels: Vec<_> = [label, mailbox_label]
+        .into_iter()
+        .filter(|s| !s.is_empty())
+        .collect();
+    json!({"id":text(reference,"id"),"accountId":account,"subject":"","participants":[],
+        "snippet":text(reference,"snippet"),"messageCount":0,"lastMessageAt":"","isRead":true,
+        "isStarred":mailbox_label=="STARRED","labelIds":labels,"hasAttachments":false,"metadataPending":true})
+}
+
 fn collect_inline(part: &Value, out: &mut Vec<(String, String, Value)>) {
     let mime = text(part, "mimeType");
     if [
@@ -965,36 +1060,78 @@ mod tests {
         json!({"id":id,"messages":[{"id":"m","internalDate":"1000","labelIds":["INBOX","UNREAD"],"snippet":"A &amp; B","payload":{"headers":[{"name":"Subject","value":"Hello"}]}}]})
     }
     #[test]
-    fn uncached_metadata_is_batched_and_cached_reload_needs_only_the_list_call() {
-        let page = json!({"threads":[{"id":"a"},{"id":"b"},{"id":"c"},{"id":"d"}]});
+    fn lists_drain_all_pages_and_deduplicate_without_fetching_metadata() {
         let (mut g, server, dir) = fixture(vec![
-            (200, page.clone()),
-            (200, mail("a")),
-            (200, mail("b")),
-            (200, mail("c")),
-            (200, mail("d")),
-            (200, page),
+            (
+                200,
+                json!({"threads":[{"id":"a","snippet":"Preview"},{"id":"b"}],"nextPageToken":"next"}),
+            ),
+            (200, json!({"threads":[{"id":"b"},{"id":"c"}]})),
         ]);
-        let query = json!({"accountId":"a","mailbox":"inbox"});
-        let first = g.threads("a", &query).unwrap();
+        let page = g
+            .threads(
+                "a",
+                &json!({"accountId":"a","labelId":"custom","search":"from:alice","limit":30}),
+            )
+            .unwrap();
         assert_eq!(
-            first["items"]
-                .as_array()
-                .unwrap()
+            array(&page["items"])
                 .iter()
                 .map(|v| text(v, "id"))
                 .collect::<Vec<_>>(),
-            ["a", "b", "c", "d"]
+            ["a", "b", "c"]
         );
-        assert_eq!(g.threads("a", &query).unwrap()["items"], first["items"]);
+        assert_eq!(page["items"][0]["snippet"], "Preview");
+        assert!(array(&page["items"])
+            .iter()
+            .all(|v| v["metadataPending"] == true));
+        assert!(page["nextCursor"].is_null());
+        assert!(g.store.get("a", "thread:a").unwrap().is_none());
         let requests = server.join().unwrap();
-        assert_eq!(requests.len(), 3);
-        assert!(requests[1].starts_with("POST /batch "));
-        let log = serde_json::to_value(g.diagnostics.snapshot()).unwrap();
-        assert_eq!(log["requests"], 6);
-        assert_eq!(log["quotaUnits"], 180);
-        assert_eq!(log["cacheHits"], 4);
+        assert_eq!(requests.len(), 2);
+        assert!(requests.iter().all(|r| r.starts_with("GET /threads?")
+            && r.contains("maxResults=500")
+            && r.contains("labelIds=custom")
+            && r.contains("from%3Aalice")));
+        assert!(requests[1].contains("pageToken=next"));
+        assert_eq!(
+            serde_json::to_value(g.diagnostics.snapshot()).unwrap()["quotaUnits"],
+            20
+        );
         drop(g);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn visible_metadata_is_batched_reused_in_memory_and_persisted_only_on_open() {
+        let (mut g, server, dir) =
+            fixture(vec![(200, mail("t")), (200, mail("u")), (200, mail("t"))]);
+        let ids = vec!["t".into(), "u".into()];
+        let rows = g.summaries("a", &ids).unwrap();
+        assert_eq!(rows[0]["subject"], "Hello");
+        assert!(g.store.get("a", "thread:t").unwrap().is_none());
+        assert!(g.store.get("a", "body:t").unwrap().is_none());
+        assert_eq!(g.summaries("a", &ids).unwrap(), rows);
+        g.thread("a", "t").unwrap();
+        assert!(g.store.get("a", "body:t").unwrap().is_some());
+        assert!(g.store.get("a", "thread:t").unwrap().unwrap()["messages"].is_null());
+        assert!(g.store.get("a", "thread:u").unwrap().is_none());
+        let requests = server.join().unwrap();
+        assert_eq!(requests.len(), 2);
+        assert!(requests[0].starts_with("POST /batch "));
+        assert!(requests[1].contains("format=full") && !requests[1].contains("fields="));
+        drop(g);
+        let mut reopened = Gmail::new(Store::open(&dir.join("cache.sqlite")).unwrap()).unwrap();
+        assert_eq!(reopened.thread("a", "t").unwrap()["subject"], "Hello");
+        assert_eq!(
+            reopened.summaries("a", &["t".into()]).unwrap()[0]["subject"],
+            "Hello"
+        );
+        assert_eq!(
+            serde_json::to_value(reopened.diagnostics.snapshot()).unwrap()["requests"],
+            0
+        );
+        drop(reopened);
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -1029,26 +1166,28 @@ mod tests {
     }
 
     #[test]
-    fn bootstrap_splits_metadata_into_bounded_batches_and_keeps_the_baseline() {
-        let ids = ["a", "b", "c", "d", "e"];
-        let mut replies = vec![
-            (200, json!({"historyId":"20"})),
-            (200, json!({"threads":ids.map(|id| json!({"id":id}))})),
-        ];
-        replies.extend(ids.map(|id| (200, mail(id))));
-        let (mut g, server, dir) = fixture(replies);
+    fn bootstrap_only_captures_the_history_baseline() {
+        let (mut g, server, dir) = fixture(vec![(200, json!({"historyId":"20"}))]);
         assert!(g.sync("a").unwrap());
         assert_eq!(g.store.history("a").unwrap().as_deref(), Some("20"));
-        assert!(ids
-            .iter()
-            .all(|id| g.store.get("a", &format!("thread:{id}")).unwrap().is_some()));
-        let requests = server.join().unwrap();
-        assert_eq!(requests.len(), 4);
-        assert!(requests[2].starts_with("POST /batch "));
-        assert!(requests[3].starts_with("GET /threads/e?"));
-        let log = serde_json::to_value(g.diagnostics.snapshot()).unwrap();
-        assert_eq!(log["requests"], 7);
-        assert_eq!(log["quotaUnits"], 211);
+        assert_eq!(server.join().unwrap().len(), 1);
+        assert_eq!(
+            serde_json::to_value(g.diagnostics.snapshot()).unwrap()["quotaUnits"],
+            1
+        );
+        drop(g);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn first_baseline_preserves_fresh_visible_metadata() {
+        let (mut g, server, dir) =
+            fixture(vec![(200, mail("t")), (200, json!({"historyId":"20"}))]);
+        let ids = vec!["t".into()];
+        let visible = g.summaries("a", &ids).unwrap();
+        assert!(g.sync("a").unwrap());
+        assert_eq!(g.summaries("a", &ids).unwrap(), visible);
+        assert_eq!(server.join().unwrap().len(), 2);
         drop(g);
         std::fs::remove_dir_all(dir).unwrap();
     }
@@ -1069,38 +1208,22 @@ mod tests {
         let (requested, received) = mpsc::channel();
         let (respond, response_allowed) = mpsc::channel();
         let server = std::thread::spawn(move || {
-            for (index, value) in [
-                json!({"historyId":"11","history":[{"messages":[{"threadId":"t"},{"threadId":"u"},{"threadId":"v"},{"threadId":"w"}]}]}),
-                json!({}),
-            ]
-            .into_iter()
-            .enumerate()
-            {
-                let (mut socket, _) = listener.accept().unwrap();
-                socket
-                    .set_read_timeout(Some(Duration::from_secs(5)))
-                    .unwrap();
-                let request = read_http(&mut socket);
-                if index == 0 {
-                    assert!(request.starts_with("GET /history?"));
-                    requested.send(()).unwrap();
-                    response_allowed
-                        .recv_timeout(Duration::from_secs(5))
-                        .unwrap();
-                } else {
-                    assert!(request.starts_with("POST /batch "));
-                    assert_eq!(request.matches("GET /threads/").count(), 4);
-                }
-                let (content_type, body) = if index == 0 {
-                    ("application/json", value.to_string())
-                } else {
-                    let parts: Vec<_> = ["t", "u", "v", "w"].into_iter().enumerate().map(|(i, id)| {
-                        format!("--fixture\r\nContent-Type: application/http\r\nContent-ID: <response-item-{i}>\r\n\r\nHTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{}\r\n", mail(id))
-                    }).collect();
-                    ("multipart/mixed; boundary=fixture", format!("{}--fixture--\r\n", parts.concat()))
-                };
-                write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
-            }
+            let (mut socket, _) = listener.accept().unwrap();
+            socket
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            assert!(read_http(&mut socket).starts_with("GET /history?"));
+            requested.send(()).unwrap();
+            response_allowed
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap();
+            let body=json!({"historyId":"11","history":[{"messages":[{"threadId":"t"},{"threadId":"u"}]}]}).to_string();
+            write!(
+                socket,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .unwrap();
         });
         let cached = model::normalize("a", &mail("t"), true).unwrap();
         g.store
@@ -1157,39 +1280,37 @@ mod tests {
     }
 
     #[test]
-    fn sync_steps_leave_cached_reads_and_actions_available_before_atomic_commit() {
+    fn sync_steps_leave_cached_reads_available_then_invalidate_only_changed_threads() {
         use super::super::sync::{Step, Sync};
-        let (mut g, server, dir) = fixture(vec![
-            (
-                200,
-                json!({"historyId":"11","history":[{"messages":[{"threadId":"t"},{"threadId":"z"}]}]}),
-            ),
-            (200, mail("t")),
-            (200, mail("z")),
-        ]);
-        let old = model::normalize("a", &mail("t"), true).unwrap();
-        g.store
-            .sync("a", "10", &[("t".into(), Some(old.clone()))])
-            .unwrap();
-        g.store.put("a", "body:t", &old).unwrap();
-        let mut pass = Sync::new(&g, "a").unwrap();
-        for _ in 0..2 {
-            assert!(matches!(pass.step(&mut g).unwrap(), Step::Pending(wait) if wait.is_zero()));
-            assert_eq!(g.store.history("a").unwrap().as_deref(), Some("10"));
-            // Cached mail stays readable between history and metadata requests.
-            assert_eq!(g.thread("a", "t").unwrap()["isRead"], false);
-            assert!(g.store.get("a", "thread:z").unwrap().is_none());
+        let (mut g, server, dir) = fixture(vec![(
+            200,
+            json!({"historyId":"11","history":[{"messages":[{"threadId":"t"},{"threadId":"unknown"}]}]}),
+        )]);
+        for id in ["t", "unchanged"] {
+            let value = model::normalize("a", &mail(id), true).unwrap();
+            g.store.put("a", &format!("body:{id}"), &value).unwrap();
+            g.store.put("a", &format!("thread:{id}"), &value).unwrap();
         }
+        g.store.sync("a", "10", &[]).unwrap();
+        let mut pass = Sync::new(&g, "a").unwrap();
+        assert!(matches!(pass.step(&mut g).unwrap(), Step::Pending(_)));
+        assert_eq!(g.store.history("a").unwrap().as_deref(), Some("10"));
+        assert_eq!(g.thread("a", "t").unwrap()["subject"], "Hello");
         g.action(
             "a",
             &json!({"action":"markRead","threadIds":["t"],"value":true}),
         )
         .unwrap();
         assert!(matches!(pass.step(&mut g).unwrap(), Step::Done(true)));
-        assert_eq!(g.store.history("a").unwrap().as_deref(), Some("11"));
-        assert!(g.store.get("a", "thread:z").unwrap().is_some());
+        assert!(g.store.get("a", "body:t").unwrap().is_none());
+        assert_eq!(
+            g.store.get("a", "thread:t").unwrap().unwrap()["metadataPending"],
+            true
+        );
+        assert_eq!(g.thread("a", "unchanged").unwrap()["subject"], "Hello");
+        assert!(g.store.get("a", "thread:unknown").unwrap().is_none());
         assert_eq!(g.store.overlay("a", "t").unwrap()["isRead"], true);
-        assert_eq!(server.join().unwrap().len(), 2);
+        assert_eq!(server.join().unwrap().len(), 1);
         drop(g);
         std::fs::remove_dir_all(dir).unwrap();
     }
@@ -1197,85 +1318,79 @@ mod tests {
     #[test]
     fn connection_change_cancels_sync_before_it_can_commit_old_data() {
         use super::super::sync::{Step, Sync};
-        let (mut g, server, dir) = fixture(vec![
-            (
-                200,
-                json!({"historyId":"11","history":[{"messages":[{"threadId":"t"}]}]}),
-            ),
-            (200, mail("t")),
-        ]);
+        let (mut g, server, dir) = fixture(vec![(
+            200,
+            json!({"historyId":"11","history":[{"messages":[{"threadId":"t"}]}]}),
+        )]);
         g.store.sync("a", "10", &[]).unwrap();
         let mut pass = Sync::new(&g, "a").unwrap();
-        for _ in 0..2 {
-            assert!(matches!(pass.step(&mut g).unwrap(), Step::Pending(_)));
-        }
+        assert!(matches!(pass.step(&mut g).unwrap(), Step::Pending(_)));
         g.generation += 1;
-        let error = pass.step(&mut g).err().unwrap();
-        assert_eq!(error.code, "cancelled");
+        assert_eq!(pass.step(&mut g).err().unwrap().code, "cancelled");
         assert_eq!(g.store.history("a").unwrap().as_deref(), Some("10"));
-        assert!(g.store.get("a", "thread:t").unwrap().is_none());
-        assert_eq!(server.join().unwrap().len(), 2);
+        assert_eq!(server.join().unwrap().len(), 1);
         drop(g);
         std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
-    fn failed_metadata_after_a_yield_discards_the_whole_pass() {
+    fn repeated_list_page_tokens_fail_without_replacing_the_cached_complete_list() {
         let (mut g, server, dir) = fixture(vec![
             (
                 200,
-                json!({"historyId":"11","history":[{"messages":[{"threadId":"t"},{"threadId":"z"}]}]}),
+                json!({"threads":[{"id":"t"}],"nextPageToken":"repeat"}),
             ),
-            (200, mail("t")),
-            (503, json!({})),
+            (
+                200,
+                json!({"threads":[{"id":"z"}],"nextPageToken":"repeat"}),
+            ),
         ]);
-        g.store.sync("a", "10", &[]).unwrap();
-        assert_eq!(g.sync("a").unwrap_err().code, "offline");
-        assert_eq!(g.store.history("a").unwrap().as_deref(), Some("10"));
-        assert!(g.store.get("a", "thread:t").unwrap().is_none());
+        let query = json!({"accountId":"a","mailbox":"inbox"});
+        let key = format!("page:{query}");
+        g.store
+            .put("a", &key, &json!({"threads":[{"id":"old"}]}))
+            .unwrap();
+        assert_eq!(g.threads("a", &query).unwrap_err().code, "invalid");
+        assert_eq!(
+            g.store.get("a", &key).unwrap().unwrap()["threads"][0]["id"],
+            "old"
+        );
         assert_eq!(server.join().unwrap().len(), 2);
         drop(g);
         std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
-    fn sync_pages_are_atomic_and_deletion_cleans_local_overrides() {
+    fn sync_pages_invalidate_changes_without_fetching_or_erasing_partial_deletions() {
         let (mut g, server, dir) = fixture(vec![
             (
                 200,
-                json!({"history":[{"messages":[{"threadId":"t"}]}],"nextPageToken":"page2","historyId":"11"}),
+                json!({"history":[{"labelsAdded":[{"message":{"threadId":"t"}}]}],"nextPageToken":"page2","historyId":"11"}),
             ),
             (
                 200,
                 json!({"history":[{"messagesDeleted":[{"message":{"threadId":"deleted"}}]}],"historyId":"12"}),
             ),
-            (
-                404,
-                json!({"error":"private content must not reach errors"}),
-            ),
-            (200, mail("t")),
         ]);
         g.store.sync("a", "10", &[]).unwrap();
         g.store
-            .write_overlays(
-                "a",
-                &[
-                    ("deleted".into(), json!({"isRead":true})),
-                    ("t".into(), json!({"isStarred":true})),
-                ],
-            )
+            .write_overlays("a", &[("deleted".into(), json!({"isRead":true}))])
             .unwrap();
         assert!(g.sync("a").unwrap());
         assert_eq!(g.store.history("a").unwrap().as_deref(), Some("12"));
-        assert_eq!(g.store.overlay("a", "deleted").unwrap(), json!({}));
-        assert_eq!(g.store.overlay("a", "t").unwrap()["isStarred"], true);
+        // Deleting one message does not mean the entire conversation was deleted.
+        assert_eq!(g.store.overlay("a", "deleted").unwrap()["isRead"], true);
         let requests = server.join().unwrap();
+        assert_eq!(requests.len(), 2);
         assert!(requests[1].contains("pageToken=page2"));
-        assert!(requests[..2].iter().all(|r| r.starts_with("GET ")));
-        assert!(requests[2].starts_with("POST /batch "));
+        assert_eq!(
+            serde_json::to_value(g.diagnostics.snapshot()).unwrap()["quotaUnits"],
+            4
+        );
         drop(g);
         std::fs::remove_dir_all(dir).unwrap();
     }
+
     #[test]
     fn failed_history_page_leaves_cursor_and_cached_mail_unchanged() {
         let (mut g, server, dir) = fixture(vec![
@@ -1305,22 +1420,64 @@ mod tests {
         std::fs::remove_dir_all(dir).unwrap();
     }
     #[test]
-    fn expired_cursor_bootstraps_from_a_pre_read_baseline() {
-        let (mut g, server, dir) = fixture(vec![
-            (404, json!({})),
-            (200, json!({"historyId":"20"})),
-            (200, json!({"threads":[{"id":"t"}]})),
-            (200, mail("t")),
-        ]);
+    fn expired_cursor_invalidates_old_mail_without_fetching_replacements() {
+        let (mut g, server, dir) =
+            fixture(vec![(404, json!({})), (200, json!({"historyId":"20"}))]);
         g.store.sync("a", "old", &[]).unwrap();
+        let value = model::normalize("a", &mail("old"), true).unwrap();
+        g.store.put("a", "body:old", &value).unwrap();
+        g.store.put("a", "thread:old", &value).unwrap();
         assert!(g.sync("a").unwrap());
         assert_eq!(g.store.history("a").unwrap().as_deref(), Some("20"));
+        assert!(g.store.get("a", "body:old").unwrap().is_none());
+        assert_eq!(
+            g.store.get("a", "thread:old").unwrap().unwrap()["metadataPending"],
+            true
+        );
         let requests = server.join().unwrap();
+        assert_eq!(requests.len(), 2);
         assert!(requests[1].contains("/profile"));
-        assert!(requests[2].contains("/threads?"));
         drop(g);
         std::fs::remove_dir_all(dir).unwrap();
     }
+
+    #[test]
+    fn local_actions_on_unloaded_ids_fetch_no_metadata_and_survive_restart() {
+        let (mut g, server, dir) = fixture(vec![(200, json!({"threads":[{"id":"t"},{"id":"u"}]}))]);
+        g.threads("a", &json!({"accountId":"a","mailbox":"inbox"}))
+            .unwrap();
+        g.action("a", &json!({"action":"trash","threadIds":["t","u"]}))
+            .unwrap();
+        assert!(g.store.get("a", "body:t").unwrap().is_none());
+        assert!(g.store.get("a", "thread:t").unwrap().is_none());
+        assert_eq!(server.join().unwrap().len(), 1);
+        drop(g);
+        let mut reopened = Gmail::new(Store::open(&dir.join("cache.sqlite")).unwrap()).unwrap();
+        let moved = reopened
+            .page_overlay("a", json!({"threads":[]}), &json!({"mailbox":"trash"}))
+            .unwrap();
+        assert_eq!(array(&moved["items"]).len(), 2);
+        assert_eq!(moved["items"][0]["metadataPending"], true);
+        reopened
+            .action("a", &json!({"action":"restore","threadIds":["t"]}))
+            .unwrap();
+        assert_eq!(
+            array(
+                &reopened
+                    .page_overlay("a", json!({"threads":[]}), &json!({"mailbox":"inbox"}))
+                    .unwrap()["items"]
+            )
+            .len(),
+            1
+        );
+        assert_eq!(
+            serde_json::to_value(reopened.diagnostics.snapshot()).unwrap()["requests"],
+            0
+        );
+        drop(reopened);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
     #[test]
     fn local_actions_change_destination_membership_and_counts_without_network() {
         let (mut g, server, dir) = fixture(vec![]);
@@ -1348,80 +1505,55 @@ mod tests {
         std::fs::remove_dir_all(dir).unwrap();
     }
     #[test]
-    fn read_search_pagination_and_opened_bodies_work_then_fall_back_offline() {
-        let raw = mail("t");
+    fn opened_bodies_and_completed_id_lists_work_offline() {
         let (mut g, server, dir) = fixture(vec![
             (
                 200,
-                json!({"labels":[{"id":"INBOX","name":"INBOX","type":"system"}]}),
+                json!({"threads":[{"id":"t","snippet":"Preview"}],"nextPageToken":"older"}),
             ),
-            (200, json!({"threads":[{"id":"t"}],"nextPageToken":"older"})),
-            (200, raw.clone()),
-            (200, raw),
+            (200, json!({"threads":[{"id":"u"}]})),
+            (200, mail("t")),
         ]);
-        assert_eq!(g.labels("a").unwrap()[0]["type"], "system");
-        let query =
-            json!({"accountId":"a","mailbox":"inbox","search":"from:alice@example.com","limit":25});
+        let query = json!({"accountId":"a","mailbox":"inbox","search":"from:alice@example.com"});
         let page = g.threads("a", &query).unwrap();
-        assert_eq!(page["nextCursor"], "older");
-        assert_eq!(page["items"][0]["snippet"], "A & B");
+        assert_eq!(array(&page["items"]).len(), 2);
+        assert_eq!(page["items"][0]["metadataPending"], true);
         assert_eq!(g.thread("a", "t").unwrap()["subject"], "Hello");
-        let requests = server.join().unwrap();
-        assert!(requests[1].contains("from%3Aalice%40example.com"));
-        assert!(requests[2].contains("fields="));
-        assert!(requests[2].contains("body%28size%2CattachmentId%29"));
-        assert!(requests.iter().all(|r| r.starts_with("GET ")));
-        assert_eq!(g.threads("a", &query).unwrap()["stale"], true);
+        assert_eq!(server.join().unwrap().len(), 3);
+        let offline = g.threads("a", &query).unwrap();
+        assert_eq!(offline["stale"], true);
+        assert_eq!(offline["items"][0]["subject"], "Hello");
+        assert_eq!(offline["items"][1]["metadataPending"], true);
         assert_eq!(g.thread("a", "t").unwrap()["subject"], "Hello");
         drop(g);
         std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
-    fn list_refreshes_reuse_metadata_and_history_sync_updates_it() {
+    fn changed_mail_is_refetched_only_when_opened_and_unchanged_mail_is_reused() {
         let mut updated = mail("t");
         updated["messages"][0]["payload"]["headers"][0]["value"] = json!("Updated");
         let (mut g, server, dir) = fixture(vec![
-            (200, json!({"threads":[{"id":"t"}]})),
+            (200, mail("t")),
+            (200, json!({"historyId":"11"})),
             (
                 200,
-                json!({"history":[{"messages":[{"threadId":"t"}]}],"historyId":"11"}),
+                json!({"historyId":"12","history":[{"messagesAdded":[{"message":{"threadId":"t"}}]}]}),
             ),
             (200, updated),
-            (200, json!({"threads":[{"id":"t"}]})),
         ]);
-        g.store
-            .sync(
-                "a",
-                "10",
-                &[(
-                    "t".into(),
-                    Some(model::normalize("a", &mail("t"), false).unwrap()),
-                )],
-            )
-            .unwrap();
-        let query = json!({"accountId":"a","mailbox":"inbox"});
-        g.action(
-            "a",
-            &json!({"action":"setStarred","threadIds":["t"],"value":true}),
-        )
-        .unwrap();
-        let page = g.threads("a", &query).unwrap();
-        assert_eq!(page["items"][0]["subject"], "Hello");
-        assert_eq!(page["items"][0]["isStarred"], true);
+        g.store.sync("a", "10", &[]).unwrap();
+        g.thread("a", "t").unwrap();
+        assert!(!g.sync("a").unwrap());
+        assert_eq!(g.thread("a", "t").unwrap()["subject"], "Hello");
         assert!(g.sync("a").unwrap());
-        let page = g.threads("a", &query).unwrap();
-        assert_eq!(page["items"][0]["subject"], "Updated");
-        assert_eq!(page["items"][0]["isStarred"], true);
+        assert!(g.store.get("a", "body:t").unwrap().is_none());
+        assert_eq!(g.thread("a", "t").unwrap()["subject"], "Updated");
         let requests = server.join().unwrap();
         assert_eq!(requests.len(), 4);
-        assert_eq!(
-            requests
-                .iter()
-                .filter(|r| r.contains("/threads/t?"))
-                .count(),
-            1
-        );
+        assert!(requests[1..3]
+            .iter()
+            .all(|r| r.starts_with("GET /history?")));
         drop(g);
         std::fs::remove_dir_all(dir).unwrap();
     }
@@ -1469,9 +1601,12 @@ mod tests {
     }
 
     #[test]
-    fn metadata_rate_limit_preserves_the_cached_page_and_local_overlay() {
+    fn later_list_page_rate_limit_preserves_the_complete_cached_list_and_local_overlay() {
         let (mut g, server, dir) = fixture(vec![
-            (200, json!({"threads":[{"id":"new"}]})),
+            (
+                200,
+                json!({"threads":[{"id":"new"}],"nextPageToken":"second"}),
+            ),
             (429, json!({})),
         ]);
         let query = json!({"accountId":"a","mailbox":"inbox"});
@@ -1481,7 +1616,7 @@ mod tests {
             .put(
                 "a",
                 &format!("page:{query}"),
-                &json!({"items":[thread],"nextCursor":"older"}),
+                &json!({"threads":[{"id":"t"}],"nextCursor":null}),
             )
             .unwrap();
         g.action(
@@ -1493,7 +1628,7 @@ mod tests {
         assert_eq!(page["stale"], true);
         assert_eq!(page["items"][0]["id"], "t");
         assert_eq!(page["items"][0]["isStarred"], true);
-        assert_eq!(page["nextCursor"], "older");
+        assert!(page["nextCursor"].is_null());
         assert_eq!(server.join().unwrap().len(), 2);
         drop(g);
         std::fs::remove_dir_all(dir).unwrap();

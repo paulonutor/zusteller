@@ -1,14 +1,10 @@
 use super::{
     api::Gmail,
-    batch,
-    model::{self, array, text},
-    quota, Error, Result,
+    model::{array, text},
+    Error, Result,
 };
 use serde_json::Value;
-use std::{
-    collections::{BTreeSet, VecDeque},
-    time::Duration,
-};
+use std::{collections::BTreeSet, time::Duration};
 
 pub enum Step {
     Pending(Duration),
@@ -17,15 +13,13 @@ pub enum Step {
 
 enum Phase {
     Profile,
-    Recent,
     History,
-    Metadata,
     Commit,
     Finished,
 }
 
 // A pass holds its uncommitted changes here, rather than holding the Gmail mutex.
-// Each step fetches one page or bounded metadata batch; quota waits happen outside the worker.
+// Each step reads one history page; mail is fetched only when viewed.
 pub struct Sync {
     account: String,
     generation: u64,
@@ -34,9 +28,8 @@ pub struct Sync {
     history: String,
     page_token: String,
     changed: BTreeSet<String>,
-    pending: VecDeque<String>,
-    changes: Vec<(String, Option<Value>)>,
     bootstrap: bool,
+    invalidate_all: bool,
     waiting: bool,
 }
 
@@ -52,6 +45,12 @@ impl Sync {
         }
         let cursor = gmail.store.history(account)?;
         let bootstrap = cursor.is_none();
+        // A first connection has no older mail to invalidate. Preserve row metadata
+        // just loaded by the foreground while the initial baseline is established.
+        let invalidate_all = bootstrap && gmail.store.0.query_row(
+            "SELECT EXISTS(SELECT 1 FROM cache WHERE account=?1 AND (key LIKE 'thread:%' OR key LIKE 'body:%'))",
+            [account], |r| r.get::<_,bool>(0),
+        )?;
         gmail.diagnostics.event("sync", "started", None);
         Ok(Self {
             account: account.into(),
@@ -65,9 +64,8 @@ impl Sync {
             history: String::new(),
             page_token: String::new(),
             changed: BTreeSet::new(),
-            pending: VecDeque::new(),
-            changes: Vec::new(),
             bootstrap,
+            invalidate_all,
             waiting: false,
         })
     }
@@ -98,18 +96,8 @@ impl Sync {
                 "Gmail sync cancelled after the connection changed",
             ));
         }
-        if matches!(self.phase, Phase::Metadata) {
-            return self.metadata(gmail);
-        }
         let (path, params) = match self.phase {
             Phase::Profile => ("profile", vec![]),
-            Phase::Recent => (
-                "threads",
-                vec![
-                    ("maxResults", "100".into()),
-                    ("includeSpamTrash", "true".into()),
-                ],
-            ),
             Phase::History => {
                 let mut params = vec![
                     ("startHistoryId", self.cursor.clone()),
@@ -121,13 +109,16 @@ impl Sync {
                 ("history", params)
             }
             Phase::Commit => {
-                gmail
-                    .store
-                    .sync(&self.account, &self.history, &self.changes)?;
+                gmail.store.invalidate(
+                    &self.account,
+                    &self.history,
+                    &self.changed,
+                    self.invalidate_all,
+                )?;
+                gmail.invalidate_summaries(&self.account, &self.changed, self.invalidate_all);
                 self.phase = Phase::Finished;
-                return Ok(Step::Done(self.bootstrap || !self.changes.is_empty()));
+                return Ok(Step::Done(self.bootstrap || !self.changed.is_empty()));
             }
-            Phase::Metadata => unreachable!(),
             Phase::Finished => return Err(Error::new("invalid", "Gmail sync has already ended")),
         };
         let wait = gmail.quota.background_wait(path)?;
@@ -147,35 +138,13 @@ impl Sync {
                 // remain in history for the next pass.
                 self.history = text(&profile, "historyId").into();
                 self.require_history()?;
-                self.phase = Phase::Recent;
-            }
-            Phase::Recent => {
-                let page = response?;
-                for thread in array(&page["threads"]) {
-                    let id = text(thread, "id");
-                    if !id.is_empty() && self.changed.insert(id.into()) {
-                        self.pending.push_back(id.into());
-                    }
-                }
-                // Revalidate older cached conversations after history expiry.
-                let mut stmt = gmail
-                    .store
-                    .0
-                    .prepare("SELECT key FROM cache WHERE account=?1 AND key LIKE 'thread:%'")?;
-                let keys = stmt.query_map([&self.account], |r| r.get::<_, String>(0))?;
-                for key in keys {
-                    let id = key?.trim_start_matches("thread:").to_string();
-                    if self.changed.insert(id.clone()) {
-                        self.pending.push_back(id);
-                    }
-                }
-                self.changed.clear();
-                self.metadata_phase();
+                self.phase = Phase::Commit;
             }
             Phase::History => {
                 let page = match response {
                     Err(error) if error.code == "not_found" => {
                         self.bootstrap = true;
+                        self.invalidate_all = true;
                         self.changed.clear();
                         self.phase = Phase::Profile;
                         return Ok(Step::Pending(Duration::ZERO));
@@ -201,52 +170,10 @@ impl Sync {
                 if self.page_token.is_empty() {
                     self.history = text(&page, "historyId").into();
                     self.require_history()?;
-                    self.fetch_metadata();
+                    self.phase = Phase::Commit;
                 }
             }
             _ => unreachable!(),
-        }
-        Ok(Step::Pending(Duration::ZERO))
-    }
-
-    fn metadata(&mut self, gmail: &mut Gmail) -> Result<Step> {
-        let ids: Vec<_> = self
-            .pending
-            .iter()
-            .take(batch::METADATA_LIMIT)
-            .cloned()
-            .collect();
-        let reads: Vec<_> = ids
-            .iter()
-            .map(|id| {
-                batch::Read::new(
-                    format!("threads/{}", super::api::segment(id)),
-                    super::api::summary_params(),
-                )
-            })
-            .collect();
-        let wait = gmail
-            .quota
-            .background_wait_cost(reads.iter().map(|r| quota::cost(&r.path)).sum())?;
-        if !wait.is_zero() {
-            if !self.waiting {
-                gmail.diagnostics.event("sync", "waiting_for_quota", None);
-                self.waiting = true;
-            }
-            return Ok(Step::Pending(wait));
-        }
-        self.waiting = false;
-        for (id, response) in ids.into_iter().zip(gmail.get_many(&self.account, &reads)?) {
-            let value = match response {
-                Ok(raw) => Some(model::normalize(&self.account, &raw, false)?),
-                Err(error) if error.code == "not_found" => None,
-                Err(error) => return Err(error),
-            };
-            self.changes.push((id, value));
-            self.pending.pop_front();
-        }
-        if self.pending.is_empty() {
-            self.phase = Phase::Commit;
         }
         Ok(Step::Pending(Duration::ZERO))
     }
@@ -263,18 +190,5 @@ impl Sync {
         if !id.is_empty() {
             self.changed.insert(id.into());
         }
-    }
-
-    fn fetch_metadata(&mut self) {
-        self.pending = std::mem::take(&mut self.changed).into_iter().collect();
-        self.metadata_phase();
-    }
-
-    fn metadata_phase(&mut self) {
-        self.phase = if self.pending.is_empty() {
-            Phase::Commit
-        } else {
-            Phase::Metadata
-        };
     }
 }

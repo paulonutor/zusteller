@@ -49,6 +49,8 @@ export type ThreadSummary = {
   isStarred: boolean;
   labelIds: ID[];
   hasAttachments: boolean;
+  /** List membership is known; row details have not been loaded yet. */
+  metadataPending?: boolean;
 };
 
 export type Thread = ThreadSummary & { messages: Message[] };
@@ -88,6 +90,8 @@ export interface MailService {
   getMailboxCounts(accountId: ID): Promise<MailboxCounts>;
   getThreads(query: ThreadQuery): Promise<Page<ThreadSummary>>;
   getThread(accountId: ID, threadId: ID): Promise<Thread>;
+  /** Optional lazy row metadata; message bodies are fetched only by getThread. */
+  getThreadSummary?(accountId: ID, threadId: ID, signal?: AbortSignal): Promise<ThreadSummary>;
   markRead(accountId: ID, threadIds: ID[], read: boolean): Promise<void>;
   setStarred(accountId: ID, threadIds: ID[], starred: boolean): Promise<void>;
   archive(accountId: ID, threadIds: ID[]): Promise<void>;

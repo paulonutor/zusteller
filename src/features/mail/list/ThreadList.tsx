@@ -236,6 +236,7 @@ export function ThreadList(p: Props) {
       setSize={index === undefined ? undefined : p.hasMore ? -1 : p.items.length}
       posInSet={index === undefined ? undefined : index + 1}
       thread={t}
+      viewport={scroller}
       accountEmail={p.accountEmail}
       labelsById={labelsById}
       selected={p.selection.selected.has(t.id)}

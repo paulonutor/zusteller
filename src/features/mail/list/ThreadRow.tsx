@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useRef, type RefObject } from 'react';
 import { Paperclip, Star } from 'lucide-react';
 import { SYSTEM_LABEL, type ID, type Label, type ThreadSummary } from '@/domain/mail';
 import { Checkbox } from '@/components/ui/Checkbox';
@@ -8,6 +8,7 @@ import { beginThreadDrag, endDrag, useDropZone } from '../dnd';
 import { LabelChip } from '../LabelChip';
 import { LabelOverflow } from './LabelOverflow';
 import { avatarHue, displayName, formatListDate, initials } from '../format';
+import { useLazySummary } from '../hooks';
 
 type Props = {
   thread: ThreadSummary;
@@ -27,6 +28,7 @@ type Props = {
   /** Set when the list is windowed: total rows (-1 = unknown) and 1-based position. */
   setSize?: number;
   posInSet?: number;
+  viewport: RefObject<HTMLDivElement | null>;
 };
 
 /** The correspondent shown on the avatar: first participant who isn't me. */
@@ -50,6 +52,8 @@ function senders(t: ThreadSummary, me: string | undefined): string {
 
 export const ThreadRow = memo(function ThreadRow(p: Props) {
   const t = p.thread;
+  const row = useRef<HTMLDivElement>(null);
+  const metadata = useLazySummary(t, row, p.viewport);
   const chips = t.labelIds
     .map((id) => p.labelsById.get(id))
     .filter((l): l is Label => !!l && l.type === 'user');
@@ -67,11 +71,13 @@ export const ThreadRow = memo(function ThreadRow(p: Props) {
   return (
     <ContextMenu items={p.buildContextItems} onOpenChange={(o) => o && p.onContextOpen()}>
       <div
+        ref={row}
         role="option"
         id={`row-${t.id}`}
         aria-selected={p.selected}
         aria-setsize={p.setSize}
         aria-posinset={p.posInSet}
+        data-metadata-pending={t.metadataPending || undefined}
         data-unread={!t.isRead}
         data-focused={p.focused && p.listHasFocus}
         onClick={p.onClick}
@@ -126,7 +132,11 @@ export const ThreadRow = memo(function ThreadRow(p: Props) {
               className={cn('truncate text-[13.5px]', !t.isRead ? 'font-semibold' : 'font-medium')}
             >
               {!t.isRead && <span className="sr-only">Unread, </span>}
-              {senders(t, p.accountEmail)}
+              {t.metadataPending
+                ? metadata.isError
+                  ? 'Could not load conversation'
+                  : 'Loading conversation…'
+                : senders(t, p.accountEmail)}
             </span>
             {t.messageCount > 1 && (
               <span className="shrink-0 text-[11px] text-muted">{t.messageCount}</span>
@@ -139,10 +149,10 @@ export const ThreadRow = memo(function ThreadRow(p: Props) {
                 </>
               )}
               {t.isStarred && <span className="sr-only">Starred, </span>}
-              {formatListDate(t.lastMessageAt)}
+              {!t.metadataPending && formatListDate(t.lastMessageAt)}
             </span>
             {/* Pointer-only (see checkbox above). Keyboard: S; also toolbar and context menu. */}
-            {!inTrash && (
+            {!inTrash && !t.metadataPending && (
               <span
                 data-star
                 data-starred={t.isStarred}

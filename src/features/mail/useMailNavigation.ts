@@ -46,8 +46,10 @@ export function useMailNavigation(accountId: ID | undefined) {
         ? loaded.filter((t) => t.isStarred)
         : loaded;
     if (filter === 'all') return scoped;
-    return scoped.filter((t) =>
-      filter === 'unread' ? selection.selected.has(t.id) || !t.isRead : t.isStarred,
+    return scoped.filter(
+      (t) =>
+        t.metadataPending ||
+        (filter === 'unread' ? selection.selected.has(t.id) || !t.isRead : t.isStarred),
     );
   }, [loaded, filter, selection.selected, view]);
   const filterCounts = useMemo(
