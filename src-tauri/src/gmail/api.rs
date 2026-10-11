@@ -1,5 +1,6 @@
 use super::{
     auth,
+    diagnostics::Diagnostics,
     model::{self, array, text},
     quota::Quota,
     store::Store,
@@ -11,6 +12,7 @@ use serde_json::{json, Value};
 use std::{
     collections::{BTreeSet, HashMap},
     io::Read,
+    sync::Arc,
     time::Instant,
 };
 
@@ -18,6 +20,7 @@ const BASE: &str = "https://gmail.googleapis.com/gmail/v1/users/me/";
 const MAX_RESPONSE: u64 = 24 * 1024 * 1024;
 pub struct Gmail {
     pub store: Store,
+    pub diagnostics: Arc<Diagnostics>,
     access: HashMap<String, auth::Access>,
     client: Client,
     base: String,
@@ -27,6 +30,7 @@ impl Gmail {
     pub fn new(store: Store) -> Result<Self> {
         Ok(Self {
             store,
+            diagnostics: Arc::new(Diagnostics::default()),
             access: HashMap::new(),
             client: auth::client()?,
             base: BASE.into(),
@@ -41,6 +45,7 @@ impl Gmail {
     ) -> Result<Value> {
         let profile = request(
             &self.quota,
+            &self.diagnostics,
             &self.client,
             &self.base,
             &access.token,
@@ -92,11 +97,27 @@ impl Gmail {
     }
     fn get(&mut self, account: &str, path: &str, params: &[(&str, String)]) -> Result<Value> {
         let token = self.token(account)?;
-        match request(&self.quota, &self.client, &self.base, &token, path, params) {
+        match request(
+            &self.quota,
+            &self.diagnostics,
+            &self.client,
+            &self.base,
+            &token,
+            path,
+            params,
+        ) {
             Err(e) if e.code == "auth" => {
                 self.access.remove(account);
                 let token = self.token(account)?;
-                request(&self.quota, &self.client, &self.base, &token, path, params)
+                request(
+                    &self.quota,
+                    &self.diagnostics,
+                    &self.client,
+                    &self.base,
+                    &token,
+                    path,
+                    params,
+                )
             }
             other => other,
         }
@@ -132,6 +153,7 @@ impl Gmail {
         let fetched = parallel(&ids, |id| {
             request(
                 &self.quota,
+                &self.diagnostics,
                 &self.client,
                 &self.base,
                 &token,
@@ -258,10 +280,15 @@ impl Gmail {
                 None => missing.push(id.clone()),
             }
         }
+        if !summaries.is_empty() {
+            self.diagnostics
+                .event("cache", "reused", Some(summaries.len()));
+        }
         let token = self.token(account)?;
         let fetched = parallel(&missing, |id| {
             let raw = request(
                 &self.quota,
+                &self.diagnostics,
                 &self.client,
                 &self.base,
                 &token,
@@ -489,6 +516,16 @@ impl Gmail {
         Ok(Value::Null)
     }
     pub fn sync(&mut self, account: &str) -> Result<bool> {
+        self.diagnostics.event("sync", "started", None);
+        let result = self.sync_inner(account);
+        self.diagnostics.event(
+            "sync",
+            if result.is_ok() { "finished" } else { "failed" },
+            None,
+        );
+        result
+    }
+    fn sync_inner(&mut self, account: &str) -> Result<bool> {
         let cursor = self.store.history(account)?;
         let Some(cursor) = cursor else {
             return self.bootstrap(account);
@@ -542,6 +579,7 @@ impl Gmail {
         let changes = parallel(&ids, |id| {
             match request(
                 &self.quota,
+                &self.diagnostics,
                 &self.client,
                 &self.base,
                 &token,
@@ -579,6 +617,7 @@ impl Gmail {
         let mut changes = parallel(&ids, |id| {
             match request(
                 &self.quota,
+                &self.diagnostics,
                 &self.client,
                 &self.base,
                 &token,
@@ -751,92 +790,123 @@ fn parallel<T: Send, F: Fn(&String) -> Result<T> + Sync>(
 }
 fn request(
     quota: &Quota,
+    diagnostics: &Diagnostics,
     client: &Client,
     base: &str,
     token: &str,
     path: &str,
     params: &[(&str, String)],
 ) -> Result<Value> {
-    quota.acquire(path)?;
-    let mut response = client
-        .get(format!("{base}{path}"))
-        .bearer_auth(token)
-        .query(params)
-        .send()
-        .map_err(|_| {
-            Error::new(
-                "offline",
-                "Gmail is offline. Cached mail is still available.",
-            )
-        })?;
-    let status = response.status();
-    if !status.is_success() {
-        let mut error = match status.as_u16() {
-            401 => Error::new("auth", "Google access expired. Connect Gmail again."),
-            404 => Error::new("not_found", "Gmail item was not found"),
-            403 => Error::new(
-                "permission",
-                "Google denied access. Check Gmail API and test-user configuration.",
-            ),
-            429 => Error::new("rate_limit", "Gmail rate limit reached. Sync will retry."),
-            500..=599 => Error::new("offline", "Google is unavailable. Sync will retry."),
-            _ => Error::new("invalid", "Gmail rejected the request"),
-        };
-        if status.as_u16() == 403 {
-            let mut body = Vec::new();
-            if response
-                .by_ref()
-                .take(64 * 1024)
-                .read_to_end(&mut body)
-                .is_ok()
-            {
-                if let Ok(value) = serde_json::from_slice::<Value>(&body) {
-                    if array(&value["error"]["errors"]).iter().any(|e| {
-                        [
-                            "rateLimitExceeded",
-                            "userRateLimitExceeded",
-                            "dailyLimitExceeded",
-                        ]
-                        .contains(&text(e, "reason"))
-                    }) {
-                        error =
-                            Error::new("rate_limit", "Gmail rate limit reached. Sync will retry.");
+    let started = Instant::now();
+    if let Err(error) = quota.acquire(path) {
+        let result = Err(error);
+        diagnostics.request(
+            path,
+            None,
+            &result,
+            (started.elapsed(), started.elapsed()),
+            None,
+            false,
+        );
+        return result;
+    }
+    let wait = started.elapsed();
+    let mut http_status = None;
+    let mut reason = None;
+    let result = (|| {
+        let mut response = client
+            .get(format!("{base}{path}"))
+            .bearer_auth(token)
+            .query(params)
+            .send()
+            .map_err(|_| {
+                Error::new(
+                    "offline",
+                    "Gmail is offline. Cached mail is still available.",
+                )
+            })?;
+        let status = response.status();
+        http_status = Some(status.as_u16());
+        if !status.is_success() {
+            let mut error = match status.as_u16() {
+                401 => Error::new("auth", "Google access expired. Connect Gmail again."),
+                404 => Error::new("not_found", "Gmail item was not found"),
+                403 => Error::new(
+                    "permission",
+                    "Google denied access. Check Gmail API and test-user configuration.",
+                ),
+                429 => Error::new("rate_limit", "Gmail rate limit reached. Sync will retry."),
+                500..=599 => Error::new("offline", "Google is unavailable. Sync will retry."),
+                _ => Error::new("invalid", "Gmail rejected the request"),
+            };
+            if [403, 429].contains(&status.as_u16()) {
+                let mut body = Vec::new();
+                if response
+                    .by_ref()
+                    .take(64 * 1024)
+                    .read_to_end(&mut body)
+                    .is_ok()
+                {
+                    if let Ok(value) = serde_json::from_slice::<Value>(&body) {
+                        if let Some(value) = array(&value["error"]["errors"]).iter().find(|e| {
+                            [
+                                "rateLimitExceeded",
+                                "userRateLimitExceeded",
+                                "dailyLimitExceeded",
+                            ]
+                            .contains(&text(e, "reason"))
+                        }) {
+                            reason = Some(text(value, "reason").to_string());
+                            error = Error::new(
+                                "rate_limit",
+                                "Gmail rate limit reached. Sync will retry.",
+                            );
+                        }
                     }
                 }
             }
+            error.retry_after = response
+                .headers()
+                .get("retry-after")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| {
+                    v.parse().ok().or_else(|| {
+                        let target = chrono::DateTime::parse_from_rfc2822(v).ok()?.timestamp();
+                        let now = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .ok()?
+                            .as_secs() as i64;
+                        Some(target.saturating_sub(now).max(0) as u64)
+                    })
+                });
+            if error.code == "rate_limit" {
+                quota.limited(&mut error);
+            }
+            return Err(error);
         }
-        error.retry_after = response
-            .headers()
-            .get("retry-after")
-            .and_then(|v| v.to_str().ok())
-            .and_then(|v| {
-                v.parse().ok().or_else(|| {
-                    let target = chrono::DateTime::parse_from_rfc2822(v).ok()?.timestamp();
-                    let now = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .ok()?
-                        .as_secs() as i64;
-                    Some(target.saturating_sub(now).max(0) as u64)
-                })
-            });
-        if error.code == "rate_limit" {
-            quota.limited(&mut error);
+        if response.content_length().is_some_and(|n| n > MAX_RESPONSE) {
+            return Err(Error::new("invalid", "Gmail response is too large"));
         }
-        return Err(error);
-    }
-    if response.content_length().is_some_and(|n| n > MAX_RESPONSE) {
-        return Err(Error::new("invalid", "Gmail response is too large"));
-    }
-    let mut bytes = Vec::new();
-    response
-        .by_ref()
-        .take(MAX_RESPONSE + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|_| Error::new("offline", "Gmail response was interrupted"))?;
-    if bytes.len() as u64 > MAX_RESPONSE {
-        return Err(Error::new("invalid", "Gmail response is too large"));
-    }
-    serde_json::from_slice(&bytes).map_err(|_| Error::new("invalid", "Invalid Gmail response"))
+        let mut bytes = Vec::new();
+        response
+            .by_ref()
+            .take(MAX_RESPONSE + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|_| Error::new("offline", "Gmail response was interrupted"))?;
+        if bytes.len() as u64 > MAX_RESPONSE {
+            return Err(Error::new("invalid", "Gmail response is too large"));
+        }
+        serde_json::from_slice(&bytes).map_err(|_| Error::new("invalid", "Invalid Gmail response"))
+    })();
+    diagnostics.request(
+        path,
+        http_status,
+        &result,
+        (started.elapsed(), wait),
+        reason.as_deref(),
+        true,
+    );
+    result
 }
 
 fn summary_params() -> Vec<(&'static str, String)> {
@@ -1147,6 +1217,10 @@ mod tests {
             let error = g.labels("a").unwrap_err();
             assert_eq!(error.code, "rate_limit");
             assert_eq!(error.retry_after, Some(120));
+            let log = serde_json::to_value(g.diagnostics.snapshot()).unwrap();
+            assert_eq!(log["entries"][0]["status"], status);
+            assert_eq!(log["entries"][0]["reason"], "userRateLimitExceeded");
+            assert_eq!(log["rateLimits"], 1);
             assert_eq!(g.sync("a").unwrap_err().code, "rate_limit");
             assert_eq!(g.thread("a", "uncached").unwrap_err().code, "rate_limit");
             g.store
@@ -1162,6 +1236,10 @@ mod tests {
             );
             g.store.put("a", "labels", &json!([])).unwrap();
             assert_eq!(g.labels("a").unwrap(), json!([]));
+            assert_eq!(
+                serde_json::to_value(g.diagnostics.snapshot()).unwrap()["requests"],
+                1
+            );
             assert_eq!(server.join().unwrap().len(), 1);
             drop(g);
             std::fs::remove_dir_all(dir).unwrap();

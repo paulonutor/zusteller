@@ -301,6 +301,7 @@ pub fn run() {
             gmail::gmail_cancel_connect,
             gmail::gmail_read,
             gmail::gmail_download,
+            gmail::gmail_diagnostics,
             notify,
             set_badge,
             set_window_theme,

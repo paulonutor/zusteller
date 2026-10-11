@@ -74,7 +74,7 @@ impl Budget {
     }
 }
 
-fn cost(path: &str) -> f64 {
+pub fn cost(path: &str) -> f64 {
     match path {
         "profile" | "labels" => 1.0,
         "history" => 2.0,

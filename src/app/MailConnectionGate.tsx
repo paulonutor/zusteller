@@ -1,8 +1,9 @@
-import { useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { mailKeys } from '@/domain/mail';
 import { Button } from '@/components/ui/Button';
 import { useServices } from './services';
+import { MailDiagnosticsPanel } from './MailDiagnosticsPanel';
 
 /** Shared account UI depends only on the optional provider lifecycle contract. */
 export function MailConnectionGate({ children }: { children: ReactNode }) {
@@ -18,6 +19,12 @@ export function MailConnectionGate({ children }: { children: ReactNode }) {
   const account = accounts.data?.[0];
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const diagnosticsButton = useRef<HTMLButtonElement>(null);
+  const closeDiagnostics = () => {
+    setDiagnosticsOpen(false);
+    diagnosticsButton.current?.focus();
+  };
   const run = async (task: () => Promise<void>, clear = false) => {
     setBusy(true);
     setError(undefined);
@@ -117,6 +124,17 @@ export function MailConnectionGate({ children }: { children: ReactNode }) {
                 : 'Cached mail · connecting to Google…'))}
         </span>
         <div className="ml-auto flex gap-3">
+          {connection.getDiagnostics && (
+            <button
+              ref={diagnosticsButton}
+              aria-expanded={diagnosticsOpen}
+              aria-controls={diagnosticsOpen ? 'gmail-diagnostics' : undefined}
+              className="hover:underline"
+              onClick={() => setDiagnosticsOpen((open) => !open)}
+            >
+              Diagnostics
+            </button>
+          )}
           <button
             disabled={busy}
             className="hover:underline disabled:opacity-50"
@@ -150,6 +168,9 @@ export function MailConnectionGate({ children }: { children: ReactNode }) {
           )}
         </div>
       </div>
+      {diagnosticsOpen && connection.getDiagnostics && (
+        <MailDiagnosticsPanel connection={connection} onClose={closeDiagnostics} />
+      )}
     </div>
   );
 }

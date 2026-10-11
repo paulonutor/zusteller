@@ -1,4 +1,5 @@
 // Synthetic native-provider UI checks; no OAuth tokens or real Gmail data.
+/* global document, innerWidth */
 import { chromium } from 'playwright';
 import AxeBuilder from '@axe-core/playwright';
 import fs from 'node:fs';
@@ -16,6 +17,7 @@ for (const scheme of ['light', 'dark']) {
   page.on('pageerror', (e) => errors.push(e.message));
   await page.addInitScript(() => {
     let connected = false;
+    globalThis.__gmailActions = 0;
     const account = {
       id: 'preview@example.com',
       email: 'preview@example.com',
@@ -57,6 +59,63 @@ for (const scheme of ['light', 'dark']) {
             connected = true;
             return account;
           }
+          if (command === 'gmail_diagnostics')
+            return {
+              requests: 104,
+              quotaUnits: 4053,
+              rateLimits: 1,
+              cacheHits: 50,
+              entries: [
+                {
+                  timestamp: Date.parse('2026-10-11T13:00:00Z'),
+                  operation: 'sync',
+                  outcome: 'started',
+                  status: null,
+                  durationMs: 0,
+                  waitMs: 0,
+                  quotaUnits: 0,
+                  reason: null,
+                  retryAfter: null,
+                  count: null,
+                },
+                {
+                  timestamp: Date.parse('2026-10-11T13:00:01Z'),
+                  operation: 'threads.get',
+                  outcome: 'rate_limit',
+                  status: 429,
+                  durationMs: 620,
+                  waitMs: 500,
+                  quotaUnits: 40,
+                  reason: 'userRateLimitExceeded',
+                  retryAfter: 60,
+                  count: null,
+                },
+                {
+                  timestamp: Date.parse('2026-10-11T13:00:02Z'),
+                  operation: 'cache',
+                  outcome: 'reused',
+                  status: null,
+                  durationMs: 0,
+                  waitMs: 0,
+                  quotaUnits: 0,
+                  reason: null,
+                  retryAfter: null,
+                  count: 25,
+                },
+                {
+                  timestamp: Date.parse('2026-10-11T13:00:03Z'),
+                  operation: 'sync',
+                  outcome: 'failed',
+                  status: null,
+                  durationMs: 0,
+                  waitMs: 0,
+                  quotaUnits: 0,
+                  reason: null,
+                  retryAfter: null,
+                  count: null,
+                },
+              ],
+            };
           if (command === 'gmail_read') {
             switch (args.operation) {
               case 'accounts':
@@ -75,6 +134,9 @@ for (const scheme of ['light', 'dark']) {
                 return { ...thread, messages: [message] };
               case 'sync':
                 return false;
+              case 'action':
+                globalThis.__gmailActions++;
+                return;
               case 'disconnect':
                 connected = false;
                 return;
@@ -104,6 +166,37 @@ for (const scheme of ['light', 'dark']) {
   await page.getByRole('option').first().click();
   await page.getByRole('button', { name: 'Save preview.txt' }).waitFor();
   await page.screenshot({ path: `${out}/${scheme}-reader.png` });
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  for (const width of [1280, 600]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
+    const panel = page.getByRole('region', { name: 'Gmail diagnostics', exact: true });
+    await panel.getByText(/userRateLimitExceeded/).waitFor();
+    await panel.getByRole('button', { name: 'Copy log' }).click();
+    await panel.getByText('Log copied', { exact: true }).waitFor();
+    const copied = await page.evaluate(() => navigator.clipboard.readText());
+    if (!copied.includes('HTTP 429') || !copied.includes('retry in 60 s'))
+      throw new Error('Diagnostics did not copy the request details');
+    const overflows = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
+    if (overflows) throw new Error(`Diagnostics overflow at ${width}px`);
+    await page.screenshot({ path: `${out}/${scheme}-diagnostics-${width}.png` });
+    const diagnosticsAudit = await new AxeBuilder({ page }).analyze();
+    const violations = diagnosticsAudit.violations.filter((v) => v.id !== 'color-contrast');
+    if (violations.length)
+      throw new Error(`Diagnostics accessibility: ${JSON.stringify(violations.map((v) => v.id))}`);
+    await panel.getByLabel('Gmail diagnostic events').focus();
+    const before = await page.evaluate(() => globalThis.__gmailActions);
+    await page.keyboard.press('s');
+    if ((await page.evaluate(() => globalThis.__gmailActions)) !== before)
+      throw new Error('Mail shortcuts fired while reading diagnostics');
+    await page.keyboard.press('Escape');
+    await panel.waitFor({ state: 'hidden' });
+    const restored = await page
+      .getByRole('button', { name: 'Diagnostics', exact: true })
+      .evaluate((el) => document.activeElement === el);
+    if (!restored) throw new Error('Diagnostics did not restore keyboard focus');
+  }
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.getByRole('button', { name: 'Save preview.txt' }).click();
   await page.getByRole('button', { name: 'Reset local changes' }).click();
   results = await new AxeBuilder({ page }).analyze();

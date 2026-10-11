@@ -72,6 +72,21 @@ the desktop host for visual tests.
   grant yourself, use your Google Account's third-party connections page; that
   can affect other clients using the same Google Cloud project.
 
+## Inspect Gmail activity
+
+Click **Diagnostics** in the Gmail connection bar to open the live request log.
+It refreshes every two seconds while open, including while sync is running.
+Use **Copy log** to copy the session totals and retained events for troubleshooting.
+Close the panel with **Close** or Escape while focused inside it.
+
+The panel shows request counts, estimated quota units, cache reuse, sync events,
+HTTP status, timing and quota pacing, Google's recognized rate-limit reason,
+and retry delays. Requests suppressed during cooldown use zero quota units.
+It retains the last 200 events in memory; totals cover the current app session.
+Restarting the app clears both. Inspecting diagnostics makes no Gmail API calls.
+No account addresses, message/thread IDs, search queries, message content,
+attachment filenames, request/response bodies or credentials are recorded.
+
 ## Data and limits
 
 OAuth uses the system browser, PKCE S256, a random checked state and a temporary

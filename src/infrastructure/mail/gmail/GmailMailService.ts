@@ -11,7 +11,7 @@ import {
   type ThreadQuery,
   type ThreadSummary,
 } from '@/domain/mail';
-import type { MailConnection, ConnectionStatus } from '@/domain/mail/connection';
+import type { MailConnection, ConnectionStatus, MailDiagnostics } from '@/domain/mail/connection';
 
 export type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 
@@ -33,6 +33,10 @@ export class GmailMailService implements MailService, MailConnection {
   constructor(private readonly invoke: Invoke) {}
 
   getStatus = () => this.status;
+  getDiagnostics = async (): Promise<MailDiagnostics> => {
+    const snapshot = await this.invoke<MailDiagnostics>('gmail_diagnostics');
+    return { ...snapshot, retryAt: this.retryAt > Date.now() ? this.retryAt : undefined };
+  };
   subscribeStatus = (listener: () => void) => {
     this.statusListeners.add(listener);
     return () => {

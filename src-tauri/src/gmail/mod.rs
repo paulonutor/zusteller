@@ -1,5 +1,6 @@
 mod api;
 mod auth;
+mod diagnostics;
 mod model;
 mod quota;
 mod store;
@@ -34,6 +35,7 @@ impl Error {
 #[derive(Default)]
 pub struct State {
     gmail: Arc<Mutex<Option<api::Gmail>>>,
+    diagnostics: Arc<diagnostics::Diagnostics>,
     connecting: Arc<AtomicBool>,
     cancelled: Arc<AtomicBool>,
 }
@@ -41,6 +43,7 @@ pub struct State {
 async fn work<R: tauri::Runtime, T: Send + 'static>(
     app: tauri::AppHandle<R>,
     state: Arc<Mutex<Option<api::Gmail>>>,
+    diagnostics: Arc<diagnostics::Diagnostics>,
     task: impl FnOnce(&mut api::Gmail) -> Result<T> + Send + 'static,
 ) -> Result<T> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -53,12 +56,20 @@ async fn work<R: tauri::Runtime, T: Send + 'static>(
                 .app_data_dir()
                 .map_err(|_| Error::new("invalid", "App data directory is unavailable"))?
                 .join("gmail/cache.sqlite");
-            *guard = Some(api::Gmail::new(store::Store::open(&path)?)?);
+            let mut gmail = api::Gmail::new(store::Store::open(&path)?)?;
+            gmail.diagnostics = diagnostics;
+            *guard = Some(gmail);
         }
         task(guard.as_mut().unwrap())
     })
     .await
     .map_err(|_| Error::new("invalid", "Gmail worker failed"))?
+}
+
+// This lock is independent of the sync worker, so the log stays readable during sync.
+#[tauri::command]
+pub fn gmail_diagnostics(state: tauri::State<'_, State>) -> diagnostics::Snapshot {
+    state.diagnostics.snapshot()
 }
 
 #[tauri::command]
@@ -97,9 +108,12 @@ pub async fn gmail_connect(app: tauri::AppHandle, state: tauri::State<'_, State>
     let result = match result {
         Ok(Ok((grant, access))) if !state.cancelled.load(Ordering::SeqCst) => {
             let cancelled = state.cancelled.clone();
-            work(app, state.gmail.clone(), move |g| {
-                g.install(grant, access, &cancelled)
-            })
+            work(
+                app,
+                state.gmail.clone(),
+                state.diagnostics.clone(),
+                move |g| g.install(grant, access, &cancelled),
+            )
             .await
         }
         Ok(Ok(_)) => Err(Error::new("cancelled", "Gmail connection cancelled")),
@@ -124,33 +138,38 @@ pub async fn gmail_read<R: tauri::Runtime>(
 ) -> Result<Value> {
     let account = account_id.unwrap_or_default();
     let input = input.unwrap_or(json!({}));
-    work(app, state.gmail.clone(), move |g| {
-        if operation == "accounts" {
-            return Ok(json!(g.store.accounts()?));
-        }
-        if !g
-            .store
-            .accounts()?
-            .iter()
-            .any(|a| model::text(a, "id") == account)
-        {
-            return Err(Error::new("not_found", "Gmail account is not connected"));
-        }
-        match operation.as_str() {
-            "labels" => g.labels(&account),
-            "counts" => g.counts(&account),
-            "threads" => g.threads(&account, &input),
-            "thread" => g.thread(&account, model::text(&input, "threadId")),
-            "action" => g.action(&account, &input),
-            "reset" => {
-                g.store.reset(&account)?;
-                Ok(Value::Null)
+    work(
+        app,
+        state.gmail.clone(),
+        state.diagnostics.clone(),
+        move |g| {
+            if operation == "accounts" {
+                return Ok(json!(g.store.accounts()?));
             }
-            "disconnect" => g.disconnect(&account),
-            "sync" => Ok(json!(g.sync(&account)?)),
-            _ => Err(Error::new("invalid", "Unknown Gmail operation")),
-        }
-    })
+            if !g
+                .store
+                .accounts()?
+                .iter()
+                .any(|a| model::text(a, "id") == account)
+            {
+                return Err(Error::new("not_found", "Gmail account is not connected"));
+            }
+            match operation.as_str() {
+                "labels" => g.labels(&account),
+                "counts" => g.counts(&account),
+                "threads" => g.threads(&account, &input),
+                "thread" => g.thread(&account, model::text(&input, "threadId")),
+                "action" => g.action(&account, &input),
+                "reset" => {
+                    g.store.reset(&account)?;
+                    Ok(Value::Null)
+                }
+                "disconnect" => g.disconnect(&account),
+                "sync" => Ok(json!(g.sync(&account)?)),
+                _ => Err(Error::new("invalid", "Unknown Gmail operation")),
+            }
+        },
+    )
     .await
 }
 
@@ -164,9 +183,12 @@ pub async fn gmail_download(
     attachment_id: String,
     filename: String,
 ) -> Result<()> {
-    let bytes = work(app.clone(), state.gmail.clone(), move |g| {
-        g.attachment(&account_id, &message_id, &attachment_id, &thread_id)
-    })
+    let bytes = work(
+        app.clone(),
+        state.gmail.clone(),
+        state.diagnostics.clone(),
+        move |g| g.attachment(&account_id, &message_id, &attachment_id, &thread_id),
+    )
     .await?;
     // Native Save As keeps untrusted attachment filenames from choosing a path.
     tauri::async_runtime::spawn_blocking(move || {
@@ -219,17 +241,17 @@ mod ipc_tests {
         };
         let app = mock_builder()
             .manage(state)
-            .invoke_handler(tauri::generate_handler![gmail_read])
+            .invoke_handler(tauri::generate_handler![gmail_read, gmail_diagnostics])
             .build(mock_context(noop_assets()))
             .unwrap();
         let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
             .build()
             .unwrap();
-        let call = |body: Value| {
+        let call_command = |command: &str, body: Value| {
             get_ipc_response(
                 &webview,
                 tauri::webview::InvokeRequest {
-                    cmd: "gmail_read".into(),
+                    cmd: command.into(),
                     callback: tauri::ipc::CallbackFn(0),
                     error: tauri::ipc::CallbackFn(1),
                     url: if cfg!(windows) {
@@ -246,6 +268,15 @@ mod ipc_tests {
             )
             .map(|r| r.deserialize::<Value>().unwrap())
         };
+        let call = |body| call_command("gmail_read", body);
+        {
+            let state = app.state::<State>();
+            let _busy_sync_worker = state.gmail.lock().unwrap();
+            state.diagnostics.event("sync", "started", None);
+            let log = call_command("gmail_diagnostics", json!({})).unwrap();
+            assert_eq!(log["entries"][0]["operation"], "sync");
+            assert_eq!(log["requests"], 0);
+        }
         assert_eq!(
             call(json!({"operation":"accounts"})).unwrap()[0]["email"],
             "fixture@example.com"
