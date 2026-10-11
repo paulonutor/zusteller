@@ -291,7 +291,7 @@ fn read_accent() -> Result<String, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .manage(gmail::State::default())
+        .manage(gmail::State::at_startup().expect("Could not enable protected Gmail testing"))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
@@ -315,6 +315,11 @@ pub fn run() {
             confirm
         ])
         .setup(|app| {
+            if app.state::<gmail::State>().privacy_enabled() {
+                if let Some(window) = app.get_webview_window("main") {
+                    window.set_title("Zusteller · Privacy mode")?;
+                }
+            }
             // No cheap in-process callback for accent changes: check once a second, emit on change.
             let handle = app.handle().clone();
             std::thread::spawn(move || {

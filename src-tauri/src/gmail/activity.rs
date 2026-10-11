@@ -49,7 +49,11 @@ pub async fn open_mail_activity<R: Runtime>(app: AppHandle<R>) -> Result<(), Str
         LABEL,
         WebviewUrl::App("index.html?view=activity".into()),
     )
-    .title("Gmail Activity")
+    .title(if app.state::<State>().privacy_enabled() {
+        "Gmail Activity · Privacy mode"
+    } else {
+        "Gmail Activity"
+    })
     .inner_size(820.0, 660.0)
     .min_inner_size(480.0, 420.0)
     .disable_drag_drop_handler()

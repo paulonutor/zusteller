@@ -4,6 +4,7 @@ mod auth;
 mod batch;
 mod diagnostics;
 mod model;
+mod privacy;
 mod quota;
 mod scheduler;
 mod store;
@@ -38,6 +39,7 @@ impl Error {
 
 #[derive(Default)]
 pub struct State {
+    privacy: Mutex<privacy::Privacy>,
     activity: activity::Activity,
     gmail: Arc<Mutex<Option<api::Gmail>>>,
     diagnostics: Arc<diagnostics::Diagnostics>,
@@ -45,6 +47,31 @@ pub struct State {
     cancelled: Arc<AtomicBool>,
     scheduler: Arc<scheduler::Scheduler>,
     syncing: Arc<AtomicBool>,
+}
+
+impl State {
+    pub fn at_startup() -> Result<Self> {
+        let enabled = std::env::args().any(|a| a == "--privacy");
+        if enabled {
+            privacy::suppress_credential_dialogs()?;
+        }
+        Ok(Self {
+            privacy: Mutex::new(privacy::Privacy::new(enabled)),
+            ..Self::default()
+        })
+    }
+    pub fn privacy_enabled(&self) -> bool {
+        self.privacy
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .enabled
+    }
+    fn public_error(&self, mut error: Error) -> Error {
+        if self.privacy_enabled() {
+            error.message = "Gmail request failed in privacy mode".into();
+        }
+        error
+    }
 }
 
 fn with_worker<R: tauri::Runtime, T>(
@@ -141,6 +168,12 @@ pub fn gmail_diagnostics(state: tauri::State<'_, State>) -> diagnostics::Snapsho
 
 #[tauri::command]
 pub async fn gmail_connect(app: tauri::AppHandle, state: tauri::State<'_, State>) -> Result<Value> {
+    if state.privacy_enabled() {
+        return Err(Error::new(
+            "invalid",
+            "Sign-in is disabled in privacy mode. Connect Gmail in a normal session first.",
+        ));
+    }
     if !cfg!(target_os = "macos") {
         return Err(Error::new(
             "invalid",
@@ -197,14 +230,23 @@ pub async fn gmail_read<R: tauri::Runtime>(
     account_id: Option<String>,
     input: Option<Value>,
 ) -> Result<Value> {
-    let account = account_id.unwrap_or_default();
-    let input = input.unwrap_or(json!({}));
+    let (account, input) = state
+        .privacy
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .input(
+            &operation,
+            account_id.unwrap_or_default(),
+            input.unwrap_or(json!({})),
+        )?;
     if operation == "sync" {
         return sync_work(app, &state, account)
             .await
-            .map(|changed| json!(changed));
+            .map(|changed| json!(changed))
+            .map_err(|error| state.public_error(error));
     }
-    work(app, &state, move |g| {
+    let output_operation = operation.clone();
+    let result = work(app, &state, move |g| {
         if operation == "accounts" {
             return Ok(json!(g.store.accounts()?));
         }
@@ -240,12 +282,22 @@ pub async fn gmail_read<R: tauri::Runtime>(
             _ => Err(Error::new("invalid", "Unknown Gmail operation")),
         }
     })
-    .await
+    .await;
+    let mut privacy = state.privacy.lock().unwrap_or_else(|e| e.into_inner());
+    match result {
+        Ok(value) => privacy.output(&output_operation, value),
+        Err(mut error) => {
+            if privacy.enabled {
+                error.message = "Gmail request failed in privacy mode".into();
+            }
+            Err(error)
+        }
+    }
 }
 
 #[tauri::command]
-pub async fn gmail_download(
-    app: tauri::AppHandle,
+pub async fn gmail_download<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     state: tauri::State<'_, State>,
     account_id: String,
     thread_id: String,
@@ -253,6 +305,12 @@ pub async fn gmail_download(
     attachment_id: String,
     filename: String,
 ) -> Result<()> {
+    if state.privacy_enabled() {
+        return Err(Error::new(
+            "invalid",
+            "Attachment downloads are disabled in privacy mode",
+        ));
+    }
     let bytes = work(app.clone(), &state, move |g| {
         g.attachment(&account_id, &message_id, &attachment_id, &thread_id)
     })
@@ -290,6 +348,15 @@ mod ipc_tests {
 
     #[test]
     fn frontend_command_payloads_run_through_tauri_without_desktop_interaction() {
+        check_ipc(false);
+    }
+
+    #[test]
+    fn private_ipc_masks_cached_mail_and_round_trips_actions() {
+        check_ipc(true);
+    }
+
+    fn check_ipc(protected: bool) {
         let dir = std::env::temp_dir().join(format!(
             "zusteller-gmail-ipc-test-{}",
             rand::random::<u64>()
@@ -302,13 +369,20 @@ mod ipc_tests {
             .put("fixture@example.com", "thread:t", &thread)
             .unwrap();
         store.put("fixture@example.com", "body:t", &thread).unwrap();
+        let mut privacy = privacy::Privacy::new(protected);
+        let thread_id = privacy.output("thread", thread.clone()).unwrap()["id"].clone();
         let state = State {
+            privacy: Mutex::new(privacy),
             gmail: Arc::new(Mutex::new(Some(api::Gmail::new(store).unwrap()))),
             ..State::default()
         };
         let app = mock_builder()
             .manage(state)
-            .invoke_handler(tauri::generate_handler![gmail_read, gmail_diagnostics])
+            .invoke_handler(tauri::generate_handler![
+                gmail_read,
+                gmail_diagnostics,
+                gmail_download
+            ])
             .build(mock_context(noop_assets()))
             .unwrap();
         let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
@@ -344,20 +418,39 @@ mod ipc_tests {
             assert_eq!(log["entries"][0]["operation"], "sync");
             assert_eq!(log["requests"], 0);
         }
-        assert_eq!(
-            call(json!({"operation":"accounts"})).unwrap()[0]["email"],
-            "fixture@example.com"
-        );
-        assert_eq!(call(json!({"operation":"thread","accountId":"fixture@example.com","input":{"threadId":"t"}})).unwrap()["isRead"],false);
-        call(json!({"operation":"action","accountId":"fixture@example.com","input":{"action":"markRead","threadIds":["t"],"value":true}})).unwrap();
-        let local=call(json!({"operation":"thread","accountId":"fixture@example.com","input":{"threadId":"t"}})).unwrap();
+        let accounts = call(json!({"operation":"accounts"})).unwrap();
+        let account = accounts[0]["id"].clone();
+        assert_eq!(accounts[0]["privacyProtected"] == true, protected);
+        if protected {
+            assert!(!accounts.to_string().contains("fixture@example.com"));
+        } else {
+            assert_eq!(accounts[0]["email"], "fixture@example.com");
+        }
+        let read = || {
+            call(json!({"operation":"thread","accountId":account,"input":{"threadId":thread_id}}))
+        };
+        assert_eq!(read().unwrap()["isRead"], false);
+        call(json!({"operation":"action","accountId":account,"input":{"action":"markRead","threadIds":[thread_id],"value":true}})).unwrap();
+        let local = read().unwrap();
         assert_eq!(local["isRead"], true);
-        assert_eq!(local["messages"][0]["plainText"], "hello");
+        if protected {
+            assert!(!local.to_string().contains("fixture@example.com"));
+            assert!(!local.to_string().contains("hello"));
+            assert_eq!(call(json!({"operation":"thread","accountId":"fixture@example.com","input":{"threadId":"t"}})).unwrap_err()["code"],"invalid");
+            for operation in ["reset", "disconnect"] {
+                assert_eq!(
+                    call(json!({"operation":operation,"accountId":account})).unwrap_err()["code"],
+                    "invalid"
+                );
+            }
+            assert_eq!(call_command("gmail_download",json!({"accountId":account,"threadId":thread_id,"messageId":"ignored","attachmentId":"ignored","filename":"ignored"})).unwrap_err()["message"],"Attachment downloads are disabled in privacy mode");
+        } else {
+            assert_eq!(local["messages"][0]["plainText"], "hello");
+            call(json!({"operation":"reset","accountId":account})).unwrap();
+            assert_eq!(read().unwrap()["isRead"], false);
+        }
         assert!(!local.to_string().contains("token"));
-        call(json!({"operation":"reset","accountId":"fixture@example.com"})).unwrap();
-        assert_eq!(call(json!({"operation":"thread","accountId":"fixture@example.com","input":{"threadId":"t"}})).unwrap()["isRead"],false);
-        let error =
-            call(json!({"operation":"send","accountId":"fixture@example.com"})).unwrap_err();
+        let error = call(json!({"operation":"send","accountId":account})).unwrap_err();
         assert_eq!(error["code"], "invalid");
         drop(webview);
         drop(app);

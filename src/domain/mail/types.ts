@@ -8,7 +8,14 @@ export type ID = string;
 export type SystemMailbox = 'inbox' | 'starred' | 'sent' | 'junk' | 'trash' | 'all';
 
 export type Address = { name?: string; email: string };
-export type Account = { id: ID; email: string; displayName: string; avatarUrl?: string };
+export type Account = {
+  id: ID;
+  email: string;
+  displayName: string;
+  avatarUrl?: string;
+  /** Native provider replaced private content before returning it to the UI. */
+  privacyProtected?: boolean;
+};
 export type Label = {
   id: ID;
   accountId: ID;

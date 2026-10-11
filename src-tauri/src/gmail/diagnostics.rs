@@ -97,7 +97,20 @@ impl Diagnostics {
         entry.duration_ms = timing.0.as_millis() as u64;
         entry.wait_ms = timing.1.as_millis() as u64;
         entry.quota_units = if sent { quota::cost(path) as u64 } else { 0 };
-        entry.reason = reason.map(str::to_string);
+        // Google reasons are untrusted strings. Retain only documented categories,
+        // never arbitrary response text in the diagnostics window or copied log.
+        entry.reason = reason.map(|reason| match reason {
+            "userRateLimitExceeded"
+            | "rateLimitExceeded"
+            | "quotaExceeded"
+            | "dailyLimitExceeded"
+            | "authError"
+            | "insufficientPermissions"
+            | "forbidden"
+            | "notFound"
+            | "backendError" => reason.to_owned(),
+            _ => "other".to_owned(),
+        });
         entry.retry_after = error.and_then(|e| e.retry_after);
         self.push(entry);
     }
@@ -169,5 +182,22 @@ mod tests {
         let text = serde_json::to_string(&snapshot).unwrap();
         assert!(!text.contains("Private response text"));
         assert!(text.contains("retryAfter"));
+    }
+
+    #[test]
+    fn unknown_google_reasons_cannot_expose_response_text() {
+        let log = Diagnostics::default();
+        log.request(
+            "threads/private-id",
+            Some(403),
+            &Err(super::super::Error::new("permission", "Private body")),
+            (Duration::ZERO, Duration::ZERO),
+            Some("private@example.com"),
+            true,
+        );
+        let output = serde_json::to_string(&log.snapshot()).unwrap();
+        assert!(!output.contains("private"));
+        assert!(!output.contains("Private body"));
+        assert!(output.contains("other"));
     }
 }

@@ -218,3 +218,33 @@ known token contrast findings separately from failing structural findings.
 These checks do not establish that Google's consent settings, a specific Desktop
 OAuth client, real Keychain prompts or an actual Gmail account work. Those require
 the live connection and restart checks above.
+
+## Private testing
+
+Quit Zusteller and launch the built app with `open -n /path/to/zusteller.app --args --privacy`.
+For development, use `npm run tauri dev -- -- --privacy`. Connect the account in an
+ordinary session first and allow any required Keychain access there. Privacy mode is fixed for the process lifetime; restart
+without the argument to return to normal mail. Do not run an ordinary instance
+alongside a privacy instance during screenshot or computer-use testing. Native
+credential prompts are suppressed in privacy mode. If credentials cannot be read
+or refreshed, reconnect in an ordinary session before testing again.
+
+The sidebar says **Privacy mode** and the native main and Activity window titles
+identify the mode. Rust replaces account identities, contacts, subjects, snippets,
+plain text, HTML, dates, attachment names and user labels before IPC. IDs and page
+cursors use aliases stable for that launch. Unknown output fields, avatar URLs,
+email links, images and inline attachment data are discarded. Diagnostics retain
+only known Google error categories.
+
+This uses the real list, lazy-load, sync and cache paths without additional Gmail
+requests. Counts, read/star flags, message/attachment counts and attachment sizes
+remain visible. All displayed dates are synthetic, so this mode cannot verify real
+date formatting or email-specific HTML layouts. Search, OAuth sign-in, attachment
+downloads, disconnect and resetting local changes are blocked. Organization
+actions still update the existing local preview overlays; they do not write Gmail.
+
+Original data remains in the native cache and credentials remain in Keychain.
+This is a protected UI for testing, not an anonymized database export. Synthetic
+fixtures verify masking and IPC routing before any real-account inspection. Run
+`node scripts/gmail-privacy-check.mjs` against the dev server for synthetic
+light/dark and compact UI checks. Screenshots go to `/tmp/zusteller-gmail-privacy`.
