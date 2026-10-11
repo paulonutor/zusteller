@@ -25,6 +25,18 @@ function setup() {
     entries: [
       {
         timestamp: 0,
+        operation: 'batch',
+        outcome: 'sent',
+        status: null,
+        durationMs: 0,
+        waitMs: 0,
+        quotaUnits: 0,
+        reason: null,
+        retryAfter: null,
+        count: 4,
+      },
+      {
+        timestamp: 0,
         operation: 'threads.get',
         outcome: 'rate_limit',
         status: 429,
@@ -71,6 +83,7 @@ it('shows status and full diagnostics, copies logs and closes on Escape without 
   expect(await screen.findByText(/HTTP 429/)).toHaveTextContent('userRateLimitExceeded');
   await user.click(screen.getByRole('button', { name: 'Copy log' }));
   expect(await navigator.clipboard.readText()).toContain('retry in 60 s');
+  expect(await navigator.clipboard.readText()).toContain('batch · sent · 4 calls');
   screen.getByLabelText('Gmail diagnostic events').focus();
   await user.keyboard('s{Escape}');
   expect(close).toHaveBeenCalledOnce();

@@ -115,6 +115,18 @@ for (const scheme of ['light', 'dark']) {
               entries: [
                 {
                   timestamp: Date.parse('2026-10-11T13:00:00Z'),
+                  operation: 'batch',
+                  outcome: 'sent',
+                  status: null,
+                  durationMs: 0,
+                  waitMs: 0,
+                  quotaUnits: 0,
+                  reason: null,
+                  retryAfter: null,
+                  count: 4,
+                },
+                {
+                  timestamp: Date.parse('2026-10-11T13:00:00Z'),
                   operation: 'sync',
                   outcome: 'started',
                   status: null,
@@ -242,6 +254,8 @@ for (const scheme of ['light', 'dark']) {
     const copied = await activity.evaluate(() => navigator.clipboard.readText());
     if (!copied.includes('HTTP 429') || !copied.includes('retry in 60 s'))
       throw new Error('Diagnostics did not copy the request details');
+    if (!copied.includes('batch · sent · 4 calls'))
+      throw new Error('Diagnostics did not identify the batched call count');
     const overflows = await activity.evaluate(
       () => document.documentElement.scrollWidth > innerWidth,
     );

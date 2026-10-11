@@ -1,5 +1,6 @@
 use super::{
     auth,
+    batch::{self, Read as BatchRead},
     diagnostics::Diagnostics,
     model::{self, array, text},
     quota::Quota,
@@ -130,6 +131,70 @@ impl Gmail {
             other => other,
         }
     }
+    pub(super) fn get_many(
+        &mut self,
+        account: &str,
+        reads: &[BatchRead],
+    ) -> Result<Vec<Result<Value>>> {
+        if reads.len() == 1 {
+            return Ok(vec![self.get(account, &reads[0].path, &reads[0].params)]);
+        }
+        let token = self.token(account)?;
+        let responses = batch::request(
+            &self.quota,
+            &self.diagnostics,
+            &self.client,
+            &self.base,
+            &token,
+            reads,
+        );
+        let mut responses = match responses {
+            Err(error) if error.code == "auth" => {
+                self.access.remove(account);
+                let token = self.token(account)?;
+                return batch::request(
+                    &self.quota,
+                    &self.diagnostics,
+                    &self.client,
+                    &self.base,
+                    &token,
+                    reads,
+                );
+            }
+            other => other?,
+        };
+        // Retry only expired-token parts, once. Never replay successful reads or
+        // retry during a shared rate-limit cooldown.
+        if responses
+            .iter()
+            .any(|r| matches!(r, Err(e) if e.code == "rate_limit"))
+        {
+            return Ok(responses);
+        }
+        let expired: Vec<_> = responses
+            .iter()
+            .enumerate()
+            .filter_map(|(i, r)| matches!(r, Err(e) if e.code == "auth").then_some(i))
+            .collect();
+        if !expired.is_empty() {
+            self.access.remove(account);
+            let token = self.token(account)?;
+            let retry: Vec<_> = expired.iter().map(|&i| reads[i].clone()).collect();
+            let retried = batch::request(
+                &self.quota,
+                &self.diagnostics,
+                &self.client,
+                &self.base,
+                &token,
+                &retry,
+            )?;
+            for (i, response) in expired.into_iter().zip(retried) {
+                responses[i] = response;
+            }
+        }
+        Ok(responses)
+    }
+
     pub fn labels(&mut self, account: &str) -> Result<Value> {
         let labels = match self.get(account, "labels", &[]) {
             Ok(v) => v,
@@ -154,21 +219,19 @@ impl Gmail {
             .iter()
             .map(|l| text(l, "id").into())
             .collect();
-        let token = match self.token(account) {
-            Ok(t) => t,
-            Err(e) => return Err(e),
-        };
-        let fetched = parallel(&ids, |id| {
-            request(
-                &self.quota,
-                &self.diagnostics,
-                &self.client,
-                &self.base,
-                &token,
-                &format!("labels/{}", segment(id)),
-                &[],
-            )
-        });
+        let fetched: Result<Vec<Value>> = (|| {
+            let mut values = Vec::new();
+            for chunk in ids.chunks(batch::LABEL_LIMIT) {
+                let reads: Vec<_> = chunk
+                    .iter()
+                    .map(|id| BatchRead::new(format!("labels/{}", segment(id)), vec![]))
+                    .collect();
+                for value in self.get_many(account, &reads)? {
+                    values.push(value?);
+                }
+            }
+            Ok(values)
+        })();
         let fetched = match fetched {
             Ok(v) => v,
             Err(e) if e.code == "offline" || e.code == "rate_limit" => {
@@ -292,19 +355,19 @@ impl Gmail {
             self.diagnostics
                 .event("cache", "reused", Some(summaries.len()));
         }
-        let token = self.token(account)?;
-        let fetched = parallel(&missing, |id| {
-            let raw = request(
-                &self.quota,
-                &self.diagnostics,
-                &self.client,
-                &self.base,
-                &token,
-                &format!("threads/{}", segment(id)),
-                &summary_params(),
-            )?;
-            model::normalize(account, &raw, false)
-        });
+        let fetched: Result<Vec<Value>> = (|| {
+            let mut values = Vec::new();
+            for chunk in missing.chunks(batch::METADATA_LIMIT) {
+                let reads: Vec<_> = chunk
+                    .iter()
+                    .map(|id| BatchRead::new(format!("threads/{}", segment(id)), summary_params()))
+                    .collect();
+                for raw in self.get_many(account, &reads)? {
+                    values.push(model::normalize(account, &raw?, false)?);
+                }
+            }
+            Ok(values)
+        })();
         let fetched = match fetched {
             Ok(threads) => threads,
             Err(e) if e.code == "offline" || e.code == "rate_limit" => {
@@ -636,36 +699,6 @@ fn mailbox_for(id: &str) -> Option<&'static str> {
 pub(super) fn segment(id: &str) -> String {
     url::form_urlencoded::byte_serialize(id.as_bytes()).collect()
 }
-// Bounded network concurrency; credentials remain entirely inside Rust.
-fn parallel<T: Send, F: Fn(&String) -> Result<T> + Sync>(
-    ids: &[String],
-    fetch: F,
-) -> Result<Vec<T>> {
-    let mut values = Vec::new();
-    for chunk in ids.chunks(5) {
-        let results = std::thread::scope(|scope| {
-            let handles: Vec<_> = chunk
-                .iter()
-                .map(|id| {
-                    let fetch = &fetch;
-                    scope.spawn(move || fetch(id))
-                })
-                .collect();
-            handles
-                .into_iter()
-                .map(|h| {
-                    h.join().unwrap_or_else(|_| {
-                        Err(Error::new("invalid", "Gmail request worker failed"))
-                    })
-                })
-                .collect::<Vec<_>>()
-        });
-        for result in results {
-            values.push(result?);
-        }
-    }
-    Ok(values)
-}
 fn request(
     quota: &Quota,
     diagnostics: &Diagnostics,
@@ -706,57 +739,17 @@ fn request(
         let status = response.status();
         http_status = Some(status.as_u16());
         if !status.is_success() {
-            let mut error = match status.as_u16() {
-                401 => Error::new("auth", "Google access expired. Connect Gmail again."),
-                404 => Error::new("not_found", "Gmail item was not found"),
-                403 => Error::new(
-                    "permission",
-                    "Google denied access. Check Gmail API and test-user configuration.",
-                ),
-                429 => Error::new("rate_limit", "Gmail rate limit reached. Sync will retry."),
-                500..=599 => Error::new("offline", "Google is unavailable. Sync will retry."),
-                _ => Error::new("invalid", "Gmail rejected the request"),
-            };
-            if [403, 429].contains(&status.as_u16()) {
-                let mut body = Vec::new();
-                if response
-                    .by_ref()
-                    .take(64 * 1024)
-                    .read_to_end(&mut body)
-                    .is_ok()
-                {
-                    if let Ok(value) = serde_json::from_slice::<Value>(&body) {
-                        if let Some(value) = array(&value["error"]["errors"]).iter().find(|e| {
-                            [
-                                "rateLimitExceeded",
-                                "userRateLimitExceeded",
-                                "dailyLimitExceeded",
-                            ]
-                            .contains(&text(e, "reason"))
-                        }) {
-                            reason = Some(text(value, "reason").to_string());
-                            error = Error::new(
-                                "rate_limit",
-                                "Gmail rate limit reached. Sync will retry.",
-                            );
-                        }
-                    }
-                }
-            }
-            error.retry_after = response
-                .headers()
-                .get("retry-after")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| {
-                    v.parse().ok().or_else(|| {
-                        let target = chrono::DateTime::parse_from_rfc2822(v).ok()?.timestamp();
-                        let now = std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .ok()?
-                            .as_secs() as i64;
-                        Some(target.saturating_sub(now).max(0) as u64)
-                    })
-                });
+            let mut body = Vec::new();
+            let _ = response.by_ref().take(64 * 1024).read_to_end(&mut body);
+            let (mut error, recognized) = response_error(
+                status.as_u16(),
+                &body,
+                response
+                    .headers()
+                    .get("retry-after")
+                    .and_then(|v| v.to_str().ok()),
+            );
+            reason = recognized;
             if error.code == "rate_limit" {
                 quota.limited(&mut error);
             }
@@ -785,6 +778,51 @@ fn request(
         true,
     );
     result
+}
+
+pub(super) fn response_error(
+    status: u16,
+    body: &[u8],
+    retry_after: Option<&str>,
+) -> (Error, Option<String>) {
+    let mut error = match status {
+        401 => Error::new("auth", "Google access expired. Connect Gmail again."),
+        404 => Error::new("not_found", "Gmail item was not found"),
+        403 => Error::new(
+            "permission",
+            "Google denied access. Check Gmail API and test-user configuration.",
+        ),
+        429 => Error::new("rate_limit", "Gmail rate limit reached. Sync will retry."),
+        500..=599 => Error::new("offline", "Google is unavailable. Sync will retry."),
+        _ => Error::new("invalid", "Gmail rejected the request"),
+    };
+    let mut reason = None;
+    if [403, 429].contains(&status) {
+        if let Ok(value) = serde_json::from_slice::<Value>(body) {
+            if let Some(value) = array(&value["error"]["errors"]).iter().find(|e| {
+                [
+                    "rateLimitExceeded",
+                    "userRateLimitExceeded",
+                    "dailyLimitExceeded",
+                ]
+                .contains(&text(e, "reason"))
+            }) {
+                reason = Some(text(value, "reason").to_string());
+                error = Error::new("rate_limit", "Gmail rate limit reached. Sync will retry.");
+            }
+        }
+    }
+    error.retry_after = retry_after.and_then(|v| {
+        v.parse().ok().or_else(|| {
+            let target = chrono::DateTime::parse_from_rfc2822(v).ok()?.timestamp();
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .ok()?
+                .as_secs() as i64;
+            Some(target.saturating_sub(now).max(0) as u64)
+        })
+    });
+    (error, reason)
 }
 
 pub(super) fn summary_params() -> Vec<(&'static str, String)> {
@@ -840,38 +878,44 @@ mod tests {
                 socket
                     .set_read_timeout(Some(Duration::from_secs(5)))
                     .unwrap();
-                let mut bytes = [0; 8192];
-                let n = socket.read(&mut bytes).unwrap();
-                let request = String::from_utf8_lossy(&bytes[..n]);
+                let request = read_http(&mut socket);
                 requests.push(request.lines().next().unwrap().to_string());
-                let target = request
+                let batch = request.starts_with("POST /batch ");
+                let targets: Vec<_> = request
                     .lines()
-                    .next()
-                    .unwrap()
-                    .split_whitespace()
-                    .nth(1)
-                    .unwrap();
-                let path = url::Url::parse(&format!("http://localhost{target}"))
-                    .unwrap()
-                    .path()
-                    .to_string();
-                let index = if path.ends_with("/threads/t") {
-                    replies
+                    .filter(|line| line.starts_with("GET "))
+                    .map(|line| line.split_whitespace().nth(1).unwrap())
+                    .collect();
+                let mut parts = Vec::new();
+                for (i, target) in targets.into_iter().enumerate() {
+                    let path = url::Url::parse(&format!("http://localhost{target}"))
+                        .unwrap()
+                        .path()
+                        .to_string();
+                    let id = path.rsplit('/').next().unwrap();
+                    let index = replies
                         .iter()
-                        .position(|(_, v)| v["id"] == "t")
-                        .unwrap_or(0)
-                } else if path.ends_with("/threads/deleted") {
-                    replies
-                        .iter()
-                        .position(|(code, _)| *code == 404)
-                        .unwrap_or(0)
-                } else {
-                    0
-                };
-                let (status, value) = replies.remove(index);
-
-                let body = value.to_string();
-                write!(socket,"HTTP/1.1 {status} Test\r\nContent-Type: application/json\r\n{headers}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
+                        .position(|(_, v)| v["id"] == id)
+                        .or_else(|| {
+                            (id == "deleted")
+                                .then(|| replies.iter().position(|(code, _)| *code == 404))
+                                .flatten()
+                        })
+                        .unwrap_or(0);
+                    let (status, value) = replies.remove(index);
+                    if batch {
+                        parts.push(format!("--fixture\r\nContent-Type: application/http\r\nContent-ID: <response-item-{i}>\r\n\r\nHTTP/1.1 {status} Test\r\nContent-Type: application/json\r\n{headers}\r\n{value}\r\n"));
+                    } else {
+                        let body = value.to_string();
+                        write!(socket,"HTTP/1.1 {status} Test\r\nContent-Type: application/json\r\n{headers}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
+                    }
+                }
+                if batch {
+                    // Reverse parts to exercise Content-ID correlation in every fixture.
+                    parts.reverse();
+                    let body = format!("{}--fixture--\r\n", parts.concat());
+                    write!(socket,"HTTP/1.1 200 OK\r\nContent-Type: multipart/mixed; boundary=fixture\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
+                }
             }
             requests
         });
@@ -891,9 +935,124 @@ mod tests {
         );
         (gmail, server, dir)
     }
+    fn read_http(socket: &mut std::net::TcpStream) -> String {
+        let mut bytes = Vec::new();
+        let mut chunk = [0; 8192];
+        loop {
+            let n = socket.read(&mut chunk).unwrap();
+            assert!(n > 0, "Incomplete fixture request");
+            bytes.extend_from_slice(&chunk[..n]);
+            assert!(bytes.len() < 256 * 1024);
+            if let Some(end) = bytes.windows(4).position(|w| w == b"\r\n\r\n") {
+                let headers = String::from_utf8_lossy(&bytes[..end]);
+                let size = headers
+                    .lines()
+                    .find_map(|line| {
+                        line.split_once(':')
+                            .filter(|(k, _)| k.eq_ignore_ascii_case("content-length"))
+                            .map(|(_, v)| v.trim().parse::<usize>().unwrap())
+                    })
+                    .unwrap_or(0);
+                if bytes.len() >= end + 4 + size {
+                    break;
+                }
+            }
+        }
+        String::from_utf8(bytes).unwrap()
+    }
+
     fn mail(id: &str) -> Value {
         json!({"id":id,"messages":[{"id":"m","internalDate":"1000","labelIds":["INBOX","UNREAD"],"snippet":"A &amp; B","payload":{"headers":[{"name":"Subject","value":"Hello"}]}}]})
     }
+    #[test]
+    fn uncached_metadata_is_batched_and_cached_reload_needs_only_the_list_call() {
+        let page = json!({"threads":[{"id":"a"},{"id":"b"},{"id":"c"},{"id":"d"}]});
+        let (mut g, server, dir) = fixture(vec![
+            (200, page.clone()),
+            (200, mail("a")),
+            (200, mail("b")),
+            (200, mail("c")),
+            (200, mail("d")),
+            (200, page),
+        ]);
+        let query = json!({"accountId":"a","mailbox":"inbox"});
+        let first = g.threads("a", &query).unwrap();
+        assert_eq!(
+            first["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| text(v, "id"))
+                .collect::<Vec<_>>(),
+            ["a", "b", "c", "d"]
+        );
+        assert_eq!(g.threads("a", &query).unwrap()["items"], first["items"]);
+        let requests = server.join().unwrap();
+        assert_eq!(requests.len(), 3);
+        assert!(requests[1].starts_with("POST /batch "));
+        let log = serde_json::to_value(g.diagnostics.snapshot()).unwrap();
+        assert_eq!(log["requests"], 6);
+        assert_eq!(log["quotaUnits"], 180);
+        assert_eq!(log["cacheHits"], 4);
+        drop(g);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn label_counts_batch_and_partial_failure_preserves_cached_counts() {
+        let labels = json!([{"id":"INBOX"},{"id":"UNREAD"},{"id":"custom"}]);
+        let inbox = json!({"id":"INBOX","threadsUnread":7});
+        let unread = json!({"id":"UNREAD","threadsUnread":9});
+        let custom = json!({"id":"custom","threadsUnread":2,"type":"user"});
+        let (mut g, server, dir) = fixture(vec![
+            (200, inbox.clone()),
+            (200, unread.clone()),
+            (200, custom.clone()),
+            (200, inbox),
+            (200, unread),
+            (429, json!({})),
+        ]);
+        g.store.put("a", "labels", &labels).unwrap();
+        let counts = g.counts("a").unwrap();
+        assert_eq!(counts["mailboxes"]["inbox"], 7);
+        assert_eq!(counts["mailboxes"]["all"], 9);
+        assert_eq!(counts["labels"]["custom"], 2);
+        assert_eq!(g.counts("a").unwrap(), counts);
+        assert_eq!(g.quota.acquire("profile").unwrap_err().code, "rate_limit");
+        assert_eq!(server.join().unwrap().len(), 2);
+        let log = serde_json::to_value(g.diagnostics.snapshot()).unwrap();
+        assert_eq!(log["requests"], 6);
+        assert_eq!(log["quotaUnits"], 6);
+        assert_eq!(log["rateLimits"], 1);
+        drop(g);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn bootstrap_splits_metadata_into_bounded_batches_and_keeps_the_baseline() {
+        let ids = ["a", "b", "c", "d", "e"];
+        let mut replies = vec![
+            (200, json!({"historyId":"20"})),
+            (200, json!({"threads":ids.map(|id| json!({"id":id}))})),
+        ];
+        replies.extend(ids.map(|id| (200, mail(id))));
+        let (mut g, server, dir) = fixture(replies);
+        assert!(g.sync("a").unwrap());
+        assert_eq!(g.store.history("a").unwrap().as_deref(), Some("20"));
+        assert!(ids
+            .iter()
+            .all(|id| g.store.get("a", &format!("thread:{id}")).unwrap().is_some()));
+        let requests = server.join().unwrap();
+        assert_eq!(requests.len(), 4);
+        assert!(requests[2].starts_with("POST /batch "));
+        assert!(requests[3].starts_with("GET /threads/e?"));
+        let log = serde_json::to_value(g.diagnostics.snapshot()).unwrap();
+        assert_eq!(log["requests"], 7);
+        assert_eq!(log["quotaUnits"], 211);
+        drop(g);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
     #[test]
     fn sync_worker_yields_to_queued_interaction_after_inflight_request() {
         use super::super::{scheduler, sync_work, with_worker, State};
@@ -911,8 +1070,8 @@ mod tests {
         let (respond, response_allowed) = mpsc::channel();
         let server = std::thread::spawn(move || {
             for (index, value) in [
-                json!({"historyId":"11","history":[{"messages":[{"threadId":"t"}]}]}),
-                mail("t"),
+                json!({"historyId":"11","history":[{"messages":[{"threadId":"t"},{"threadId":"u"},{"threadId":"v"},{"threadId":"w"}]}]}),
+                json!({}),
             ]
             .into_iter()
             .enumerate()
@@ -921,9 +1080,7 @@ mod tests {
                 socket
                     .set_read_timeout(Some(Duration::from_secs(5)))
                     .unwrap();
-                let mut bytes = [0; 8192];
-                let n = socket.read(&mut bytes).unwrap();
-                let request = String::from_utf8_lossy(&bytes[..n]);
+                let request = read_http(&mut socket);
                 if index == 0 {
                     assert!(request.starts_with("GET /history?"));
                     requested.send(()).unwrap();
@@ -931,10 +1088,18 @@ mod tests {
                         .recv_timeout(Duration::from_secs(5))
                         .unwrap();
                 } else {
-                    assert!(request.starts_with("GET /threads/t?"));
+                    assert!(request.starts_with("POST /batch "));
+                    assert_eq!(request.matches("GET /threads/").count(), 4);
                 }
-                let body = value.to_string();
-                write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+                let (content_type, body) = if index == 0 {
+                    ("application/json", value.to_string())
+                } else {
+                    let parts: Vec<_> = ["t", "u", "v", "w"].into_iter().enumerate().map(|(i, id)| {
+                        format!("--fixture\r\nContent-Type: application/http\r\nContent-ID: <response-item-{i}>\r\n\r\nHTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{}\r\n", mail(id))
+                    }).collect();
+                    ("multipart/mixed; boundary=fixture", format!("{}--fixture--\r\n", parts.concat()))
+                };
+                write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
             }
         });
         let cached = model::normalize("a", &mail("t"), true).unwrap();
@@ -1008,7 +1173,7 @@ mod tests {
             .unwrap();
         g.store.put("a", "body:t", &old).unwrap();
         let mut pass = Sync::new(&g, "a").unwrap();
-        for _ in 0..3 {
+        for _ in 0..2 {
             assert!(matches!(pass.step(&mut g).unwrap(), Step::Pending(wait) if wait.is_zero()));
             assert_eq!(g.store.history("a").unwrap().as_deref(), Some("10"));
             // Cached mail stays readable between history and metadata requests.
@@ -1024,7 +1189,7 @@ mod tests {
         assert_eq!(g.store.history("a").unwrap().as_deref(), Some("11"));
         assert!(g.store.get("a", "thread:z").unwrap().is_some());
         assert_eq!(g.store.overlay("a", "t").unwrap()["isRead"], true);
-        assert_eq!(server.join().unwrap().len(), 3);
+        assert_eq!(server.join().unwrap().len(), 2);
         drop(g);
         std::fs::remove_dir_all(dir).unwrap();
     }
@@ -1068,7 +1233,7 @@ mod tests {
         assert_eq!(g.sync("a").unwrap_err().code, "offline");
         assert_eq!(g.store.history("a").unwrap().as_deref(), Some("10"));
         assert!(g.store.get("a", "thread:t").unwrap().is_none());
-        assert_eq!(server.join().unwrap().len(), 3);
+        assert_eq!(server.join().unwrap().len(), 2);
         drop(g);
         std::fs::remove_dir_all(dir).unwrap();
     }
@@ -1106,7 +1271,8 @@ mod tests {
         assert_eq!(g.store.overlay("a", "t").unwrap()["isStarred"], true);
         let requests = server.join().unwrap();
         assert!(requests[1].contains("pageToken=page2"));
-        assert!(requests.iter().all(|r| r.starts_with("GET ")));
+        assert!(requests[..2].iter().all(|r| r.starts_with("GET ")));
+        assert!(requests[2].starts_with("POST /batch "));
         drop(g);
         std::fs::remove_dir_all(dir).unwrap();
     }

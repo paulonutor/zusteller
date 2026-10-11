@@ -1,7 +1,8 @@
 use super::{
     api::Gmail,
+    batch,
     model::{self, array, text},
-    Error, Result,
+    quota, Error, Result,
 };
 use serde_json::Value;
 use std::{
@@ -24,7 +25,7 @@ enum Phase {
 }
 
 // A pass holds its uncommitted changes here, rather than holding the Gmail mutex.
-// Each step fetches one page or thread; quota waits happen outside the worker.
+// Each step fetches one page or bounded metadata batch; quota waits happen outside the worker.
 pub struct Sync {
     account: String,
     generation: u64,
@@ -97,10 +98,13 @@ impl Sync {
                 "Gmail sync cancelled after the connection changed",
             ));
         }
+        if matches!(self.phase, Phase::Metadata) {
+            return self.metadata(gmail);
+        }
         let (path, params) = match self.phase {
-            Phase::Profile => ("profile".into(), vec![]),
+            Phase::Profile => ("profile", vec![]),
             Phase::Recent => (
-                "threads".into(),
+                "threads",
                 vec![
                     ("maxResults", "100".into()),
                     ("includeSpamTrash", "true".into()),
@@ -114,15 +118,8 @@ impl Sync {
                 if !self.page_token.is_empty() {
                     params.push(("pageToken", self.page_token.clone()));
                 }
-                ("history".into(), params)
+                ("history", params)
             }
-            Phase::Metadata => (
-                format!(
-                    "threads/{}",
-                    super::api::segment(self.pending.front().unwrap())
-                ),
-                super::api::summary_params(),
-            ),
             Phase::Commit => {
                 gmail
                     .store
@@ -130,9 +127,10 @@ impl Sync {
                 self.phase = Phase::Finished;
                 return Ok(Step::Done(self.bootstrap || !self.changes.is_empty()));
             }
+            Phase::Metadata => unreachable!(),
             Phase::Finished => return Err(Error::new("invalid", "Gmail sync has already ended")),
         };
-        let wait = gmail.quota.background_wait(&path)?;
+        let wait = gmail.quota.background_wait(path)?;
         if !wait.is_zero() {
             if !self.waiting {
                 gmail.diagnostics.event("sync", "waiting_for_quota", None);
@@ -141,7 +139,7 @@ impl Sync {
             return Ok(Step::Pending(wait));
         }
         self.waiting = false;
-        let response = gmail.get(&self.account, &path, &params);
+        let response = gmail.get(&self.account, path, &params);
         match self.phase {
             Phase::Profile => {
                 let profile = response?;
@@ -206,19 +204,49 @@ impl Sync {
                     self.fetch_metadata();
                 }
             }
-            Phase::Metadata => {
-                let value = match response {
-                    Ok(raw) => Some(model::normalize(&self.account, &raw, false)?),
-                    Err(error) if error.code == "not_found" => None,
-                    Err(error) => return Err(error),
-                };
-                self.changes
-                    .push((self.pending.pop_front().unwrap(), value));
-                if self.pending.is_empty() {
-                    self.phase = Phase::Commit;
-                }
-            }
             _ => unreachable!(),
+        }
+        Ok(Step::Pending(Duration::ZERO))
+    }
+
+    fn metadata(&mut self, gmail: &mut Gmail) -> Result<Step> {
+        let ids: Vec<_> = self
+            .pending
+            .iter()
+            .take(batch::METADATA_LIMIT)
+            .cloned()
+            .collect();
+        let reads: Vec<_> = ids
+            .iter()
+            .map(|id| {
+                batch::Read::new(
+                    format!("threads/{}", super::api::segment(id)),
+                    super::api::summary_params(),
+                )
+            })
+            .collect();
+        let wait = gmail
+            .quota
+            .background_wait_cost(reads.iter().map(|r| quota::cost(&r.path)).sum())?;
+        if !wait.is_zero() {
+            if !self.waiting {
+                gmail.diagnostics.event("sync", "waiting_for_quota", None);
+                self.waiting = true;
+            }
+            return Ok(Step::Pending(wait));
+        }
+        self.waiting = false;
+        for (id, response) in ids.into_iter().zip(gmail.get_many(&self.account, &reads)?) {
+            let value = match response {
+                Ok(raw) => Some(model::normalize(&self.account, &raw, false)?),
+                Err(error) if error.code == "not_found" => None,
+                Err(error) => return Err(error),
+            };
+            self.changes.push((id, value));
+            self.pending.pop_front();
+        }
+        if self.pending.is_empty() {
+            self.phase = Phase::Commit;
         }
         Ok(Step::Pending(Duration::ZERO))
     }

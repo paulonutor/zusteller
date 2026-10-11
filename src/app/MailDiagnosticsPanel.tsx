@@ -11,7 +11,8 @@ function formatEntry(entry: MailDiagnosticEntry) {
   if (entry.waitMs) parts.push(`paced ${entry.waitMs} ms`);
   if (entry.reason) parts.push(entry.reason);
   if (entry.retryAfter !== null) parts.push(`retry in ${entry.retryAfter} s`);
-  if (entry.count !== null) parts.push(`${entry.count} summaries`);
+  if (entry.count !== null)
+    parts.push(`${entry.count} ${entry.operation === 'batch' ? 'calls' : 'summaries'}`);
   return parts.join(' · ');
 }
 

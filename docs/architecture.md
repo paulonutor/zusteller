@@ -56,10 +56,14 @@ are in Keychain and access tokens are in Rust memory. Server cache and local
 thread-field overrides are separate. SQLite commits each history batch with its
 cursor, and failed pagination/fetches leave the prior cursor intact.
 The native scheduler runs queued interactive work before background sync. A sync
-pass keeps pending changes outside the worker and yields between individual
-requests and quota waits; the cursor is committed only after the full pass.
+pass keeps pending changes outside the worker and yields between page requests,
+metadata batches and quota waits; the cursor is committed only after the full pass.
 Background requests preserve 80 quota units for foreground reads. Connection
-changes invalidate pending passes before they can commit.
+changes invalidate pending passes before they can commit. Thread metadata uses
+multipart batches of up to four reads, label counts up to fifty; single reads
+remain direct. Quota is acquired for the whole batch and diagnostics account for
+each inner call. MIME parsing and Content-ID correlation handle independent
+statuses, with shared cooldowns for outer and inner rate limits.
 The reusable Gmail Activity webview renders the same frontend in `?view=activity`
 mode. It mounts no mail reader or provider subscription, so it starts no sync loop.
 The main connection gate publishes status into independent native session memory;

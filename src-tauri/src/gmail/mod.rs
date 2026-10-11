@@ -1,6 +1,7 @@
 pub mod activity;
 mod api;
 mod auth;
+mod batch;
 mod diagnostics;
 mod model;
 mod quota;
@@ -17,7 +18,7 @@ use std::sync::{
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Error {
     pub code: String,

@@ -121,16 +121,37 @@ take longer because metadata reads are paced. List refreshes reuse metadata
 maintained by history sync and fetch only missing summaries. See Google's
 [quota reference](https://developers.google.com/workspace/gmail/api/reference/quota).
 Opening mail, loading mailbox/search pages, attachments and local actions take
-priority over background sync. Sync releases the native worker between individual
-page/thread requests and during quota waits, and leaves 80 quota units available
+priority over background sync. Sync releases the native worker between page
+requests or small metadata batches and during quota waits, and leaves 80 quota units available
 for interactive reads. A request already in flight must finish before the worker
 can switch to a user action. Sustained interaction can delay background sync.
 Diagnostics records `sync waiting_for_quota` when background pacing begins.
-The status bar reports sync errors and the last successful sync. History
+The Gmail Activity window reports sync errors and the last successful sync. History
 pagination is applied before its cursor is committed; expired history rebuilds
 the recent window and revalidates
 older cached conversations.
 Disconnecting or replacing the connection cancels any uncommitted sync pass.
+
+Independent thread-metadata reads use Gmail multipart batches of up to four
+calls. Label-count reads use batches of up to fifty. One remaining read is sent
+normally. The endpoint is `/batch` on Gmail's API host, as specified by its
+[discovery document](https://gmail.googleapis.com/$discovery/rest?version=v1).
+Small metadata batches keep sync able to yield and fit a full authentication
+retry plus the interactive reserve in the 400-unit burst.
+
+| Read work                           | HTTP requests before batching | HTTP requests now | Quota units |
+| ----------------------------------- | ----------------------------: | ----------------: | ----------: |
+| Initial sync of 100 threads         |                           102 |                27 |       4,011 |
+| List page with 30 missing summaries |                            31 |                 9 |       1,210 |
+| Counts for 30 already-listed labels |                            30 |                 1 |          30 |
+
+Batching reduces HTTP overhead, not quota use. Every inner call spends its normal
+quota cost and has its own diagnostic entry; `batch sent` records the grouped
+call count. Responses are correlated by Content-ID. Missing, duplicate or invalid
+parts fail the pass without committing its cursor. Inner and outer rate limits
+share the existing cooldown; expired-token parts are retried once without
+replaying successful reads. See Google's
+[batching guide](https://developers.google.com/workspace/gmail/api/guides/batch).
 
 Unread counts show `~` because Gmail label counts and the preview's thread
 membership rules can differ. Local actions adjust those estimates using known
@@ -156,6 +177,8 @@ and revocation errors, MIME decoding, read/search/page/download requests, offlin
 cache fallback, history recovery/transactions and the frontend command payloads.
 It also checks foreground priority, reserved quota, cached reads/local actions
 between sync steps, and cancellation or metadata failure before cursor commit.
+Batch fixtures check encoded nested GETs, response correlation, malformed parts,
+inner/outer rate limits, per-call quota totals and cache fallback on partial failure.
 The native CI jobs run these tests without real credentials or desktop interaction.
 
 With `npm run dev` running, `node scripts/gmail-preview-check.mjs` drives a

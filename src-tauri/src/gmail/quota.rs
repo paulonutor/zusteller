@@ -30,20 +30,28 @@ impl Default for Quota {
 
 impl Quota {
     pub fn background_wait(&self, path: &str) -> Result<Duration> {
+        self.background_wait_cost(cost(path))
+    }
+
+    pub fn background_wait_cost(&self, cost: f64) -> Result<Duration> {
         // A 401 can trigger one retry. Keep the foreground reserve even then.
         self.0
             .lock()
             .map_err(|_| Error::new("invalid", "Gmail request budget is unavailable"))?
-            .wait_for(Instant::now(), 2.0 * cost(path) + INTERACTIVE_RESERVE)
+            .wait_for(Instant::now(), 2.0 * cost + INTERACTIVE_RESERVE)
     }
 
     pub fn acquire(&self, path: &str) -> Result<()> {
+        self.acquire_cost(cost(path))
+    }
+
+    pub fn acquire_cost(&self, cost: f64) -> Result<()> {
         loop {
             let wait = self
                 .0
                 .lock()
                 .map_err(|_| Error::new("invalid", "Gmail request budget is unavailable"))?
-                .reserve(Instant::now(), cost(path))?;
+                .reserve(Instant::now(), cost)?;
             if wait.is_zero() {
                 return Ok(());
             }
@@ -135,6 +143,40 @@ mod tests {
             .is_zero());
         assert!(budget
             .reserve(now, cost("threads/another"))
+            .unwrap()
+            .is_zero());
+        assert_eq!(budget.units, 0.0);
+    }
+
+    #[test]
+    fn four_thread_batch_and_full_auth_retry_preserve_two_interactive_reads() {
+        let now = Instant::now();
+        let mut budget = Budget {
+            units: BURST,
+            updated: now,
+            cooldown: None,
+        };
+        let batch_cost = 4.0 * cost("threads/t");
+        assert!(budget
+            .wait_for(now, 2.0 * batch_cost + INTERACTIVE_RESERVE)
+            .unwrap()
+            .is_zero());
+        assert!(budget.reserve(now, batch_cost).unwrap().is_zero());
+        assert_eq!(
+            budget
+                .wait_for(now, 2.0 * batch_cost + INTERACTIVE_RESERVE)
+                .unwrap(),
+            Duration::from_secs(2)
+        );
+        // A retry may use its reserved budget without waiting. Two foreground
+        // opens still fit immediately after both attempts.
+        assert!(budget.reserve(now, batch_cost).unwrap().is_zero());
+        assert!(budget
+            .reserve(now, cost("threads/first"))
+            .unwrap()
+            .is_zero());
+        assert!(budget
+            .reserve(now, cost("threads/second"))
             .unwrap()
             .is_zero());
         assert_eq!(budget.units, 0.0);
