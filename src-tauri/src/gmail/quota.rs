@@ -41,6 +41,14 @@ impl Quota {
             .wait_for(Instant::now(), 2.0 * cost + INTERACTIVE_RESERVE)
     }
 
+    /// Pacing for row metadata: wait until the batch fits and the interactive reserve remains.
+    pub fn metadata_wait(&self, cost: f64) -> Result<Duration> {
+        self.0
+            .lock()
+            .map_err(|_| Error::new("invalid", "Gmail request budget is unavailable"))?
+            .wait_for(Instant::now(), cost + INTERACTIVE_RESERVE)
+    }
+
     pub fn acquire(&self, path: &str) -> Result<()> {
         self.acquire_cost(cost(path))
     }

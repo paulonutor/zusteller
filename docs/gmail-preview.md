@@ -113,14 +113,16 @@ changed. This is not a full offline mirror.
 
 Opening a mailbox, label or search drains every `threads.list` page at 500 IDs per
 request, deduplicates IDs and preserves Google's order. It fetches no thread
-metadata during this pass. Rows load metadata only when they intersect the list
-viewport, including in short lists. Virtualizer overscan and offscreen selected
+metadata during this pass. Rows load metadata only when they are within 200 px of the
+list viewport, including in short lists. Virtualizer overscan and offscreen selected
 rows do not trigger reads. Queued reads are cancelled when rows leave the viewport.
 Sender, subject, date and flags require this separate read because Google's
 [list endpoint](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.threads/list)
 omits messages. Bodies and inline images load only when a conversation is opened.
 Unchanged opened conversations reuse SQLite; unchanged row metadata reuses memory.
-Only one row-metadata batch runs at a time, including while scrolling. A rate-limit
+Only one row-metadata batch runs at a time, including while scrolling. Batches are
+background work: they wait for quota without holding the Gmail worker, so opening a
+conversation is not queued behind them. A rate-limit
 response leaves visible rows and the selected reader waiting until Retry-After,
 then retries automatically. Leaving the viewport cancels a row's retry. Opening
 a conversation resolves its pending row and cancels redundant metadata work.

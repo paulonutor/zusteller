@@ -406,6 +406,21 @@ impl Gmail {
         Ok(None)
     }
 
+    /// How long uncached rows must wait for quota before `summaries` can run without sleeping.
+    pub fn summaries_wait(&mut self, account: &str, ids: &[String]) -> Result<std::time::Duration> {
+        let mut missing = BTreeSet::new();
+        for id in ids {
+            if self.cached_summary(account, id)?.is_none() {
+                missing.insert(id);
+            }
+        }
+        if missing.is_empty() {
+            return Ok(std::time::Duration::ZERO);
+        }
+        self.quota
+            .metadata_wait(missing.len() as f64 * super::quota::cost("threads/x"))
+    }
+
     pub fn summaries(&mut self, account: &str, ids: &[String]) -> Result<Value> {
         let mut missing = Vec::new();
         for id in ids {

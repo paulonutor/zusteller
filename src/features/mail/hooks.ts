@@ -114,7 +114,10 @@ function replaceSummary(client: ReturnType<typeof useQueryClient>, summary: Thre
   }
 }
 
-/** Mounted overscan/selection rows must not fetch until they intersect the list viewport. */
+/** Rows within about three rows of the list viewport are fetched ahead of the scroll. */
+const PREFETCH_MARGIN = '200px 0px';
+
+/** Mounted overscan/selection rows must not fetch until they are at or near the list viewport. */
 export function useLazySummary(
   thread: ThreadSummary,
   row: RefObject<HTMLDivElement | null>,
@@ -127,6 +130,7 @@ export function useLazySummary(
     if (!mail.getThreadSummary || !row.current || !viewport.current) return;
     const observer = new IntersectionObserver(([entry]) => setVisible(!!entry?.isIntersecting), {
       root: viewport.current,
+      rootMargin: PREFETCH_MARGIN,
     });
     observer.observe(row.current);
     return () => observer.disconnect();

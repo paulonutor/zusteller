@@ -119,6 +119,47 @@ impl Drop for Syncing {
     }
 }
 
+/// Row metadata is background work: it waits for quota without holding the worker, so opening
+/// a conversation or loading a list is never queued behind a paced batch.
+async fn summaries_work<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: &State,
+    account: String,
+    ids: Vec<String>,
+) -> Result<Value> {
+    let scheduler = state.scheduler.clone();
+    let gmail = state.gmail.clone();
+    let diagnostics = state.diagnostics.clone();
+    tauri::async_runtime::spawn_blocking(move || loop {
+        let step = {
+            let _permit = scheduler.background();
+            with_worker(&app, &gmail, &diagnostics, |g| {
+                if !g
+                    .store
+                    .accounts()?
+                    .iter()
+                    .any(|a| model::text(a, "id") == account)
+                {
+                    return Err(Error::new("not_found", "Gmail account is not connected"));
+                }
+                let wait = g.summaries_wait(&account, &ids)?;
+                if wait.is_zero() {
+                    g.summaries(&account, &ids).map(Ok)
+                } else {
+                    Ok(Err(wait))
+                }
+            })?
+        };
+        match step {
+            Ok(value) => return Ok(value),
+            // Neither the worker nor the permit is held while pacing.
+            Err(wait) => std::thread::sleep(wait.min(std::time::Duration::from_millis(100))),
+        }
+    })
+    .await
+    .map_err(|_| Error::new("invalid", "Gmail worker failed"))?
+}
+
 async fn sync_work<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: &State,
@@ -246,43 +287,45 @@ pub async fn gmail_read<R: tauri::Runtime>(
             .map_err(|error| state.public_error(error));
     }
     let output_operation = operation.clone();
-    let result = work(app, &state, move |g| {
-        if operation == "accounts" {
-            return Ok(json!(g.store.accounts()?));
-        }
-        if !g
-            .store
-            .accounts()?
+    let result = if operation == "summaries" {
+        let ids: Vec<String> = model::array(&input["threadIds"])
             .iter()
-            .any(|a| model::text(a, "id") == account)
-        {
-            return Err(Error::new("not_found", "Gmail account is not connected"));
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect();
+        if ids.len() > batch::METADATA_LIMIT {
+            Err(Error::new("invalid", "Too many visible conversations"))
+        } else {
+            summaries_work(app, &state, account, ids).await
         }
-        match operation.as_str() {
-            "labels" => g.labels(&account),
-            "counts" => g.counts(&account),
-            "threads" => g.threads(&account, &input),
-            "thread" => g.thread(&account, model::text(&input, "threadId")),
-            "summaries" => {
-                let ids: Vec<String> = model::array(&input["threadIds"])
-                    .iter()
-                    .filter_map(|v| v.as_str().map(str::to_string))
-                    .collect();
-                if ids.len() > batch::METADATA_LIMIT {
-                    return Err(Error::new("invalid", "Too many visible conversations"));
+    } else {
+        work(app, &state, move |g| {
+            if operation == "accounts" {
+                return Ok(json!(g.store.accounts()?));
+            }
+            if !g
+                .store
+                .accounts()?
+                .iter()
+                .any(|a| model::text(a, "id") == account)
+            {
+                return Err(Error::new("not_found", "Gmail account is not connected"));
+            }
+            match operation.as_str() {
+                "labels" => g.labels(&account),
+                "counts" => g.counts(&account),
+                "threads" => g.threads(&account, &input),
+                "thread" => g.thread(&account, model::text(&input, "threadId")),
+                "action" => g.action(&account, &input),
+                "reset" => {
+                    g.store.reset(&account)?;
+                    Ok(Value::Null)
                 }
-                g.summaries(&account, &ids)
+                "disconnect" => g.disconnect(&account),
+                _ => Err(Error::new("invalid", "Unknown Gmail operation")),
             }
-            "action" => g.action(&account, &input),
-            "reset" => {
-                g.store.reset(&account)?;
-                Ok(Value::Null)
-            }
-            "disconnect" => g.disconnect(&account),
-            _ => Err(Error::new("invalid", "Unknown Gmail operation")),
-        }
-    })
-    .await;
+        })
+        .await
+    };
     let mut privacy = state.privacy.lock().unwrap_or_else(|e| e.into_inner());
     match result {
         Ok(value) => privacy.output(&output_operation, value),
