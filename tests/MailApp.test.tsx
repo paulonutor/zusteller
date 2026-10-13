@@ -144,16 +144,30 @@ describe('single-message threads', () => {
     const reader = screen.getByRole('region', { name: 'Conversation' });
     const article = await within(reader).findByRole('article');
     expect(within(reader).getAllByRole('article')).toHaveLength(1);
-    // The header is static text, not a toggle (the only expandable control is the recipient Details).
+    // The header is static text, not a toggle (the only expandable control is the recipient details).
     expect(article.firstElementChild?.tagName).toBe('DIV');
     expect(article.querySelectorAll('button[aria-expanded]')).toHaveLength(1);
     expect(within(article).getByRole('button', { name: /Details/ })).toBeTruthy();
     // Body, recipients and attachments are visible without any interaction.
     expect(within(article).getByText(/I went through the latest build/)).toBeTruthy();
-    expect(within(article).getByText(/^To /)).toBeTruthy();
+    expect(within(article).getByText(/^to /)).toBeTruthy();
     expect(within(article).getByRole('list', { name: 'Attachments' })).toBeTruthy();
     expect(within(reader).queryByRole('button', { name: /expand all|collapse all/i })).toBeNull();
     expect(within(reader).getByText('1 message')).toBeTruthy();
+  });
+
+  it('shows sender address and opens full header details from the recipient line', async () => {
+    const user = setup();
+    await waitForRows();
+    await user.click(rowFor('Zusteller beta feedback'));
+    const reader = screen.getByRole('region', { name: 'Conversation' });
+    const article = await within(reader).findByRole('article');
+    expect(within(article).getByText(/^<.+@.+>$/)).toBeTruthy();
+    expect(within(article).queryByLabelText('Message details')).toBeNull();
+    await user.click(within(article).getByRole('button', { name: /Details/ }));
+    expect(within(article).getByLabelText('Message details')).toBeTruthy();
+    await user.keyboard('{Escape}');
+    expect(within(article).queryByLabelText('Message details')).toBeNull();
   });
 
   it('keeps collapse/expand for multi-message threads (latest open, older collapsed)', async () => {

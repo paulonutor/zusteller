@@ -37,11 +37,34 @@ html:root [data-pane='reader'] article {
 html:root [data-pane='reader'] article:last-child {
   border-bottom: 1px solid var(--border);
 }
+/* One-message conversations are a plain page, not a card (Gmail / Apple Mail). */
+html:root [data-pane='reader'] article[data-flat] {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+html:root [data-pane='reader'] article[data-flat]:last-child {
+  border-bottom: 0;
+}
+html:root [data-pane='reader'] .mail-message-head [data-reader-avatar] {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: hsl(var(--av-h) 40% 88%);
+  background: hsl(var(--av-h) 26% 34%);
+}
+html:root:not(.dark) [data-pane='reader'] .mail-message-head [data-reader-avatar] {
+  color: hsl(var(--av-h) 45% 24%);
+  background: hsl(var(--av-h) 40% 84%);
+}
 html:root .mail-thread-messages {
   border-top: 0;
-}
-html:root .mail-message-toggle {
-  padding-block: 12px;
 }
 html:root .mail-attachments li {
   border-radius: 10px;

@@ -1,11 +1,18 @@
 import { useServices } from '@/app/services';
 import { useToast } from '@/app/toast';
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, FileText, ImageOff, Paperclip, Star } from 'lucide-react';
 import type { Message } from '@/domain/mail';
 import { useTheme } from '@/app/theme';
 import { cn } from '@/lib/cn';
-import { displayName, formatAddress, formatFullDate, formatSize } from '../format';
+import {
+  avatarHue,
+  displayName,
+  formatAddress,
+  formatFullDate,
+  formatSize,
+  initials,
+} from '../format';
 import { PlainTextBody } from './safe-html/PlainTextBody';
 
 // DOMPurify + iframe frame are only needed once an HTML mail is opened.
@@ -50,23 +57,11 @@ export function MessageView({
   const [showRemote, setShowRemote] = useState(false);
   const allowRemoteImages = !junk || showRemote;
   const [blocked, setBlocked] = useState(false);
-  const [details, setDetails] = useState(false);
 
   const preview = (m.plainText ?? '').replace(/\s+/g, ' ').slice(0, 120);
 
-  const summary = (
+  const status = (
     <>
-      {collapsible &&
-        (expanded ? (
-          <ChevronDown size={14} className="shrink-0 text-muted" />
-        ) : (
-          <ChevronRight size={14} className="shrink-0 text-muted" />
-        ))}
-      <span className="shrink-0 text-[13.5px] font-semibold">{displayName(m.from)}</span>
-      {!expanded && (
-        <span className="min-w-0 flex-1 truncate text-[12.5px] text-muted">{preview}</span>
-      )}
-      {expanded && <span className="flex-1" />}
       {m.isStarred && (
         <Star size={13} className="shrink-0 fill-star text-star" aria-label="Starred" />
       )}
@@ -76,60 +71,75 @@ export function MessageView({
       <time dateTime={m.sentAt} className="shrink-0 text-[12px] text-muted">
         {formatFullDate(m.sentAt)}
       </time>
+      {collapsible &&
+        (expanded ? (
+          <ChevronDown size={14} className="shrink-0 text-muted" />
+        ) : (
+          <ChevronRight size={14} className="shrink-0 text-muted" />
+        ))}
     </>
   );
+
+  const sender = (
+    <>
+      {expanded ? (
+        <span className="min-w-0 flex-1 truncate">
+          <span className="text-[13.5px] font-semibold">{displayName(m.from)}</span>
+          <span className="ml-1.5 text-[12.5px] text-muted">&lt;{m.from.email}&gt;</span>
+        </span>
+      ) : (
+        <>
+          <span className="shrink-0 text-[13.5px] font-semibold">{displayName(m.from)}</span>
+          <span className="min-w-0 flex-1 truncate text-[12.5px] text-muted">{preview}</span>
+        </>
+      )}
+      {status}
+    </>
+  );
+
+  const avatar = (
+    <span
+      data-reader-avatar
+      aria-hidden="true"
+      style={{ '--av-h': avatarHue(m.from.email) } as React.CSSProperties}
+      className={cn('self-start', expanded && 'row-span-2')}
+    >
+      {initials(m.from)}
+    </span>
+  );
+
+  const rowClass = 'flex min-h-10 min-w-0 items-center gap-2 text-left';
 
   return (
     <article
       aria-label={`Message from ${displayName(m.from)}`}
+      data-flat={collapsible ? undefined : 'true'}
       className="border-b border-border last:border-b-0"
     >
-      {collapsible ? (
-        <button
-          type="button"
-          aria-expanded={expanded}
-          onClick={onToggle}
-          className="mail-message-toggle flex w-full items-center gap-2 px-5 py-2.5 text-left hover:bg-hover"
-        >
-          {summary}
-        </button>
-      ) : (
-        <div className="flex w-full items-center gap-2 px-5 py-2.5">{summary}</div>
-      )}
+      <div
+        className={cn(
+          'mail-message-head grid grid-cols-[40px_minmax(0,1fr)] gap-x-3 px-5',
+          expanded ? 'pb-1 pt-3' : 'py-2.5',
+        )}
+      >
+        {avatar}
+        {collapsible ? (
+          <button
+            type="button"
+            aria-expanded={expanded}
+            onClick={onToggle}
+            className={cn('mail-message-toggle rounded-md hover:bg-hover', rowClass)}
+          >
+            {sender}
+          </button>
+        ) : (
+          <div className={rowClass}>{sender}</div>
+        )}
+        {expanded && <Recipients message={m} />}
+      </div>
 
       {expanded && (
-        <div className="selectable px-5 pb-5 pl-[38px]">
-          <div className="mb-3 text-[12px] text-muted">
-            <button
-              type="button"
-              className="hover:text-foreground"
-              onClick={() => setDetails((d) => !d)}
-              aria-expanded={details}
-            >
-              To {m.to.map(displayName).join(', ')}
-              {m.cc?.length ? `, Cc ${m.cc.map(displayName).join(', ')}` : ''}
-              <span className="ml-1 underline-offset-2 hover:underline">
-                {details ? 'Hide' : 'Details'}
-              </span>
-            </button>
-            {details && (
-              <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
-                <dt>From</dt>
-                <dd>{formatAddress(m.from)}</dd>
-                <dt>To</dt>
-                <dd>{m.to.map(formatAddress).join(', ')}</dd>
-                {!!m.cc?.length && (
-                  <>
-                    <dt>Cc</dt>
-                    <dd>{m.cc.map(formatAddress).join(', ')}</dd>
-                  </>
-                )}
-                <dt>Date</dt>
-                <dd>{formatFullDate(m.sentAt)}</dd>
-              </dl>
-            )}
-          </div>
-
+        <div className="selectable px-5 pb-5 pt-2">
           {m.html ? (
             <>
               {blocked && !allowRemoteImages && (
@@ -200,5 +210,63 @@ export function MessageView({
         </div>
       )}
     </article>
+  );
+}
+
+/** "to Paul" line under the sender; the caret opens a popover with the full header fields. */
+function Recipients({ message: m }: { message: Message }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('pointerdown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const cc = m.cc ?? [];
+  return (
+    <div ref={ref} className="relative -mt-0.5 min-w-0 text-[12px] text-muted">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-label={`Details, to ${m.to.map(displayName).join(', ')}`}
+        onClick={() => setOpen((o) => !o)}
+        className="flex max-w-full items-center gap-0.5 rounded hover:text-foreground"
+      >
+        <span className="truncate">
+          to {m.to.map(displayName).join(', ')}
+          {cc.length ? `, Cc ${cc.map(displayName).join(', ')}` : ''}
+        </span>
+        <ChevronDown size={12} className={cn('shrink-0', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <dl
+          aria-label="Message details"
+          className="selectable absolute left-0 top-full z-20 mt-1 grid w-max max-w-[min(32rem,100%)] grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-lg border border-border bg-surface-raised p-3 text-[12px] shadow-lg"
+        >
+          <dt className="text-right">from</dt>
+          <dd className="text-foreground">{formatAddress(m.from)}</dd>
+          <dt className="text-right">to</dt>
+          <dd className="text-foreground">{m.to.map(formatAddress).join(', ')}</dd>
+          {cc.length > 0 && (
+            <>
+              <dt className="text-right">cc</dt>
+              <dd className="text-foreground">{cc.map(formatAddress).join(', ')}</dd>
+            </>
+          )}
+          <dt className="text-right">date</dt>
+          <dd className="text-foreground">{formatFullDate(m.sentAt)}</dd>
+        </dl>
+      )}
+    </div>
   );
 }

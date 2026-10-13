@@ -140,16 +140,18 @@ function ThreadBody({
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <header className="mail-thread-header selectable px-5 pb-3 pt-4">
-        <h2 className="text-[20px] font-semibold leading-snug">{thread.subject}</h2>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <h2 className="text-[20px] font-semibold leading-snug">{thread.subject}</h2>
+          {chips.map((l) => (
+            <LabelChip key={l.id} label={l} className="max-w-64" />
+          ))}
+        </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[12px] text-muted">
           <span>
             {thread.messageCount} {thread.messageCount === 1 ? 'message' : 'messages'}
           </span>
           {trashed && <span className="rounded bg-hover px-1.5">In Trash</span>}
           {junk && <span className="rounded bg-hover px-1.5">In Junk</span>}
-          {chips.map((l) => (
-            <LabelChip key={l.id} label={l} className="max-w-64" />
-          ))}
           {thread.messageCount > 1 && (
             <button
               type="button"
