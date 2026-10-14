@@ -21,15 +21,15 @@ html:root [role='toolbar'] button svg {
   height: 18px;
 }
 html:root .mail-thread-header {
-  /* Subject, count and chips start where the sender name starts: 14 margin + 20 inset + 40 avatar + 12 gap. */
-  padding: 8px 28px 14px 86px;
+  /* Subject, count and chips start where the sender name starts: 8 margin + 12 inset + 40 avatar + 12 gap. */
+  padding: 8px 20px 14px 72px;
 }
 html:root [data-pane='reader'] h2 {
   font-size: 22px;
   letter-spacing: -0.01em;
 }
 html:root [data-pane='reader'] article {
-  margin: 0 14px 8px;
+  margin: 0 8px 8px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--card-bg);

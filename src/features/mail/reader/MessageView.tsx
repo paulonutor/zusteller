@@ -118,7 +118,7 @@ export function MessageView({
     >
       <div
         className={cn(
-          'mail-message-head grid grid-cols-[40px_minmax(0,1fr)] gap-x-3 px-5',
+          'mail-message-head grid grid-cols-[40px_minmax(0,1fr)] gap-x-3 px-3',
           expanded ? 'pb-1 pt-3' : 'py-2.5',
         )}
       >
@@ -139,7 +139,7 @@ export function MessageView({
       </div>
 
       {expanded && (
-        <div className="selectable pb-5 pl-[72px] pr-5 pt-2">
+        <div className="selectable pb-5 pl-[64px] pr-3 pt-2">
           {m.html ? (
             <>
               {blocked && !allowRemoteImages && (
