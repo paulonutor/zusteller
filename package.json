@@ -18,6 +18,7 @@
     "test:visual:docker": "scripts/visual-docker.sh",
     "test:visual:docker:update": "scripts/visual-docker.sh --update-snapshots",
     "tauri": "tauri",
+    "tauri:mock": "tauri dev --config src-tauri/tauri.mock.conf.json",
     "tauri:dev:opaque": "tauri dev --config src-tauri/tauri.opaque.conf.json",
     "tauri:build:opaque": "tauri build --config src-tauri/tauri.opaque.conf.json",
     "test:e2e": "playwright test --project=functional"

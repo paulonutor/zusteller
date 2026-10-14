@@ -50,7 +50,8 @@ npm run tauri build -- --debug --bundles app
 Open the `zusteller.app` path printed by the build. Cargo's configured target
 directory can differ from `src-tauri/target`. Browser-only `npm run dev` keeps
 using deterministic mock mail. `?provider=mock` explicitly selects mock mail in
-the desktop host for visual tests.
+the desktop host for visual tests. `npm run tauri:mock` starts the desktop app
+with mock mail (it overrides the window URL via `src-tauri/tauri.mock.conf.json`).
 
 ## What to try
 
