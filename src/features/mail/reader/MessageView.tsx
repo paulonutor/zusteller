@@ -137,7 +137,7 @@ export function MessageView({
     <article
       aria-label={`Message from ${displayName(m.from)}`}
       data-flat={collapsible ? undefined : 'true'}
-      className="flex flex-col border-b border-border last:border-b-0"
+      className="flex shrink-0 flex-col border-b border-border last:border-b-0"
     >
       <div
         onClick={
