@@ -139,7 +139,7 @@ export function MessageView({
       </div>
 
       {expanded && (
-        <div className="selectable px-5 pb-5 pt-2">
+        <div className="selectable pb-5 pl-[72px] pr-5 pt-2">
           {m.html ? (
             <>
               {blocked && !allowRemoteImages && (

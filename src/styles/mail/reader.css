@@ -21,7 +21,8 @@ html:root [role='toolbar'] button svg {
   height: 18px;
 }
 html:root .mail-thread-header {
-  padding: 8px 28px 14px;
+  /* Subject, count and chips start where the sender name starts: 14 margin + 20 inset + 40 avatar + 12 gap. */
+  padding: 8px 28px 14px 86px;
 }
 html:root [data-pane='reader'] h2 {
   font-size: 22px;
@@ -39,7 +40,6 @@ html:root [data-pane='reader'] article:last-child {
 }
 /* One-message conversations are a plain page, not a card (Gmail / Apple Mail). */
 html:root [data-pane='reader'] article[data-flat] {
-  margin: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
