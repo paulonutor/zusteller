@@ -65,7 +65,16 @@ describe('createSeedData', () => {
   });
 
   it('contains the special threads', () => {
-    for (const id of ['t-hostile', 't-wide', 't-long', 't-plain-only', 't-injection'])
+    for (const id of [
+      't-hostile',
+      't-wide',
+      't-long',
+      't-plain-only',
+      't-injection',
+      't-quoted',
+      't-inline',
+      't-quoted-html',
+    ])
       expect(threads.has(id)).toBe(true);
     expect(threads.get('t-long')?.length).toBe(8);
     expect(threads.get('t-plain-only')?.every((m) => !m.html)).toBe(true);

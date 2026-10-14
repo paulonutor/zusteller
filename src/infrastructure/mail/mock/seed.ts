@@ -10,6 +10,9 @@
  *   t-junk-pharma  Junk thread with an HTML body carrying remote images (banner + tracking pixel)
  *   t-quoted      5-message reply chain where every reply quotes the previous ones (nested
  *                  "On … wrote:" / > blocks, plain text and HTML blockquotes)
+ *   t-inline       plain-text inline replies: answers interleaved between quoted paragraphs
+ *   t-quoted-html  Apple Mail style <blockquote type="cite"> with German attribution and text
+ *                  after the quote
  *   t-injection    body contains harmless "Ignore previous instructions" prompt-injection text
  * All other threads are 't001', 't002', ... Message ids are `${threadId}-m${n}`.
  * All dates derive from SEED_NOW (no Date.now()).
@@ -709,7 +712,7 @@ export function createSeedData(): SeedData {
     const q4 = 'On Tue, 6 Oct 2026 at 09:48, Paul Onutor <paul@onutor.de> wrote:';
     const m5 = `Done, the changelog is on main. Tagging 0.3.0 on Friday morning then.\n\n${q4}\n${m4.replace(/^/gm, '> ')}`;
     const bq = (inner: string, head: string): string =>
-      `<div>${head}</div><blockquote style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex">${inner}</blockquote>`;
+      `<div class="gmail_quote"><div class="gmail_attr">${head}</div><blockquote class="gmail_quote" style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex">${inner}</blockquote></div>`;
     const h1 =
       '<p>Hi Paul,</p><p>I would like to cut the 0.3 release on Friday. Are we fine to ship the new thread list, or do we wait for the keyboard navigation fixes?</p><p>Max</p>';
     const h2 = `<p>Hi Max,</p><p>I would ship the thread list and move the keyboard fixes to 0.3.1. They touch the selection code and I would rather not rush them.</p>${bq(h1, q1)}`;
@@ -721,6 +724,61 @@ export function createSeedData(): SeedData {
       i(daysAgo(1, 8, 25), m3, { html: `<div>${h3}</div>` }),
       o(daysAgo(1, 9, 48), m4, { html: `<div>${h4}</div>` }),
       i(daysAgo(0, 8, 5), m5),
+    ]);
+  }
+  {
+    // Inline replies: answers are interleaved with the quoted paragraphs (plain text).
+    const q = (lines: string[]): string => lines.map((l) => `> ${l}`).join('\n');
+    const ask = [
+      'Hi Paul,',
+      '',
+      'a few questions about the invite list before I send it out:',
+      '',
+      '1. Do we include the two people from the Hamburg office?',
+      '2. Is the venue booked for the whole day or only the afternoon?',
+      '3. Who takes care of catering?',
+    ];
+    const reply1 = `On Mon, 5 Oct 2026 at 14:20, Lena Hoffmann <lena.hoffmann@posteo.de> wrote:\n${q(ask.slice(0, 5))}\n\nYes, please include them.\n\n${q(ask.slice(5, 6))}\n\nThe whole day, 9:00 to 18:00.\n\n${q(ask.slice(6))}\n\nI will ask Karin on Wednesday.\n\nPaul`;
+    const reply2 = `Thanks, that helps. Catering from Karin is perfect.\n\nOn Mon, 5 Oct 2026 at 16:05, Paul Onutor <paul@onutor.de> wrote:\n${reply1
+      .split('\n')
+      .map((l) => (l ? `> ${l}` : '>'))
+      .join('\n')}\n\nI will send the invites tomorrow morning.\n\nLena`;
+    add(
+      't-inline',
+      'Invite list for the offsite',
+      'inbox',
+      ['label-personal'],
+      { unread: true },
+      LENA,
+      [
+        i(daysAgo(2, 14, 20), ask.join('\n')),
+        o(daysAgo(2, 16, 5), reply1),
+        i(daysAgo(1, 7, 45), reply2),
+      ],
+    );
+  }
+  {
+    // Apple Mail style HTML: <blockquote type="cite"> with German attribution and text below.
+    const attr = 'Am 04.10.2026 um 18:42 schrieb Daniel Reuter &lt;daniel@reuter-design.io&gt;:';
+    const cite = (inner: string, head: string): string =>
+      `<div>${head}</div><blockquote type="cite">${inner}</blockquote>`;
+    const first =
+      '<div>Hallo Paul,</div><div><br></div><div>anbei die neue Version des Logos. Ich habe die Abstände angepasst und eine dunkle Variante ergänzt. Sag mir bitte, ob die Wortmarke noch etwas kräftiger sein soll.</div><div><br></div><div>Daniel</div>';
+    const second = `<div>Danke Daniel, sieht schon sehr gut aus!</div><div><br></div>${cite(first, attr)}<div><br></div><div>Die Wortmarke darf gern etwas kräftiger werden, der Rest passt.</div><div><br></div><div>Viele Grüße<br>Paul</div>`;
+    const third = `<div>Alles klar, kommt heute Abend.</div><div><br></div>${cite(second, 'Am 05.10.2026 um 09:10 schrieb Paul Onutor &lt;paul@onutor.de&gt;:')}<div><br></div><div>P.S. Die Rechnung schicke ich separat.</div>`;
+    add('t-quoted-html', 'Logo v3', 'inbox', ['label-work'], {}, DANIEL, [
+      i(
+        daysAgo(3, 18, 42),
+        first
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim(),
+        {
+          html: first,
+        },
+      ),
+      o(daysAgo(2, 9, 10), 'Danke Daniel, sieht schon sehr gut aus!', { html: second }),
+      i(daysAgo(1, 19, 30), 'Alles klar, kommt heute Abend.', { html: third }),
     ]);
   }
   add(
