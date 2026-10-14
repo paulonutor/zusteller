@@ -448,8 +448,43 @@ export function createSeedData(): SeedData {
       i(daysAgo(14, 20, 11), receiptText('Amazon.de', rows, '59,89 EUR'), {
         html: receiptHtml('Amazon.de', rows, '59,89 EUR', 'Arriving Friday. '),
       }),
+      o(daysAgo(13, 8, 30), 'Could you deliver to my office address instead?'),
+      i(
+        daysAgo(12, 9, 5),
+        'Your package has shipped. Delivery to the new address: Friday, 18 Sept. Track it: https://amazon.de/track',
+        {
+          html: shell(
+            '<h2>Your package has shipped</h2><p>We updated the delivery address as requested.</p><p><b>Arriving Friday, 18 Sept</b></p><a class="btn" href="https://amazon.de/track">Track package</a>',
+          ),
+        },
+      ),
     ]);
   }
+  add('t-html-multi', 'Lisbon trip: check-in and gate', 'inbox', ['label-travel'], {}, FLY, [
+    i(
+      daysAgo(3, 9, 0),
+      'Check-in for LH 1176 is open. Booking reference: X7K2QP.',
+      {
+        html: receiptHtml(
+          'Lufthansa',
+          [
+            ['LH 1176 FRA - LIS', '22 Nov 06:40'],
+            ['Check-in', 'Open'],
+          ],
+          '198,00 EUR',
+        ),
+      },
+    ),
+    i(
+      daysAgo(1, 18, 30),
+      'Your gate has been assigned: A24. Boarding starts 06:05.',
+      {
+        html: shell(
+          '<h2>Gate A24</h2><p>Boarding for <b>LH 1176</b> starts at <b>06:05</b>.</p><a class="btn" href="https://example.com/gate">View flight</a>',
+        ),
+      },
+    ),
+  ]);
   add(null, 'Your flight to Lisbon (LH 1176)', 'inbox', ['label-travel'], { star: true }, FLY, [
     i(
       daysAgo(12, 11, 0),

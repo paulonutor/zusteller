@@ -21,12 +21,7 @@ html:root [role='toolbar'] button svg {
   height: 18px;
 }
 html:root .mail-thread-header {
-  /* Subject, count and chips start where the sender name starts: 8 margin + 12 inset + 40 avatar + 12 gap. */
-  padding: 8px 20px 14px 72px;
-}
-html:root [data-pane='reader'] h2 {
-  font-size: 22px;
-  letter-spacing: -0.01em;
+  padding: 10px 20px 8px;
 }
 html:root [data-pane='reader'] article {
   margin: 0 8px 8px;
@@ -38,14 +33,9 @@ html:root [data-pane='reader'] article {
 html:root [data-pane='reader'] article:last-child {
   border-bottom: 1px solid var(--border);
 }
-/* One-message conversations are a plain page, not a card (Gmail / Apple Mail). */
+/* A single message looks like every other message card; it only grows to fill the pane. */
 html:root [data-pane='reader'] article[data-flat] {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-html:root [data-pane='reader'] article[data-flat]:last-child {
-  border-bottom: 0;
+  flex: 1 0 auto;
 }
 html:root [data-pane='reader'] .mail-message-head [data-reader-avatar] {
   display: grid;
@@ -65,6 +55,7 @@ html:root:not(.dark) [data-pane='reader'] .mail-message-head [data-reader-avatar
 }
 html:root .mail-thread-messages {
   border-top: 0;
+  padding-top: 8px;
 }
 html:root .mail-attachments li {
   border-radius: 10px;

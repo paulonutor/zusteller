@@ -153,7 +153,7 @@ describe('single-message threads', () => {
     expect(within(article).getByText(/^to /)).toBeTruthy();
     expect(within(article).getByRole('list', { name: 'Attachments' })).toBeTruthy();
     expect(within(reader).queryByRole('button', { name: /expand all|collapse all/i })).toBeNull();
-    expect(within(reader).getByText('1 message')).toBeTruthy();
+    expect(within(reader).queryByText('1 message')).toBeNull();
   });
 
   it('shows sender address and opens full header details from the recipient line', async () => {

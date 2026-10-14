@@ -102,24 +102,56 @@ export function MessageView({
       data-reader-avatar
       aria-hidden="true"
       style={{ '--av-h': avatarHue(m.from.email) } as React.CSSProperties}
-      className={cn('self-start', expanded && 'row-span-2')}
+      className={'row-span-2 self-center'}
     >
       {initials(m.from)}
     </span>
   );
 
-  const rowClass = 'flex min-h-10 min-w-0 items-center gap-2 text-left';
+  // Keep the body mounted while it animates closed, then drop it (it can hold a heavy iframe).
+  const [mounted, setMounted] = useState(expanded);
+  const [entered, setEntered] = useState(expanded);
+  useEffect(() => {
+    if (expanded) {
+      const frame = requestAnimationFrame(() => {
+        setMounted(true);
+        setEntered(true);
+      });
+      return () => cancelAnimationFrame(frame);
+    }
+    const timer = setTimeout(() => {
+      setMounted(false);
+      setEntered(false);
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [expanded]);
+  const bodyMounted = expanded || mounted;
+  const bodyShown = expanded && entered;
+
+  const rowClass = cn(
+    'flex min-w-0 items-center gap-2 text-left transition-[height] duration-200 ease-out motion-reduce:transition-none',
+    bodyShown ? 'h-5' : 'h-10',
+  );
 
   return (
     <article
       aria-label={`Message from ${displayName(m.from)}`}
       data-flat={collapsible ? undefined : 'true'}
-      className="border-b border-border last:border-b-0"
+      className="flex flex-col border-b border-border last:border-b-0"
     >
       <div
+        onClick={
+          collapsible
+            ? (e) => {
+                // Controls inside the header (recipient details) keep their own click behaviour.
+                if (!(e.target as HTMLElement).closest('[data-no-toggle]')) onToggle();
+              }
+            : undefined
+        }
         className={cn(
           'mail-message-head grid grid-cols-[40px_minmax(0,1fr)] gap-x-3 px-3',
-          expanded ? 'pb-1 pt-3' : 'py-2.5',
+          'py-2.5',
+          collapsible && 'cursor-pointer hover:bg-hover',
         )}
       >
         {avatar}
@@ -127,86 +159,109 @@ export function MessageView({
           <button
             type="button"
             aria-expanded={expanded}
-            onClick={onToggle}
-            className={cn('mail-message-toggle rounded-md hover:bg-hover', rowClass)}
+            className={cn('mail-message-toggle rounded-md', rowClass)}
           >
             {sender}
           </button>
         ) : (
           <div className={rowClass}>{sender}</div>
         )}
-        {expanded && <Recipients message={m} />}
+        {bodyMounted && (
+          <div
+            data-no-toggle
+            className="grid min-w-0 transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none"
+            style={{ gridTemplateRows: bodyShown ? '1fr' : '0fr' }}
+          >
+            <div className="min-h-0 overflow-hidden">
+              <Recipients message={m} />
+            </div>
+          </div>
+        )}
       </div>
 
-      {expanded && (
-        <div className="selectable pb-5 pl-[64px] pr-3 pt-2">
-          {m.html ? (
-            <>
-              {blocked && !allowRemoteImages && (
-                <div className="mb-3 flex items-center gap-2 rounded-md bg-hover px-3 py-1.5 text-[12px] text-muted">
-                  <ImageOff size={14} />
-                  This message is in Junk. Images are not loaded automatically.
-                  <button
-                    type="button"
-                    className="ml-auto text-[color-mix(in_srgb,var(--accent)_75%,var(--foreground))] hover:underline"
-                    onClick={() => setShowRemote(true)}
+      {bodyMounted && (
+        <div
+          className="grid flex-1 transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none"
+          style={{ gridTemplateRows: bodyShown ? '1fr' : '0fr' }}
+        >
+          <div className="flex min-h-0 flex-col overflow-hidden">
+            <div className={cn('selectable flex flex-1 flex-col px-3', !m.html && 'py-3')}>
+              {m.html ? (
+                <>
+                  {blocked && !allowRemoteImages && (
+                    <div className="mb-3 flex items-center gap-2 rounded-md bg-hover px-3 py-1.5 text-[12px] text-muted">
+                      <ImageOff size={14} />
+                      This message is in Junk. Images are not loaded automatically.
+                      <button
+                        type="button"
+                        className="ml-auto text-[color-mix(in_srgb,var(--accent)_75%,var(--foreground))] hover:underline"
+                        onClick={() => setShowRemote(true)}
+                      >
+                        Load images
+                      </button>
+                    </div>
+                  )}
+                  <div
+                    className={cn(
+                      '-mx-3 flex-1 overflow-hidden bg-white',
+                      m.attachments.length === 0 && 'rounded-b-xl',
+                    )}
                   >
-                    Load images
-                  </button>
-                </div>
-              )}
-              <Suspense
-                fallback={
-                  <div aria-hidden className="space-y-2 py-2">
-                    <div className="h-3 w-3/4 animate-pulse rounded bg-current opacity-10" />
-                    <div className="h-3 w-full animate-pulse rounded bg-current opacity-10" />
-                    <div className="h-3 w-2/3 animate-pulse rounded bg-current opacity-10" />
-                  </div>
-                }
-              >
-                <SafeHtmlFrame
-                  title={`Message body: ${m.subject}`}
-                  html={m.html}
-                  dark={resolved === 'dark'}
-                  allowRemoteImages={allowRemoteImages}
-                  onOpenLink={onOpenLink}
-                  onBlockedRemoteContent={setBlocked}
-                />
-              </Suspense>
-            </>
-          ) : (
-            <PlainTextBody text={m.plainText ?? ''} onOpenLink={onOpenLink} />
-          )}
-
-          {m.attachments.length > 0 && (
-            <ul className="mail-attachments mt-4 flex flex-wrap gap-2" aria-label="Attachments">
-              {m.attachments.map((a) => (
-                <li
-                  key={a.id}
-                  className={cn(
-                    'flex max-w-64 items-center gap-2 rounded-md border border-border px-2 py-1.5 text-[12px]',
-                  )}
-                >
-                  <FileText size={16} className="shrink-0 text-muted" />
-                  <span className="min-w-0">
-                    <span className="block truncate font-medium">{a.filename}</span>
-                    <span className="text-muted">{formatSize(a.size)}</span>
-                  </span>
-                  {mail.downloadAttachment && (
-                    <button
-                      type="button"
-                      className="ml-2 hover:underline disabled:opacity-50"
-                      disabled={!!downloading}
-                      aria-label={`Save ${a.filename}`}
-                      onClick={() => void download(a)}
+                    <Suspense
+                      fallback={
+                        <div aria-hidden className="space-y-2 py-2">
+                          <div className="h-3 w-3/4 animate-pulse rounded bg-current opacity-10" />
+                          <div className="h-3 w-full animate-pulse rounded bg-current opacity-10" />
+                          <div className="h-3 w-2/3 animate-pulse rounded bg-current opacity-10" />
+                        </div>
+                      }
                     >
-                      {downloading === a.id ? 'Saving…' : 'Save'}
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
+                      <SafeHtmlFrame
+                        title={`Message body: ${m.subject}`}
+                        html={m.html}
+                        dark={resolved === 'dark'}
+                        allowRemoteImages={allowRemoteImages}
+                        onOpenLink={onOpenLink}
+                        onBlockedRemoteContent={setBlocked}
+                      />
+                    </Suspense>
+                  </div>
+                </>
+              ) : (
+                <PlainTextBody text={m.plainText ?? ''} onOpenLink={onOpenLink} />
+              )}
+
+              {m.attachments.length > 0 && (
+                <ul className="mail-attachments my-4 flex flex-wrap gap-2" aria-label="Attachments">
+                  {m.attachments.map((a) => (
+                    <li
+                      key={a.id}
+                      className={cn(
+                        'flex max-w-64 items-center gap-2 rounded-md border border-border px-2 py-1.5 text-[12px]',
+                      )}
+                    >
+                      <FileText size={16} className="shrink-0 text-muted" />
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium">{a.filename}</span>
+                        <span className="text-muted">{formatSize(a.size)}</span>
+                      </span>
+                      {mail.downloadAttachment && (
+                        <button
+                          type="button"
+                          className="ml-2 hover:underline disabled:opacity-50"
+                          disabled={!!downloading}
+                          aria-label={`Save ${a.filename}`}
+                          onClick={() => void download(a)}
+                        >
+                          {downloading === a.id ? 'Saving…' : 'Save'}
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </article>
@@ -234,7 +289,7 @@ function Recipients({ message: m }: { message: Message }) {
 
   const cc = m.cc ?? [];
   return (
-    <div ref={ref} className="relative -mt-0.5 min-w-0 text-[12px] text-muted">
+    <div ref={ref} className="relative flex h-5 min-w-0 items-center text-[12px] text-muted">
       <button
         type="button"
         aria-expanded={open}
