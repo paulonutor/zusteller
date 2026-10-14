@@ -8,6 +8,8 @@
  *   t-long         8-message conversation; message m3 is a very long (>= 4000 chars) plain text
  *   t-plain-only   plain-text only, no html
  *   t-junk-pharma  Junk thread with an HTML body carrying remote images (banner + tracking pixel)
+ *   t-quoted      5-message reply chain where every reply quotes the previous ones (nested
+ *                  "On … wrote:" / > blocks, plain text and HTML blockquotes)
  *   t-injection    body contains harmless "Ignore previous instructions" prompt-injection text
  * All other threads are 't001', 't002', ... Message ids are `${threadId}-m${n}`.
  * All dates derive from SEED_NOW (no Date.now()).
@@ -461,29 +463,21 @@ export function createSeedData(): SeedData {
     ]);
   }
   add('t-html-multi', 'Lisbon trip: check-in and gate', 'inbox', ['label-travel'], {}, FLY, [
-    i(
-      daysAgo(3, 9, 0),
-      'Check-in for LH 1176 is open. Booking reference: X7K2QP.',
-      {
-        html: receiptHtml(
-          'Lufthansa',
-          [
-            ['LH 1176 FRA - LIS', '22 Nov 06:40'],
-            ['Check-in', 'Open'],
-          ],
-          '198,00 EUR',
-        ),
-      },
-    ),
-    i(
-      daysAgo(1, 18, 30),
-      'Your gate has been assigned: A24. Boarding starts 06:05.',
-      {
-        html: shell(
-          '<h2>Gate A24</h2><p>Boarding for <b>LH 1176</b> starts at <b>06:05</b>.</p><a class="btn" href="https://example.com/gate">View flight</a>',
-        ),
-      },
-    ),
+    i(daysAgo(3, 9, 0), 'Check-in for LH 1176 is open. Booking reference: X7K2QP.', {
+      html: receiptHtml(
+        'Lufthansa',
+        [
+          ['LH 1176 FRA - LIS', '22 Nov 06:40'],
+          ['Check-in', 'Open'],
+        ],
+        '198,00 EUR',
+      ),
+    }),
+    i(daysAgo(1, 18, 30), 'Your gate has been assigned: A24. Boarding starts 06:05.', {
+      html: shell(
+        '<h2>Gate A24</h2><p>Boarding for <b>LH 1176</b> starts at <b>06:05</b>.</p><a class="btn" href="https://example.com/gate">View flight</a>',
+      ),
+    }),
   ]);
   add(null, 'Your flight to Lisbon (LH 1176)', 'inbox', ['label-travel'], { star: true }, FLY, [
     i(
@@ -703,6 +697,32 @@ export function createSeedData(): SeedData {
       'Hi Paul,\n\nquick notes from our call:\n  - move the deadline to the 20th\n  - Lena owns the invite list\n  - budget stays at 500 EUR\n\n-- \nAnna\n\n> Paul wrote:\n> Shall we send the invites on Friday?\n',
     ),
   ]);
+  {
+    const q1 = 'On Mon, 5 Oct 2026 at 09:10, Max Müller <max@zusteller.app> wrote:';
+    const m1 =
+      'Hi Paul,\n\nI would like to cut the 0.3 release on Friday. Are we fine to ship the new thread list, or do we wait for the keyboard navigation fixes?\n\nMax';
+    const m2 = `Hi Max,\n\nI would ship the thread list and move the keyboard fixes to 0.3.1. They touch the selection code and I would rather not rush them.\n\n${q1}\n${m1.replace(/^/gm, '> ')}`;
+    const q2 = 'On Mon, 5 Oct 2026 at 11:02, Paul Onutor <paul@onutor.de> wrote:';
+    const m3 = `Works for me. One question: do we need the changelog entry before the tag, or after?\n\n${q2}\n${m2.replace(/^/gm, '> ')}`;
+    const q3 = 'On Tue, 6 Oct 2026 at 08:25, Max Müller <max@zusteller.app> wrote:';
+    const m4 = `Before the tag, please. The release script reads it.\n\n${q3}\n${m3.replace(/^/gm, '> ')}`;
+    const q4 = 'On Tue, 6 Oct 2026 at 09:48, Paul Onutor <paul@onutor.de> wrote:';
+    const m5 = `Done, the changelog is on main. Tagging 0.3.0 on Friday morning then.\n\n${q4}\n${m4.replace(/^/gm, '> ')}`;
+    const bq = (inner: string, head: string): string =>
+      `<div>${head}</div><blockquote style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex">${inner}</blockquote>`;
+    const h1 =
+      '<p>Hi Paul,</p><p>I would like to cut the 0.3 release on Friday. Are we fine to ship the new thread list, or do we wait for the keyboard navigation fixes?</p><p>Max</p>';
+    const h2 = `<p>Hi Max,</p><p>I would ship the thread list and move the keyboard fixes to 0.3.1. They touch the selection code and I would rather not rush them.</p>${bq(h1, q1)}`;
+    const h3 = `<p>Works for me. One question: do we need the changelog entry before the tag, or after?</p>${bq(h2, q2)}`;
+    const h4 = `<p>Before the tag, please. The release script reads it.</p>${bq(h3, q3)}`;
+    add('t-quoted', 'Release 0.3 on Friday?', 'inbox', ['label-work', 'label-zusteller'], {}, MAX, [
+      i(daysAgo(2, 9, 10), m1, { html: `<div>${h1}</div>` }),
+      o(daysAgo(2, 11, 2), m2, { html: `<div>${h2}</div>` }),
+      i(daysAgo(1, 8, 25), m3, { html: `<div>${h3}</div>` }),
+      o(daysAgo(1, 9, 48), m4, { html: `<div>${h4}</div>` }),
+      i(daysAgo(0, 8, 5), m5),
+    ]);
+  }
   add(
     't-injection',
     'Quick favour regarding your assistant',
