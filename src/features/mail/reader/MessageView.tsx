@@ -128,6 +128,23 @@ export function MessageView({
   const bodyMounted = expanded || mounted;
   const bodyShown = expanded && entered;
 
+  // WebKit does not re-measure a grid row (or its flex ancestors) when the body re-wraps, e.g.
+  // after an expanded quote makes a scrollbar appear, so the end of the body is clipped. The grid
+  // only exists to animate open/close: once open, drop it for plain block layout, and on close pass
+  // through one `1fr` frame so the collapse still animates.
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    if (bodyShown && !settled) {
+      const timer = setTimeout(() => setSettled(true), 250);
+      return () => clearTimeout(timer);
+    }
+    if (!expanded && settled) {
+      const frame = requestAnimationFrame(() => setSettled(false));
+      return () => cancelAnimationFrame(frame);
+    }
+  }, [bodyShown, expanded, settled]);
+  const plainBody = settled && expanded;
+
   const rowClass = cn(
     'flex min-w-0 items-center gap-2 text-left transition-[height] duration-200 ease-out motion-reduce:transition-none',
     bodyShown ? 'h-5' : 'h-10',
@@ -181,8 +198,12 @@ export function MessageView({
 
       {bodyMounted && (
         <div
-          className="grid flex-1 transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none"
-          style={{ gridTemplateRows: bodyShown ? '1fr' : '0fr' }}
+          className={cn(
+            'flex-1',
+            !plainBody &&
+              'grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none',
+          )}
+          style={plainBody ? undefined : { gridTemplateRows: settled || bodyShown ? '1fr' : '0fr' }}
         >
           <div className="flex min-h-0 flex-col overflow-hidden">
             <div className={cn('selectable flex flex-1 flex-col px-3', !m.html && 'py-3')}>
