@@ -61,3 +61,8 @@ html:root .mail-attachments li {
   border-radius: 10px;
   background: var(--fill-0);
 }
+
+html:root .mail-attachment-open:hover:not(:disabled),
+html:root .mail-attachment-save:hover:not(:disabled) {
+  background: var(--fill-2);
+}

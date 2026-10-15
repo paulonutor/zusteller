@@ -1,7 +1,17 @@
 import { useServices } from '@/app/services';
 import { useToast } from '@/app/toast';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, FileText, ImageOff, Paperclip, Star } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  Download,
+  FileText,
+  Image,
+  ImageOff,
+  LoaderCircle,
+  Paperclip,
+  Star,
+} from 'lucide-react';
 import type { Message } from '@/domain/mail';
 import { useTheme } from '@/app/theme';
 import { cn } from '@/lib/cn';
@@ -41,15 +51,23 @@ export function MessageView({
 }: Props) {
   const { mail } = useServices();
   const toast = useToast();
-  const [downloading, setDownloading] = useState<string>();
-  const download = async (attachment: Message['attachments'][number]) => {
-    setDownloading(attachment.id);
+  const [attachmentAction, setAttachmentAction] = useState<{
+    id: string;
+    action: 'open' | 'save';
+  }>();
+  const handleAttachment = async (
+    attachment: Message['attachments'][number],
+    action: 'open' | 'save',
+  ) => {
+    const handler = action === 'open' ? mail.openAttachment : mail.downloadAttachment;
+    if (!handler || attachmentAction) return;
+    setAttachmentAction({ id: attachment.id, action });
     try {
-      await mail.downloadAttachment?.(m.accountId, m.threadId, m.id, attachment);
+      await handler.call(mail, m.accountId, m.threadId, m.id, attachment);
     } catch (e) {
-      toast.show(e instanceof Error ? e.message : 'Could not download attachment', 'error');
+      toast.show(e instanceof Error ? e.message : `Could not ${action} attachment`, 'error');
     } finally {
-      setDownloading(undefined);
+      setAttachmentAction(undefined);
     }
   };
   const expanded = collapsible ? expandedProp : true;
@@ -254,31 +272,73 @@ export function MessageView({
 
               {m.attachments.length > 0 && (
                 <ul className="mail-attachments my-4 flex flex-wrap gap-2" aria-label="Attachments">
-                  {m.attachments.map((a) => (
-                    <li
-                      key={a.id}
-                      className={cn(
-                        'flex max-w-64 items-center gap-2 rounded-md border border-border px-2 py-1.5 text-[12px]',
-                      )}
-                    >
-                      <FileText size={16} className="shrink-0 text-muted" />
-                      <span className="min-w-0">
-                        <span className="block truncate font-medium">{a.filename}</span>
-                        <span className="text-muted">{formatSize(a.size)}</span>
-                      </span>
-                      {mail.downloadAttachment && (
-                        <button
-                          type="button"
-                          className="ml-2 hover:underline disabled:opacity-50"
-                          disabled={!!downloading}
-                          aria-label={`Save ${a.filename}`}
-                          onClick={() => void download(a)}
-                        >
-                          {downloading === a.id ? 'Saving…' : 'Save'}
-                        </button>
-                      )}
-                    </li>
-                  ))}
+                  {m.attachments.map((a) => {
+                    const opening =
+                      attachmentAction?.id === a.id && attachmentAction.action === 'open';
+                    const saving =
+                      attachmentAction?.id === a.id && attachmentAction.action === 'save';
+                    const Icon = a.mimeType.startsWith('image/') ? Image : FileText;
+                    const details = (
+                      <>
+                        {opening ? (
+                          <LoaderCircle
+                            size={16}
+                            className="shrink-0 animate-spin text-muted"
+                            aria-hidden="true"
+                          />
+                        ) : (
+                          <Icon size={16} className="shrink-0 text-muted" aria-hidden="true" />
+                        )}
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium">{a.filename}</span>
+                          <span className="text-muted">
+                            {opening ? 'Opening…' : formatSize(a.size)}
+                          </span>
+                        </span>
+                      </>
+                    );
+                    return (
+                      <li
+                        key={a.id}
+                        className="flex max-w-64 items-stretch overflow-hidden rounded-md border border-border text-[12px]"
+                      >
+                        {mail.openAttachment ? (
+                          <button
+                            type="button"
+                            className="mail-attachment-open flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left disabled:opacity-50"
+                            disabled={!!attachmentAction}
+                            aria-label={`Open ${a.filename}`}
+                            aria-busy={opening}
+                            title="Open in default app"
+                            onClick={() => void handleAttachment(a, 'open')}
+                          >
+                            {details}
+                          </button>
+                        ) : (
+                          <span className="flex min-w-0 items-center gap-2 px-3 py-2">
+                            {details}
+                          </span>
+                        )}
+                        {mail.downloadAttachment && (
+                          <button
+                            type="button"
+                            className="mail-attachment-save flex shrink-0 items-center border-l border-border px-3 text-muted disabled:opacity-50"
+                            disabled={!!attachmentAction}
+                            aria-label={`Save ${a.filename}`}
+                            aria-busy={saving}
+                            title="Save as…"
+                            onClick={() => void handleAttachment(a, 'save')}
+                          >
+                            {saving ? (
+                              <LoaderCircle size={16} className="animate-spin" aria-hidden="true" />
+                            ) : (
+                              <Download size={16} aria-hidden="true" />
+                            )}
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>

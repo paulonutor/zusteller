@@ -300,6 +300,7 @@ pub fn run() {
             gmail::gmail_cancel_connect,
             gmail::gmail_read,
             gmail::gmail_download,
+            gmail::gmail_open_attachment,
             gmail::gmail_diagnostics,
             gmail::activity::open_mail_activity,
             gmail::activity::close_mail_activity,
@@ -363,6 +364,11 @@ pub fn run() {
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running zusteller");
+        .build(tauri::generate_context!())
+        .expect("error while building zusteller")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<gmail::State>().clear_opened_attachments();
+            }
+        });
 }

@@ -86,6 +86,13 @@ export type MailboxCounts = {
 export interface MailService {
   readonly localPreview?: boolean;
   readonly connection?: MailConnection;
+  /** Opens an on-demand attachment in the system default application. */
+  openAttachment?(
+    accountId: ID,
+    threadId: ID,
+    messageId: ID,
+    attachment: Attachment,
+  ): Promise<void>;
   downloadAttachment?(
     accountId: ID,
     threadId: ID,

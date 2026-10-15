@@ -58,8 +58,11 @@ with mock mail (it overrides the window URL via `src-tauri/tauri.mock.conf.json`
 - Browse Inbox, Sent, Starred, All, Junk and Trash; open a user label.
 - Search using Gmail syntax such as `from:someone@example.com` or `has:attachment`.
 - Scroll to fetch older pages. Open plain and HTML messages and multi-message
-  conversations. Use **Save** beside an attachment to download it through a
-  native Save As dialog. Downloads are limited to 15 MiB.
+  conversations. Click an attachment filename to open it in the system default
+  app without a Save dialog. The separate download icon offers native Save As.
+  Both actions fetch on demand and are limited to 15 MiB. Opened files use private
+  temporary directories retained for the app session and removed on normal exit.
+  macOS quarantine checks apply to opened files.
 - Star, mark unread, archive and move a message locally. Compare with Gmail in
   your browser: Gmail should be unchanged. Restart Zusteller and verify your
   local actions remain. **Reset local changes** removes those simulations.
@@ -247,8 +250,8 @@ This uses the real list, lazy-load, sync and cache paths without additional Gmai
 requests. Counts, read/star flags, message/attachment counts and attachment sizes
 remain visible. All displayed dates are synthetic, so this mode cannot verify real
 date formatting or email-specific HTML layouts. Search, OAuth sign-in, attachment
-downloads, disconnect and resetting local changes are blocked. Organization
-actions still update the existing local preview overlays; they do not write Gmail.
+opening and downloads, disconnect and resetting local changes are blocked.
+Organization actions still update the existing local preview overlays; they do not write Gmail.
 
 Original data remains in the native cache and credentials remain in Keychain.
 This is a protected UI for testing, not an anonymized database export. Synthetic

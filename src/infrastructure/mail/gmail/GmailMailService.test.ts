@@ -8,6 +8,29 @@ afterEach(() => {
 });
 
 describe('Gmail desktop adapter', () => {
+  it('opens attachments through a distinct native command with their full scope', async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    const mail = provider(invoke);
+    const attachment = {
+      id: 'file',
+      filename: 'report.pdf',
+      mimeType: 'application/pdf',
+      size: 12,
+    };
+    await mail.openAttachment(account.id, 'thread', 'message', attachment);
+    expect(invoke).toHaveBeenCalledWith('gmail_open_attachment', {
+      accountId: account.id,
+      threadId: 'thread',
+      messageId: 'message',
+      attachmentId: 'file',
+      filename: 'report.pdf',
+    });
+    invoke.mockRejectedValue({ message: 'Opening attachments is disabled in privacy mode' });
+    await expect(mail.openAttachment(account.id, 'thread', 'message', attachment)).rejects.toThrow(
+      'Opening attachments is disabled in privacy mode',
+    );
+  });
+
   it('keeps newly visible rows queued behind one active batch while an open can proceed', async () => {
     vi.useFakeTimers();
     let finish!: (v: unknown) => void;

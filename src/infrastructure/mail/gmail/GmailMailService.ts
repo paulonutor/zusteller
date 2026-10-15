@@ -204,6 +204,17 @@ export class GmailMailService implements MailService, MailConnection {
   async resetLocalChanges(accountId: ID) {
     await this.read('reset', accountId);
   }
+  openAttachment = (accountId: ID, threadId: ID, messageId: ID, attachment: Attachment) =>
+    this.invoke<void>('gmail_open_attachment', {
+      accountId,
+      threadId,
+      messageId,
+      attachmentId: attachment.id,
+      filename: attachment.filename,
+    }).catch((e: { message?: string }) => {
+      throw new Error(e.message ?? 'Could not open attachment');
+    });
+
   downloadAttachment = (accountId: ID, threadId: ID, messageId: ID, attachment: Attachment) =>
     this.invoke<void>('gmail_download', {
       accountId,

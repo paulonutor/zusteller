@@ -1,5 +1,6 @@
 pub mod activity;
 mod api;
+mod attachments;
 mod auth;
 mod batch;
 mod diagnostics;
@@ -18,6 +19,7 @@ use std::sync::{
 };
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_opener::OpenerExt;
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -39,6 +41,7 @@ impl Error {
 
 #[derive(Default)]
 pub struct State {
+    opened_attachments: Mutex<Vec<tempfile::TempDir>>,
     privacy: Mutex<privacy::Privacy>,
     activity: activity::Activity,
     gmail: Arc<Mutex<Option<api::Gmail>>>,
@@ -50,6 +53,12 @@ pub struct State {
 }
 
 impl State {
+    pub fn clear_opened_attachments(&self) {
+        self.opened_attachments
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+    }
     pub fn at_startup() -> Result<Self> {
         let enabled = std::env::args().any(|a| a == "--privacy");
         if enabled {
@@ -334,6 +343,48 @@ pub async fn gmail_read<R: tauri::Runtime>(
 }
 
 #[tauri::command]
+pub async fn gmail_open_attachment<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, State>,
+    account_id: String,
+    thread_id: String,
+    message_id: String,
+    attachment_id: String,
+    filename: String,
+) -> Result<()> {
+    if state.privacy_enabled() {
+        return Err(Error::new(
+            "invalid",
+            "Opening attachments is disabled in privacy mode",
+        ));
+    }
+    let bytes = work(app.clone(), &state, move |g| {
+        g.attachment(&account_id, &message_id, &attachment_id, &thread_id)
+    })
+    .await?;
+    let (directory, path) =
+        tauri::async_runtime::spawn_blocking(move || attachments::prepare(&filename, &bytes))
+            .await
+            .map_err(|_| Error::new("invalid", "Attachment worker failed"))??;
+    // Keep the file available while the default application reads it. The
+    // private temporary directory is removed when native state is dropped.
+    let mut opened = state
+        .opened_attachments
+        .lock()
+        .map_err(|_| Error::new("invalid", "Attachment storage is unavailable"))?;
+    app.opener()
+        .open_path(path.to_string_lossy().into_owned(), None::<&str>)
+        .map_err(|_| {
+            Error::new(
+                "invalid",
+                "Could not open the attachment in its default app",
+            )
+        })?;
+    opened.push(directory);
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn gmail_download<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, State>,
@@ -419,7 +470,8 @@ mod ipc_tests {
             .invoke_handler(tauri::generate_handler![
                 gmail_read,
                 gmail_diagnostics,
-                gmail_download
+                gmail_download,
+                gmail_open_attachment
             ])
             .build(mock_context(noop_assets()))
             .unwrap();
@@ -481,6 +533,7 @@ mod ipc_tests {
                     "invalid"
                 );
             }
+            assert_eq!(call_command("gmail_open_attachment",json!({"accountId":account,"threadId":thread_id,"messageId":"ignored","attachmentId":"ignored","filename":"ignored"})).unwrap_err()["message"],"Opening attachments is disabled in privacy mode");
             assert_eq!(call_command("gmail_download",json!({"accountId":account,"threadId":thread_id,"messageId":"ignored","attachmentId":"ignored","filename":"ignored"})).unwrap_err()["message"],"Attachment downloads are disabled in privacy mode");
         } else {
             assert_eq!(local["messages"][0]["plainText"], "hello");
