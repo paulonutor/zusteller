@@ -154,3 +154,19 @@ describe('links', () => {
     expect(clean('<a href="mailto:a@b.test">m</a>').html).toContain('mailto:a@b.test');
   });
 });
+
+describe('style sheets', () => {
+  it('inlines class rules from <style> so sizing survives', () => {
+    const r = clean(
+      '<style>.logo{width:32px;height:auto}</style><img class="logo" src="cid:l"><p class="x">hi</p>',
+    );
+    expect(r.html).toMatch(/<img[^>]*style="width: 32px/);
+    expect(r.html).not.toContain('<style');
+  });
+
+  it('filters hostile declarations coming from <style>', () => {
+    const r = clean('<style>p{background:url(https://evil.test/x.png);color:red}</style><p>hi</p>');
+    expect(r.html).not.toContain('evil.test');
+    expect(r.html).toContain('color: red');
+  });
+});

@@ -263,6 +263,42 @@ function sanitizeInlineStyle(style: string): string {
   return kept.join('; ');
 }
 
+/**
+ * <style> blocks are dropped by the sanitizer, which would lose sizing and layout that mail
+ * defines in classes (e.g. a small logo). Copy each plain rule onto its matching elements as an
+ * inline style first; the inline style then goes through the normal style filter.
+ */
+function inlineStyleSheets(html: string): string {
+  if (!/<style[\s>]/i.test(html)) return html;
+  const doc = document.implementation.createHTMLDocument('');
+  doc.documentElement.innerHTML = html;
+  const rules: CSSStyleRule[] = [];
+  for (const style of Array.from(doc.querySelectorAll('style'))) {
+    // A constructed sheet is never attached to a document, so nothing is applied or fetched.
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(style.textContent ?? '');
+    for (const rule of Array.from(sheet.cssRules)) {
+      if (rule instanceof CSSStyleRule) rules.push(rule);
+    }
+  }
+  if (rules.length === 0) return html;
+  for (const rule of rules.slice(0, 2000)) {
+    const css = rule.style.cssText;
+    if (!css) continue;
+    let matches: NodeListOf<Element>;
+    try {
+      matches = doc.querySelectorAll(rule.selectorText);
+    } catch {
+      continue;
+    }
+    for (const el of Array.from(matches)) {
+      const own = el.getAttribute('style');
+      el.setAttribute('style', own ? `${css}; ${own}` : css);
+    }
+  }
+  return doc.body.innerHTML;
+}
+
 export function sanitizeEmailHtml(html: string, opts: SanitizeOptions = {}): SanitizeResult {
   const p = getPurify();
   state = {
@@ -271,7 +307,7 @@ export function sanitizeEmailHtml(html: string, opts: SanitizeOptions = {}): San
     pixels: new Set(),
     quotes: new Set(),
   };
-  const body: HTMLElement = p.sanitize(html, {
+  const body: HTMLElement = p.sanitize(inlineStyleSheets(html), {
     ALLOWED_TAGS,
     ALLOWED_ATTR,
     ALLOWED_URI_REGEXP: URI_REGEXP,
