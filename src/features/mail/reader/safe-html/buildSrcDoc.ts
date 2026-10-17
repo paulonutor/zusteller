@@ -21,7 +21,8 @@ body{margin:0;padding:0;height:auto;overflow-x:hidden;
   color:#1f2328;background:transparent;overflow-wrap:anywhere;word-break:break-word}
 .mail{box-sizing:border-box;max-width:100%;overflow-x:auto;overflow-y:hidden;padding:12px;
   background:#fff;color:#1f2328}
-img,table,video{max-width:100%;height:auto}
+img,table,video{max-width:100%}
+table,video,img:is(:not([height]),[width]){height:auto}
 table{border-collapse:collapse}
 pre{white-space:pre-wrap;overflow-wrap:anywhere}
 a{color:#1a5fb4;text-decoration:underline;cursor:pointer}
