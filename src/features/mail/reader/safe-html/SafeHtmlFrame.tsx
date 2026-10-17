@@ -22,9 +22,15 @@ export function SafeHtmlFrame({
   title,
 }: SafeHtmlFrameProps) {
   const { srcDoc, blocked } = useMemo(() => {
-    const result = sanitizeEmailHtml(html, { allowRemoteImages });
+    const result = sanitizeEmailHtml(html, { allowRemoteImages, dark });
     return {
-      srcDoc: buildSrcDoc(result.html, { dark, allowRemoteImages, bodyStyle: result.bodyStyle }),
+      srcDoc: buildSrcDoc(result.html, {
+        dark,
+        allowRemoteImages,
+        bodyStyle: result.bodyStyle,
+        css: result.css,
+        supportsDark: result.supportsDark,
+      }),
       blocked: result.blockedRemoteContent,
     };
   }, [html, dark, allowRemoteImages]);

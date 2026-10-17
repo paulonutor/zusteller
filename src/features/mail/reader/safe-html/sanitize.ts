@@ -3,12 +3,18 @@ import { MIN_COLLAPSE_CHARS, countAttributions, isAttribution, quotePreview } fr
 
 export interface SanitizeOptions {
   allowRemoteImages?: boolean;
+  /** The reader is in dark mode: `prefers-color-scheme` rules resolve against this, not the OS. */
+  dark?: boolean;
 }
 
 export interface SanitizeResult {
   html: string;
   /** Sanitized inline style of the message's own <body>, applied to the wrapper by the frame. */
   bodyStyle: string;
+  /** Sanitized `<style>` rules, scoped to the `.mail` wrapper. Empty when the message has none. */
+  css: string;
+  /** The message ships `prefers-color-scheme: dark` rules, so it can be shown on a dark page. */
+  supportsDark: boolean;
   blockedRemoteContent: boolean;
 }
 
@@ -23,7 +29,7 @@ const ALLOWED_TAGS = [
 const ALLOWED_ATTR = [
   'href', 'src', 'srcset', 'alt', 'title', 'width', 'height', 'align', 'valign', 'bgcolor',
   'color', 'face', 'size', 'border', 'cellpadding', 'cellspacing', 'colspan', 'rowspan', 'style',
-  'dir', 'lang', 'background',
+  'dir', 'lang', 'background', 'class', 'id',
 ]; // prettier-ignore
 
 const FORBID_CONTENTS = [
@@ -245,6 +251,15 @@ function urlsAllowed(value: string): boolean {
   }
 }
 
+/** Returns the safe `prop: value` declaration, or null when it must be dropped. */
+function filterDeclaration(prop: string, value: string): string | null {
+  if (!/^[a-z-]+$/.test(prop) || prop.startsWith('--')) return null;
+  if (DANGEROUS_CSS.test(prop) || DANGEROUS_CSS.test(value)) return null;
+  if (prop === 'z-index' || prop === 'content' || prop === 'behavior') return null;
+  if (prop === 'position' && /fixed|absolute|sticky/i.test(value)) return null;
+  return urlsAllowed(value) ? `${prop}: ${value}` : null;
+}
+
 function sanitizeInlineStyle(style: string): string {
   if (style.length > MAX_STYLE_LENGTH) return '';
   const kept: string[] = [];
@@ -252,53 +267,146 @@ function sanitizeInlineStyle(style: string): string {
     const decl = raw.trim();
     const idx = decl.indexOf(':');
     if (idx <= 0) continue;
-    const prop = decl.slice(0, idx).trim().toLowerCase();
-    const value = decl.slice(idx + 1).trim();
-    if (!/^[a-z-]+$/.test(prop) || prop.startsWith('--')) continue;
-    if (DANGEROUS_CSS.test(prop) || DANGEROUS_CSS.test(value)) continue;
-    if (prop === 'z-index' || prop === 'content' || prop === 'behavior') continue;
-    if (prop === 'position' && /fixed|absolute|sticky/i.test(value)) continue;
-
-    const ok = urlsAllowed(value);
-    if (ok) kept.push(`${prop}: ${value}`);
+    const kept1 = filterDeclaration(
+      decl.slice(0, idx).trim().toLowerCase(),
+      decl.slice(idx + 1).trim(),
+    );
+    if (kept1) kept.push(kept1);
   }
   return kept.join('; ');
 }
 
-/**
- * <style> blocks are dropped by the sanitizer, which would lose sizing and layout that mail
- * defines in classes (e.g. a small logo). Copy each plain rule onto its matching elements as an
- * inline style first; the inline style then goes through the normal style filter.
- */
-function inlineStyleSheets(html: string): string {
-  if (!/<style[\s>]/i.test(html)) return html;
-  const doc = document.implementation.createHTMLDocument('');
-  doc.documentElement.innerHTML = html;
-  const rules: CSSStyleRule[] = [];
-  for (const style of Array.from(doc.querySelectorAll('style'))) {
-    // A constructed sheet is never attached to a document, so nothing is applied or fetched.
-    const sheet = new CSSStyleSheet();
-    sheet.replaceSync(style.textContent ?? '');
-    for (const rule of Array.from(sheet.cssRules)) {
-      if (rule instanceof CSSStyleRule) rules.push(rule);
-    }
-  }
-  if (rules.length === 0) return html;
-  for (const rule of rules.slice(0, 2000)) {
-    const css = rule.style.cssText;
-    if (!css) continue;
-    let matches: NodeListOf<Element>;
-    try {
-      matches = doc.querySelectorAll(rule.selectorText);
-    } catch {
+const MAX_STYLESHEET_LENGTH = 100_000;
+const MAX_STYLE_RULES = 3_000;
+
+/** Splits a selector list on top-level commas (not those inside parens, brackets or quotes). */
+function splitSelectors(list: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let quote = '';
+  let cur = '';
+  for (const ch of list) {
+    if (quote) {
+      if (ch === quote) quote = '';
+    } else if (ch === '"' || ch === "'") quote = ch;
+    else if (ch === '(' || ch === '[') depth++;
+    else if (ch === ')' || ch === ']') depth = Math.max(0, depth - 1);
+    else if (ch === ',' && depth === 0) {
+      out.push(cur);
+      cur = '';
       continue;
     }
-    for (const el of Array.from(matches)) {
-      const own = el.getAttribute('style');
-      el.setAttribute('style', own ? `${css}; ${own}` : css);
-    }
+    cur += ch;
   }
-  return doc.body.innerHTML;
+  if (cur.trim()) out.push(cur);
+  return out;
+}
+
+/** Confines a selector to the message wrapper; `html`, `body` and `:root` become the wrapper. */
+function scopeSelector(selector: string): string {
+  const sel = selector.trim();
+  if (!sel || /[{}<]/.test(sel)) return '';
+  const root = /^(?:html|body|:root)(?![\w-])/i;
+  let rest = sel;
+  let attached = false;
+  let hadRoot = false;
+  for (let m = root.exec(rest); m; m = root.exec(rest)) {
+    hadRoot = true;
+    rest = rest.slice(m[0].length);
+    attached = !/^\s/.test(rest);
+    rest = rest.trimStart();
+  }
+  if (!hadRoot) return `.mail ${sel}`;
+  if (!rest) return '.mail';
+  return attached && /^[.#:[]/.test(rest) ? `.mail${rest}` : `.mail ${rest}`;
+}
+
+/**
+ * Resolves a media query. Pure colour-scheme queries are decided by the reader theme; anything
+ * else that mentions colour scheme or print is dropped. Returns null to drop the block, '' to
+ * inline its rules, or the condition text to keep wrapped in @media.
+ */
+function resolveMedia(text: string, dark: boolean): string | null {
+  const t = text.trim().toLowerCase();
+  if (/print|url\(|[{}<@\\]/.test(t)) return null;
+  if (t.includes('prefers-color-scheme')) {
+    const m =
+      /^(?:(?:only\s+)?(?:screen|all)\s+and\s+)?\(\s*prefers-color-scheme\s*:\s*(dark|light)\s*\)$/.exec(
+        t,
+      );
+    if (!m) return null;
+    return (m[1] === 'dark') === dark ? '' : null;
+  }
+  return /^[a-z0-9\s:()\-.,/<>=]*$/.test(t) ? t : null;
+}
+
+interface SheetOutput {
+  css: string;
+  supportsDark: boolean;
+}
+
+function collectRules(
+  rules: CSSRuleList,
+  dark: boolean,
+  out: SheetOutput,
+  budget: { rules: number },
+): string {
+  const parts: string[] = [];
+  for (const rule of Array.from(rules)) {
+    if (budget.rules-- <= 0) break;
+    if (rule instanceof CSSStyleRule) {
+      const decls: string[] = [];
+      for (let i = 0; i < rule.style.length; i++) {
+        const prop = rule.style.item(i).toLowerCase();
+        const value = rule.style.getPropertyValue(prop).trim();
+        const kept = filterDeclaration(prop, normalizeCss(value));
+        if (kept) {
+          decls.push(
+            kept + (rule.style.getPropertyPriority(prop) === 'important' ? ' !important' : ''),
+          );
+        }
+      }
+      if (decls.length === 0) continue;
+      const selectors = splitSelectors(rule.selectorText).map(scopeSelector).filter(Boolean);
+      if (selectors.length > 0) parts.push(`${selectors.join(', ')}{${decls.join('; ')}}`);
+    } else if (rule instanceof CSSMediaRule) {
+      const text = rule.media.mediaText;
+      if (/prefers-color-scheme\s*:\s*dark/i.test(text)) out.supportsDark = true;
+      const condition = resolveMedia(text, dark);
+      if (condition === null) continue;
+      const inner = collectRules(rule.cssRules, dark, out, budget);
+      if (!inner) continue;
+      parts.push(condition ? `@media ${condition}{${inner}}` : inner);
+    }
+    // @import, @font-face, @keyframes, @supports and the rest are dropped.
+  }
+  return parts.join('\n');
+}
+
+/**
+ * <style> blocks are removed by the sanitizer. Their rules are re-emitted here through the same
+ * declaration filter as inline styles, scoped to `.mail`, so remote loads, positioning tricks
+ * and @import stay blocked while class-based layout, media queries and dark mode keep working.
+ */
+function sanitizeStyleSheets(html: string, dark: boolean): SheetOutput {
+  const out: SheetOutput = { css: '', supportsDark: false };
+  if (!/<style[\s>]/i.test(html)) return out;
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const budget = { rules: MAX_STYLE_RULES };
+  const sheets: string[] = [];
+  let total = 0;
+  for (const style of Array.from(doc.querySelectorAll('style'))) {
+    const text = style.textContent ?? '';
+    total += text.length;
+    if (total > MAX_STYLESHEET_LENGTH) break;
+    // A constructed sheet is never attached to a document, so nothing is applied or fetched.
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(text);
+    sheets.push(collectRules(sheet.cssRules, dark, out, budget));
+  }
+  // Keep `</style>` and friends from ever being spelled out in the generated sheet.
+  out.css = sheets.filter(Boolean).join('\n').replace(/</g, '\\3c ');
+  return out;
 }
 
 /** Mail often paints its page background on <body>, which the sanitizer discards. */
@@ -326,7 +434,7 @@ export function sanitizeEmailHtml(html: string, opts: SanitizeOptions = {}): San
     pixels: new Set(),
     quotes: new Set(),
   };
-  const body: HTMLElement = p.sanitize(inlineStyleSheets(html), {
+  const body: HTMLElement = p.sanitize(html, {
     ALLOWED_TAGS,
     ALLOWED_ATTR,
     ALLOWED_URI_REGEXP: URI_REGEXP,
@@ -340,8 +448,11 @@ export function sanitizeEmailHtml(html: string, opts: SanitizeOptions = {}): San
   }) as HTMLElement;
   for (const pixel of state.pixels) pixel.remove();
   collapseQuotes(body, state.quotes);
+  const sheets = sanitizeStyleSheets(html, opts.dark === true);
   const result = {
     html: body.innerHTML,
+    css: sheets.css,
+    supportsDark: sheets.supportsDark,
     bodyStyle: extractBodyStyle(html),
     blockedRemoteContent: state.blocked,
   };

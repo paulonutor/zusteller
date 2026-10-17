@@ -3,6 +3,10 @@ export interface SrcDocOptions {
   allowRemoteImages?: boolean;
   /** Sanitized background/color from the message's own <body>. */
   bodyStyle?: string;
+  /** Sanitized, `.mail`-scoped rules from the message's own <style> blocks. */
+  css?: string;
+  /** The message has its own dark rules, so the wrapper follows the reader theme. */
+  supportsDark?: boolean;
 }
 
 export function buildCsp(allowRemoteImages: boolean): string {
@@ -42,17 +46,28 @@ details.zq[open]>.zq-chevron,details.zq[open]>summary .zq-chevron{transform:rota
 details.zq[open]>summary .zq-preview{display:none}
 `;
 
+const DARK_PAGE_CSS = `html{color-scheme:dark}
+.mail{background:#1c1c1e;color:#e8e8ea}
+a{color:#8ab4f8}`;
+
+/**
+ * The message's own page background fills the whole wrapper, so the default padding goes. A
+ * dark-capable message in dark mode is left to its own dark rules over a neutral dark page.
+ */
+function pageCss({ dark, supportsDark, bodyStyle }: SrcDocOptions): string {
+  const darkPage = dark === true && supportsDark === true;
+  const body = darkPage ? '' : (bodyStyle ?? '');
+  return `${darkPage ? DARK_PAGE_CSS : ''}${bodyStyle ? `.mail{${body ? `${body};` : ''}padding:0}` : ''}`;
+}
+
 export function buildSrcDoc(sanitizedHtml: string, opts: SrcDocOptions): string {
-  // The message's own page background fills the whole wrapper, so drop the default padding.
-  const mailAttrs = opts.bodyStyle
-    ? ` style="${opts.bodyStyle.replace(/"/g, '&quot;')};padding:0"`
-    : '';
   const csp = buildCsp(opts.allowRemoteImages === true);
   return `<!doctype html>
 <html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="${csp}">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<style>${BASE_CSS}</style></head>
-<body><div class="mail"${mailAttrs}>${sanitizedHtml}</div></body></html>`;
+<style>${BASE_CSS}${pageCss(opts)}</style>
+<style>${opts.css ?? ''}</style></head>
+<body><div class="mail">${sanitizedHtml}</div></body></html>`;
 }

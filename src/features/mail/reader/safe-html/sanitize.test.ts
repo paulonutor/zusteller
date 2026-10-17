@@ -156,18 +156,60 @@ describe('links', () => {
 });
 
 describe('style sheets', () => {
-  it('inlines class rules from <style> so sizing survives', () => {
-    const r = clean(
-      '<style>.logo{width:32px;height:auto}</style><img class="logo" src="cid:l"><p class="x">hi</p>',
+  const css = (html: string, dark = false) =>
+    sanitizeEmailHtml(html, { allowRemoteImages: true, dark });
+
+  it('keeps class rules, scoped to the wrapper, and the class attributes they match', () => {
+    const r = css(
+      '<style>.logo{width:32px}h1,.a>b{color:red!important}</style><img class="logo" src="cid:l">',
     );
-    expect(r.html).toMatch(/<img[^>]*style="width: 32px/);
+    expect(r.html).toContain('class="logo"');
     expect(r.html).not.toContain('<style');
+    expect(r.css).toContain('.mail .logo{width: 32px}');
+    expect(r.css).toContain('.mail h1, .mail .a>b{color: red !important}');
   });
 
-  it('filters hostile declarations coming from <style>', () => {
-    const r = clean('<style>p{background:url(https://evil.test/x.png);color:red}</style><p>hi</p>');
-    expect(r.html).not.toContain('evil.test');
-    expect(r.html).toContain('color: red');
+  it('maps html, body and :root onto the wrapper', () => {
+    const r = css(
+      '<style>:root{color:#111}body{width:100%}body.x p{margin:0}html body{top:0}</style><p>x</p>',
+    );
+    expect(r.css).toContain('.mail{color: rgb(17, 17, 17)}');
+    expect(r.css).toContain('.mail{width: 100%');
+    expect(r.css).toContain('.mail.x p{margin-top: 0px');
+    expect(r.css).not.toMatch(/(?:^|[ ,{])(?:body|html)\b/);
+  });
+
+  it('filters hostile declarations and at-rules coming from <style>', () => {
+    const r = sanitizeEmailHtml(
+      '<style>@import url(https://evil.test/a.css);@font-face{font-family:x;src:url(https://evil.test/f.woff)}p{background:url(https://evil.test/x.png);color:red;position:fixed;z-index:9}</style><p>x</p>',
+    );
+    expect(r.css).not.toMatch(/evil|import|font-face|fixed|z-index/);
+    expect(r.css).toContain('color: red');
+  });
+
+  it('blocks remote url() in style sheets when remote images are off', () => {
+    const r = sanitizeEmailHtml('<style>p{background:url(https://t.test/x.png)}</style><p>x</p>');
+    expect(r.css).not.toContain('t.test');
+    expect(r.blockedRemoteContent).toBe(true);
+  });
+
+  it('cannot break out of the generated <style> element', () => {
+    const r = css(
+      '<style>p::after{font-family:"</style><script>alert(1)</script>"}</style><p>x</p>',
+    );
+    expect(r.css).not.toContain('<');
+  });
+
+  it('resolves prefers-color-scheme from the reader theme and flags dark support', () => {
+    const html =
+      '<style>p{color:#111}@media (prefers-color-scheme: dark){p{color:#eee}}@media (max-width:480px){p{color:red}}</style><p>x</p>';
+    const light = css(html, false);
+    const dark = css(html, true);
+    expect(light.supportsDark).toBe(true);
+    expect(light.css).not.toContain('238');
+    expect(light.css).toContain('@media (max-width:480px)');
+    expect(dark.css).toContain('.mail p{color: rgb(238, 238, 238)}');
+    expect(css('<style>p{color:red}</style>').supportsDark).toBe(false);
   });
 });
 
