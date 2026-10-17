@@ -122,6 +122,17 @@ describe('remote content blocking', () => {
     expect(r.blockedRemoteContent).toBe(false);
   });
 
+  it('upgrades http and protocol-relative images to https when allowed', () => {
+    const r = clean(
+      '<img src="http://cdn.test/a.png"><img src="//cdn.test/b.png" srcset="//cdn.test/b2.png 2x, http://cdn.test/b3.png 3x">',
+      true,
+    );
+    expect(r.html).toContain('src="https://cdn.test/a.png"');
+    expect(r.html).toContain('src="https://cdn.test/b.png"');
+    expect(r.html).toContain('srcset="https://cdn.test/b2.png 2x, https://cdn.test/b3.png 3x"');
+    expect(r.html).not.toMatch(/"http:|"\/\//);
+  });
+
   it('still drops javascript urls when remote images are allowed', () => {
     const r = clean(
       '<p style="background:url(javascript:alert(1))">x</p><img src="javascript:alert(1)">',

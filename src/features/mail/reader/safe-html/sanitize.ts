@@ -116,6 +116,10 @@ function isTinyDimension(value: string | null): boolean {
   return !Number.isNaN(n) && n <= 1;
 }
 
+function toHttps(url: string): string {
+  return url.replace(/^(?:https?:)?\/\//i, 'https://');
+}
+
 function handleImage(img: Element) {
   const src = (img.getAttribute('src') ?? '').trim();
   if (src) {
@@ -126,10 +130,13 @@ function handleImage(img: Element) {
         /(?:^|;)\s*(?:width|height)\s*:\s*[01](?:px)?\s*(?:;|$)/i.test(
           img.getAttribute('style') ?? '',
         );
-      if (!state.allowRemote || /^\/\//.test(src)) {
+      if (!state.allowRemote) {
         state.blocked = true;
         img.removeAttribute('src');
         if (isPixel) state.pixels.add(img);
+      } else {
+        // The CSP only allows https images, so upgrade http: and protocol-relative URLs.
+        img.setAttribute('src', toHttps(src));
       }
     } else if (!/^cid:/i.test(src) && !RASTER_DATA_URI.test(src)) {
       img.removeAttribute('src');
@@ -141,8 +148,13 @@ function handleImage(img: Element) {
       .split(',')
       .map((c) => c.trim().split(/\s+/)[0] ?? '')
       .filter(Boolean);
-    const ok = state.allowRemote && urls.length > 0 && urls.every((u) => /^https?:\/\//i.test(u));
-    if (!ok) {
+    const ok = state.allowRemote && urls.length > 0 && urls.every((u) => REMOTE_URL.test(u));
+    if (ok) {
+      img.setAttribute(
+        'srcset',
+        srcset.replace(/(^|,)(\s*)(\S+)/g, (_m, sep, ws, u) => sep + ws + toHttps(u)),
+      );
+    } else {
       if (urls.some((u) => REMOTE_URL.test(u))) state.blocked = true;
       img.removeAttribute('srcset');
     }
