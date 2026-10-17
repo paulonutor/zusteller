@@ -29,7 +29,6 @@ body{margin:0;padding:0;height:auto;overflow-x:hidden;
   background:#fff;color:#1f2328}
 img,table,video{max-width:100%}
 table,video,img:is(:not([height]),[width]){height:auto}
-table{border-collapse:collapse}
 pre{white-space:pre-wrap;overflow-wrap:anywhere}
 a{color:#1a5fb4;text-decoration:underline;cursor:pointer}
 blockquote{margin:0 0 0 .5em;padding-left:.8em;border-left:3px solid #c8ccd2}
