@@ -7,6 +7,8 @@ export interface SanitizeOptions {
 
 export interface SanitizeResult {
   html: string;
+  /** Sanitized inline style of the message's own <body>, applied to the wrapper by the frame. */
+  bodyStyle: string;
   blockedRemoteContent: boolean;
 }
 
@@ -299,6 +301,23 @@ function inlineStyleSheets(html: string): string {
   return doc.body.innerHTML;
 }
 
+/** Mail often paints its page background on <body>, which the sanitizer discards. */
+function extractBodyStyle(html: string): string {
+  if (!/<body[\s>]/i.test(html)) return '';
+  const body = new DOMParser().parseFromString(html, 'text/html').body;
+  const parts: string[] = [];
+  const bg = (body.getAttribute('bgcolor') ?? '').trim();
+  if (/^#?[0-9a-z]{3,20}$/i.test(bg))
+    parts.push(`background-color: ${/^[0-9a-f]{6}$/i.test(bg) ? `#${bg}` : bg}`);
+  const own = sanitizeInlineStyle(body.getAttribute('style') ?? '');
+  if (own) parts.push(own);
+  return sanitizeInlineStyle(parts.join(';'))
+    .split(';')
+    .map((d) => d.trim())
+    .filter((d) => /^(?:background(?:-color)?|color)\s*:/i.test(d))
+    .join('; ');
+}
+
 export function sanitizeEmailHtml(html: string, opts: SanitizeOptions = {}): SanitizeResult {
   const p = getPurify();
   state = {
@@ -321,7 +340,11 @@ export function sanitizeEmailHtml(html: string, opts: SanitizeOptions = {}): San
   }) as HTMLElement;
   for (const pixel of state.pixels) pixel.remove();
   collapseQuotes(body, state.quotes);
-  const result = { html: body.innerHTML, blockedRemoteContent: state.blocked };
+  const result = {
+    html: body.innerHTML,
+    bodyStyle: extractBodyStyle(html),
+    blockedRemoteContent: state.blocked,
+  };
   state = { allowRemote: false, blocked: false, pixels: new Set(), quotes: new Set() };
   return result;
 }

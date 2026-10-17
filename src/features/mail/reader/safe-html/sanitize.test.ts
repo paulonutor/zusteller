@@ -170,3 +170,18 @@ describe('style sheets', () => {
     expect(r.html).toContain('color: red');
   });
 });
+
+describe('body style', () => {
+  it('keeps the message page background and colour, nothing else', () => {
+    const r = clean(
+      '<html><body bgcolor="eeeeee" style="margin:0;background:#f5f5f5;color:#111;position:fixed"><p>x</p></body></html>',
+    );
+    expect(r.bodyStyle).toContain('background: #f5f5f5');
+    expect(r.bodyStyle).toContain('color: #111');
+    expect(r.bodyStyle).not.toMatch(/margin|position/);
+  });
+
+  it('is empty without a body style', () => {
+    expect(clean('<p>x</p>').bodyStyle).toBe('');
+  });
+});

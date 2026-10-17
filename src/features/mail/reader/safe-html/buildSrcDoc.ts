@@ -1,6 +1,8 @@
 export interface SrcDocOptions {
   dark: boolean;
   allowRemoteImages?: boolean;
+  /** Sanitized background/color from the message's own <body>. */
+  bodyStyle?: string;
 }
 
 export function buildCsp(allowRemoteImages: boolean): string {
@@ -41,6 +43,10 @@ details.zq[open]>summary .zq-preview{display:none}
 `;
 
 export function buildSrcDoc(sanitizedHtml: string, opts: SrcDocOptions): string {
+  // The message's own page background fills the whole wrapper, so drop the default padding.
+  const mailAttrs = opts.bodyStyle
+    ? ` style="${opts.bodyStyle.replace(/"/g, '&quot;')};padding:0"`
+    : '';
   const csp = buildCsp(opts.allowRemoteImages === true);
   return `<!doctype html>
 <html><head><meta charset="utf-8">
@@ -48,5 +54,5 @@ export function buildSrcDoc(sanitizedHtml: string, opts: SrcDocOptions): string 
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <style>${BASE_CSS}</style></head>
-<body><div class="mail">${sanitizedHtml}</div></body></html>`;
+<body><div class="mail"${mailAttrs}>${sanitizedHtml}</div></body></html>`;
 }
