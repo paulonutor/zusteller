@@ -409,7 +409,7 @@ function sanitizeStyleSheets(html: string, dark: boolean): SheetOutput {
   return out;
 }
 
-/** Mail often paints its page background on <body>, which the sanitizer discards. */
+/** Mail often sets its page background and base font on <body>, which the sanitizer discards. */
 function extractBodyStyle(html: string): string {
   if (!/<body[\s>]/i.test(html)) return '';
   const body = new DOMParser().parseFromString(html, 'text/html').body;
@@ -422,7 +422,11 @@ function extractBodyStyle(html: string): string {
   return sanitizeInlineStyle(parts.join(';'))
     .split(';')
     .map((d) => d.trim())
-    .filter((d) => /^(?:background(?:-color)?|color)\s*:/i.test(d))
+    .filter((d) =>
+      /^(?:background(?:-color)?|color|font(?:-family|-size|-style|-weight)?|line-height|letter-spacing|text-align)\s*:/i.test(
+        d,
+      ),
+    )
     .join('; ');
 }
 

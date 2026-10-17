@@ -216,10 +216,11 @@ describe('style sheets', () => {
 describe('body style', () => {
   it('keeps the message page background and colour, nothing else', () => {
     const r = clean(
-      '<html><body bgcolor="eeeeee" style="margin:0;background:#f5f5f5;color:#111;position:fixed"><p>x</p></body></html>',
+      '<html><body bgcolor="eeeeee" style="margin:0;background:#f5f5f5;color:#111;position:fixed;font-family:Helvetica;font-size:15px"><p>x</p></body></html>',
     );
     expect(r.bodyStyle).toContain('background: #f5f5f5');
     expect(r.bodyStyle).toContain('color: #111');
+    expect(r.bodyStyle).toContain('font-size: 15px');
     expect(r.bodyStyle).not.toMatch(/margin|position/);
   });
 

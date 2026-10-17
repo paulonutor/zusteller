@@ -56,7 +56,11 @@ a{color:#8ab4f8}`;
  */
 function pageCss({ dark, supportsDark, bodyStyle }: SrcDocOptions): string {
   const darkPage = dark === true && supportsDark === true;
-  const body = darkPage ? '' : (bodyStyle ?? '');
+  const body = (bodyStyle ?? '')
+    .split(';')
+    .map((d) => d.trim())
+    .filter((d) => d && !(darkPage && /^(?:background|color)/i.test(d)))
+    .join('; ');
   return `${darkPage ? DARK_PAGE_CSS : ''}${bodyStyle ? `.mail{${body ? `${body};` : ''}padding:0}` : ''}`;
 }
 
