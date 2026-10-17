@@ -18,7 +18,7 @@ const BASE_CSS = `
 html{margin:0;padding:0;overflow-x:hidden;color-scheme:light}
 body{margin:0;padding:0;height:auto;overflow-x:hidden;
   font:13.5px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
-  color:#1f2328;background:transparent;overflow-wrap:anywhere;word-break:break-word}
+  color:#1f2328;background:transparent;overflow-wrap:break-word}
 .mail{box-sizing:border-box;max-width:100%;overflow-x:auto;overflow-y:hidden;padding:12px;
   background:#fff;color:#1f2328}
 img,table,video{max-width:100%}
