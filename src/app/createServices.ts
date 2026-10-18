@@ -27,7 +27,7 @@ function withBigSeed(seed: SeedData, n: number): SeedData {
 /**
  * Composition root. Swapping MockMailService for a real provider happens here
  * (and only here). Mock calls are immediate by default; simulate delays with ?latency=150.
- * Other flags: ?gmail=1 (Gmail-like latency, quota, stubs, search), ?offline=1, ?seed=big[:N] (dev builds only), ?newmail=<seconds>.
+ * Other flags: ?gmail=0 (plain mock; Gmail-like latency, quota, stubs and search are the default), ?offline=1, ?seed=big[:N] (dev builds only), ?newmail=<seconds>.
  */
 export function createServices(search = window.location.search): Services {
   const params = new URLSearchParams(search);
@@ -44,7 +44,8 @@ export function createServices(search = window.location.search): Services {
     seed = withBigSeed(seed, Number(big.split(':')[1]) || 3000);
   const mail = new MockMailService(seed, {
     latency: Number.isFinite(latency) ? Math.max(0, latency) : 0,
-    gmail: params.get('gmail') === '1',
+    // Gmail-like by default; ?gmail=0 or an explicit ?latency= (tests, screenshots) keeps it plain.
+    gmail: params.has('gmail') ? params.get('gmail') === '1' : !params.has('latency'),
   });
   if (params.get('offline') === '1') mail.setOffline(true);
   // Demo: ?newmail=5 delivers a new message every 5 seconds (exercises the arrival animation).

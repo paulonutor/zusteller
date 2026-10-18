@@ -3,7 +3,7 @@ import { createServices } from './createServices';
 
 // Exercise actual mail calls: normal sessions must not schedule simulated service delays.
 describe('mock app latency', () => {
-  it.each(['', '?latency=invalid', '?latency=-100'])(
+  it.each(['?latency=invalid', '?latency=-100', '?gmail=0'])(
     'does not delay actions for %s',
     async (search) => {
       const timer = vi.spyOn(globalThis, 'setTimeout');
@@ -20,6 +20,12 @@ describe('mock app latency', () => {
       }
     },
   );
+
+  it('behaves like Gmail by default, and plain with ?gmail=0 or ?latency=', () => {
+    expect(createServices('').mail.getThreadSummary).toBeDefined();
+    expect(createServices('?gmail=0').mail.getThreadSummary).toBeUndefined();
+    expect(createServices('?latency=0').mail.getThreadSummary).toBeUndefined();
+  });
 
   it('keeps explicit latency available for slow-provider testing', async () => {
     vi.useFakeTimers();

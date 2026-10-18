@@ -241,7 +241,7 @@ describe('bad environment', () => {
     ['?latency=NaN'],
     ['?latency=Infinity'],
     ['?skin=zzz&latency=0'],
-    ['?seed=nonsense&theme=banana'],
+    ['?seed=nonsense&theme=banana&latency=0'],
     ['?offline=maybe&latency=0'],
   ])(
     'createServices(%s) falls back to a working service',
