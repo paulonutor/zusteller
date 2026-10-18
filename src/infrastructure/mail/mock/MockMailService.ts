@@ -17,6 +17,14 @@ import {
   type ThreadQuery,
   type ThreadSummary,
 } from '@/domain/mail';
+import {
+  GMAIL_MAX_BATCH_IDS,
+  GMAIL_MAX_PAGE_SIZE,
+  GmailBehavior,
+  QUOTA_COST,
+  gmailSearch,
+  type GmailBehaviorOptions,
+} from './gmailBehavior';
 import type { SeedData } from './seed';
 
 export type MockLatency = number | { min: number; max: number };
@@ -26,6 +34,12 @@ export type MockMailOptions = {
   latency?: MockLatency;
   /** Seed for the latency jitter PRNG so runs are reproducible. */
   seed?: number;
+  /**
+   * Behave like the real Gmail API: realistic latency, quota (429), transient 5xx, page/batch
+   * limits, list stubs hydrated by `getThreadSummary`, Gmail search syntax and index lag.
+   * Off by default so tests stay deterministic.
+   */
+  gmail?: boolean | GmailBehaviorOptions;
 };
 
 type MethodName = keyof MailService;
@@ -68,6 +82,11 @@ export class MockMailService implements MailService {
   private rand: () => number;
   private offline = false;
   private pendingFailures: { method?: MethodName; remaining: number }[] = [];
+  private gmail?: GmailBehavior;
+  /** Thread id -> delivery time, for the search index lag. */
+  private arrivedAt = new Map<ID, number>();
+  /** Present only with `gmail` behaviour: list results are stubs until this fills them in. */
+  getThreadSummary?: (accountId: ID, threadId: ID) => Promise<ThreadSummary>;
 
   constructor(seed: SeedData, options: MockMailOptions = {}) {
     const data = clone(seed);
@@ -83,6 +102,18 @@ export class MockMailService implements MailService {
     }
     this.latency = options.latency ?? 150;
     this.rand = mulberry32(options.seed ?? 1);
+    if (options.gmail) {
+      this.gmail = new GmailBehavior(options.gmail === true ? {} : options.gmail, this.rand);
+      this.getThreadSummary = (accountId, threadId) =>
+        this.run(
+          'getThreadSummary',
+          () => {
+            this.requireAccount(accountId);
+            return clone(this.summarize(this.requireThread(accountId, threadId)));
+          },
+          QUOTA_COST.threadsGet,
+        );
+    }
   }
 
   // ---- test / dev controls (not part of MailService) -------------------
@@ -119,6 +150,7 @@ export class MockMailService implements MailService {
         attachments: [],
       },
     ]);
+    this.arrivedAt.set(threadId, this.gmail?.now() ?? Date.now());
     this.listeners.forEach((l) => l());
     return threadId;
   }
@@ -137,89 +169,116 @@ export class MockMailService implements MailService {
   // ---- reads -----------------------------------------------------------
 
   getAccounts() {
-    return this.run('getAccounts', () => clone(this.accounts));
+    return this.run('getAccounts', () => clone(this.accounts), QUOTA_COST.profile);
   }
 
   getLabels(accountId: ID) {
-    return this.run('getLabels', () => {
-      this.requireAccount(accountId);
-      return clone(this.labels.filter((l) => l.accountId === accountId));
-    });
+    return this.run(
+      'getLabels',
+      () => {
+        this.requireAccount(accountId);
+        return clone(this.labels.filter((l) => l.accountId === accountId));
+      },
+      QUOTA_COST.labelsList,
+    );
   }
 
   getMailboxCounts(accountId: ID) {
-    return this.run('getMailboxCounts', (): MailboxCounts => {
-      this.requireAccount(accountId);
-      const mailboxes: Record<SystemMailbox, number> = {
-        inbox: 0,
-        starred: 0,
-        sent: 0,
-        junk: 0,
-        trash: 0,
-        all: 0,
-      };
-      const labels: Record<ID, number> = {};
-      for (const l of this.labels) if (l.type === 'user') labels[l.id] = 0;
-      for (const list of this.messages.values()) {
-        const s = this.summarize(list);
-        if (s.accountId !== accountId || s.isRead) continue;
-        for (const box of Object.keys(mailboxes) as SystemMailbox[]) {
-          if (inMailbox(s, box)) mailboxes[box]++;
+    return this.run(
+      'getMailboxCounts',
+      (): MailboxCounts => {
+        this.requireAccount(accountId);
+        const mailboxes: Record<SystemMailbox, number> = {
+          inbox: 0,
+          starred: 0,
+          sent: 0,
+          junk: 0,
+          trash: 0,
+          all: 0,
+        };
+        const labels: Record<ID, number> = {};
+        for (const l of this.labels) if (l.type === 'user') labels[l.id] = 0;
+        for (const list of this.messages.values()) {
+          const s = this.summarize(list);
+          if (s.accountId !== accountId || s.isRead) continue;
+          for (const box of Object.keys(mailboxes) as SystemMailbox[]) {
+            if (inMailbox(s, box)) mailboxes[box]++;
+          }
+          if (!s.labelIds.includes(SYSTEM_LABEL.trash) && !s.labelIds.includes(SYSTEM_LABEL.junk)) {
+            for (const id of s.labelIds) if (id in labels) labels[id] = (labels[id] ?? 0) + 1;
+          }
         }
-        if (!s.labelIds.includes(SYSTEM_LABEL.trash) && !s.labelIds.includes(SYSTEM_LABEL.junk)) {
-          for (const id of s.labelIds) if (id in labels) labels[id] = (labels[id] ?? 0) + 1;
-        }
-      }
-      return { mailboxes, labels };
-    });
+        return { mailboxes, labels };
+      },
+      QUOTA_COST.labelGet * this.labels.length,
+    );
   }
 
   getThreads(query: ThreadQuery) {
-    return this.run('getThreads', (): Page<ThreadSummary> => {
-      this.requireAccount(query.accountId);
-      const limit = Math.max(1, Math.min(query.limit ?? DEFAULT_LIMIT, 200));
-      const terms = (query.search ?? '').toLowerCase().split(/\s+/).filter(Boolean);
-      const mailbox = query.mailbox ?? (query.labelId ? undefined : 'inbox');
+    return this.run(
+      'getThreads',
+      (): Page<ThreadSummary> => {
+        this.requireAccount(query.accountId);
+        const limit = Math.max(
+          1,
+          Math.min(query.limit ?? DEFAULT_LIMIT, this.gmail ? GMAIL_MAX_PAGE_SIZE : 200),
+        );
+        const terms = (query.search ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+        const gmailMatch =
+          this.gmail && terms.length ? gmailSearch(query.search!, this.labels) : undefined;
+        const mailbox = query.mailbox ?? (query.labelId ? undefined : 'inbox');
 
-      let matches: { summary: ThreadSummary; list: Message[] }[] = [];
-      for (const list of this.messages.values()) {
-        const summary = this.summarize(list);
-        if (summary.accountId !== query.accountId) continue;
-        if (mailbox && !inMailbox(summary, mailbox)) continue;
-        if (query.labelId) {
-          const hidden =
-            (summary.labelIds.includes(SYSTEM_LABEL.trash) &&
-              query.labelId !== SYSTEM_LABEL.trash) ||
-            (summary.labelIds.includes(SYSTEM_LABEL.junk) && query.labelId !== SYSTEM_LABEL.junk);
-          if (hidden) continue;
-          if (!summary.labelIds.includes(query.labelId)) continue;
+        let matches: { summary: ThreadSummary; list: Message[] }[] = [];
+        for (const list of this.messages.values()) {
+          const summary = this.summarize(list);
+          if (summary.accountId !== query.accountId) continue;
+          if (mailbox && !inMailbox(summary, mailbox)) continue;
+          if (query.labelId) {
+            const hidden =
+              (summary.labelIds.includes(SYSTEM_LABEL.trash) &&
+                query.labelId !== SYSTEM_LABEL.trash) ||
+              (summary.labelIds.includes(SYSTEM_LABEL.junk) && query.labelId !== SYSTEM_LABEL.junk);
+            if (hidden) continue;
+            if (!summary.labelIds.includes(query.labelId)) continue;
+          }
+          if (gmailMatch) {
+            // Gmail's search index trails delivery, so brand-new mail is not searchable yet.
+            const arrived = this.arrivedAt.get(summary.id);
+            if (arrived !== undefined && this.gmail!.now() - arrived < this.gmail!.searchIndexLagMs)
+              continue;
+            if (!gmailMatch(list)) continue;
+          } else if (terms.length && !this.matchesSearch(list, terms)) continue;
+          matches.push({ summary, list });
         }
-        if (terms.length && !this.matchesSearch(list, terms)) continue;
-        matches.push({ summary, list });
-      }
 
-      // Total order: newest first, ties broken by id. Keyset cursor on that order means
-      // mutations between pages can neither duplicate nor skip rows.
-      matches.sort((a, b) => cmp(a.summary, b.summary));
-      if (query.cursor) {
-        const c = decodeCursor(query.cursor);
-        matches = matches.filter((m) => cmp(m.summary, c) > 0);
-      }
-      const items = matches.slice(0, limit).map((m) => m.summary);
-      const last = items[items.length - 1];
-      return {
-        items: clone(items),
-        nextCursor: matches.length > limit && last ? encodeCursor(last) : undefined,
-      };
-    });
+        // Total order: newest first, ties broken by id. Keyset cursor on that order means
+        // mutations between pages can neither duplicate nor skip rows.
+        matches.sort((a, b) => cmp(a.summary, b.summary));
+        if (query.cursor) {
+          const c = decodeCursor(query.cursor);
+          matches = matches.filter((m) => cmp(m.summary, c) > 0);
+        }
+        const items = matches.slice(0, limit).map((m) => m.summary);
+        const last = items[items.length - 1];
+        return {
+          items: clone(this.gmail ? items.map(stub) : items),
+          nextCursor: matches.length > limit && last ? encodeCursor(last) : undefined,
+        };
+      },
+      QUOTA_COST.threadsList,
+    );
   }
 
   getThread(accountId: ID, threadId: ID) {
-    return this.run('getThread', (): Thread => {
-      this.requireAccount(accountId);
-      const list = this.requireThread(accountId, threadId);
-      return clone({ ...this.summarize(list), messages: list });
-    });
+    return this.run(
+      'getThread',
+      (): Thread => {
+        this.requireAccount(accountId);
+        const list = this.requireThread(accountId, threadId);
+        return clone({ ...this.summarize(list), messages: list });
+      },
+      QUOTA_COST.threadsGet,
+    );
   }
 
   // ---- mutations -------------------------------------------------------
@@ -272,19 +331,25 @@ export class MockMailService implements MailService {
   }
 
   deleteForever(accountId: ID, threadIds: ID[]) {
-    return this.run('deleteForever', () => {
-      this.requireAccount(accountId);
-      // Validate everything first so a bad id cannot leave a half-applied batch.
-      const lists = threadIds.map((id) => this.requireThread(accountId, id));
-      for (const list of lists) {
-        const binned = list.some(
-          (m) => m.labelIds.includes(SYSTEM_LABEL.junk) || m.labelIds.includes(SYSTEM_LABEL.trash),
-        );
-        if (!binned)
-          throw new MailServiceError('invalid', 'Only threads in Junk or Trash can be deleted.');
-      }
-      for (const id of threadIds) this.messages.delete(id);
-    });
+    return this.run(
+      'deleteForever',
+      () => {
+        this.requireAccount(accountId);
+        this.requireBatchSize(threadIds);
+        // Validate everything first so a bad id cannot leave a half-applied batch.
+        const lists = threadIds.map((id) => this.requireThread(accountId, id));
+        for (const list of lists) {
+          const binned = list.some(
+            (m) =>
+              m.labelIds.includes(SYSTEM_LABEL.junk) || m.labelIds.includes(SYSTEM_LABEL.trash),
+          );
+          if (!binned)
+            throw new MailServiceError('invalid', 'Only threads in Junk or Trash can be deleted.');
+        }
+        for (const id of threadIds) this.messages.delete(id);
+      },
+      QUOTA_COST.threadsDelete * threadIds.length,
+    );
   }
 
   addLabel(accountId: ID, threadIds: ID[], labelId: ID) {
@@ -322,9 +387,10 @@ export class MockMailService implements MailService {
 
   // ---- internals -------------------------------------------------------
 
-  private async run<T>(method: MethodName, fn: () => T): Promise<T> {
-    await this.delay();
+  private async run<T>(method: string, fn: () => T, units = 0): Promise<T> {
+    await this.delay(method);
     this.maybeFail(method);
+    this.gmail?.charge(units);
     return fn();
   }
 
@@ -335,22 +401,31 @@ export class MockMailService implements MailService {
     apply: (m: Message) => void,
     validate?: () => void,
   ): Promise<void> {
-    return this.run(method, () => {
-      this.requireAccount(accountId);
-      validate?.();
-      // Validate everything first so a bad id cannot leave a half-applied batch.
-      const lists = threadIds.map((id) => this.requireThread(accountId, id));
-      for (const list of lists) for (const m of list) apply(m);
-    });
+    return this.run(
+      method,
+      () => {
+        this.requireAccount(accountId);
+        this.requireBatchSize(threadIds);
+        validate?.();
+        // Validate everything first so a bad id cannot leave a half-applied batch.
+        const lists = threadIds.map((id) => this.requireThread(accountId, id));
+        for (const list of lists) for (const m of list) apply(m);
+      },
+      QUOTA_COST.threadsModify * threadIds.length,
+    );
   }
 
-  private async delay() {
+  private async delay(method: string) {
     const l = this.latency;
-    const ms = typeof l === 'number' ? l : l.min + this.rand() * (l.max - l.min);
+    const ms = this.gmail
+      ? this.gmail.latency(this.isMutation(method) ? 'mutate' : method)
+      : typeof l === 'number'
+        ? l
+        : l.min + this.rand() * (l.max - l.min);
     if (ms > 0) await new Promise((r) => setTimeout(r, ms));
   }
 
-  private maybeFail(method: MethodName) {
+  private maybeFail(method: string) {
     if (this.offline) throw new MailServiceError('offline', 'You appear to be offline.');
     const i = this.pendingFailures.findIndex((f) => !f.method || f.method === method);
     const f = this.pendingFailures[i];
@@ -360,9 +435,18 @@ export class MockMailService implements MailService {
     }
   }
 
+  private isMutation(method: string) {
+    return !method.startsWith('get');
+  }
+
   private requireAccount(id: ID) {
     if (!this.accounts.some((a) => a.id === id))
       throw new MailServiceError('not_found', `Unknown account ${id}`);
+  }
+
+  private requireBatchSize(ids: ID[]) {
+    if (this.gmail && ids.length > GMAIL_MAX_BATCH_IDS)
+      throw new MailServiceError('invalid', `At most ${GMAIL_MAX_BATCH_IDS} ids per request.`);
   }
 
   private requireThread(accountId: ID, threadId: ID): Message[] {
@@ -429,6 +513,22 @@ export class MockMailService implements MailService {
     };
   }
 }
+
+/** threads.list returns membership only; subject, senders and dates need a threads.get. */
+const stub = (s: ThreadSummary): ThreadSummary => ({
+  id: s.id,
+  accountId: s.accountId,
+  subject: '',
+  participants: [],
+  snippet: s.snippet,
+  messageCount: 1,
+  lastMessageAt: s.lastMessageAt,
+  isRead: s.isRead,
+  isStarred: s.isStarred,
+  labelIds: s.labelIds,
+  hasAttachments: false,
+  metadataPending: true,
+});
 
 const addr = (a: Address) => `${a.name ?? ''} ${a.email}`;
 

@@ -126,7 +126,7 @@ export interface MailService {
   removeLabel(accountId: ID, threadIds: ID[], labelId: ID): Promise<void>;
 }
 
-export type MailErrorCode = 'offline' | 'simulated' | 'not_found' | 'invalid';
+export type MailErrorCode = 'offline' | 'simulated' | 'not_found' | 'invalid' | 'rate_limit';
 
 export class MailServiceError extends Error {
   readonly code: MailErrorCode;
