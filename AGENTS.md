@@ -102,7 +102,7 @@ tests/            integration tests (full app against the mock)  tests-visual/ P
 scripts/          screenshots, a11y audit, capture-states, measure-host.sh
 src-tauri/        Tauri host (Rust), sibling of the Vite app like `create-tauri-app`
 .github/workflows/ frontend.yml, tauri.yml, update-visual-baselines.yml
-docs/             architecture.md, host-decision.md, mac-test-runbook.md, previews/
+docs/             architecture.md, mock-gmail-behavior.md, host-decision.md, mac-test-runbook.md, previews/
 ```
 
 ## Conventions

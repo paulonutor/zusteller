@@ -1,7 +1,7 @@
 import { MailServiceError, type Label, type Message } from '@/domain/mail';
 
 /**
- * Opt-in "behaves like Gmail" profile for MockMailService. It models the parts of the real API
+ * Optional "behaves like Gmail" profile (default in app sessions, see docs/mock-gmail-behavior.md) for MockMailService. It models the parts of the real API
  * that shape the UI: per-call latency, the per-user quota (429 + Retry-After), transient 5xx,
  * page and batch limits, list stubs that need a follow-up fetch, search syntax and index lag.
  * Everything random comes from the mock's seeded PRNG, so runs stay reproducible.
