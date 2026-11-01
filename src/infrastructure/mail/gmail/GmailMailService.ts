@@ -126,7 +126,7 @@ export class GmailMailService implements MailService, MailConnection {
     try {
       while (this.summaryQueue.length) {
         const accountId = this.summaryQueue[0]!.accountId;
-        const queued = this.summaryQueue.filter((p) => p.accountId === accountId).slice(0, 4);
+        const queued = this.summaryQueue.filter((p) => p.accountId === accountId).slice(0, 2);
         this.summaryQueue = this.summaryQueue.filter((p) => !queued.includes(p));
         const batch = queued.filter((p) => !p.signal?.aborted);
         if (!batch.length) continue;

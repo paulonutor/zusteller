@@ -81,7 +81,7 @@ describe('Gmail desktop adapter', () => {
     expect(mail.localPreview).toBe(true);
   });
 
-  it('batches visible headers in groups of four and skips rows that left the viewport', async () => {
+  it('batches visible headers in groups of two and skips rows that left the viewport', async () => {
     vi.useFakeTimers();
     const invoke = vi.fn(async (_command, args) => {
       const ids = (args?.input as { threadIds: string[] }).threadIds;
@@ -102,12 +102,22 @@ describe('Gmail desktop adapter', () => {
       {
         operation: 'summaries',
         accountId: account.id,
-        input: { threadIds: ['t0', 't1', 't2', 't3'] },
+        input: { threadIds: ['t0', 't1'] },
       },
       {
         operation: 'summaries',
         accountId: account.id,
-        input: { threadIds: ['t4', 't5', 't6', 't7'] },
+        input: { threadIds: ['t2', 't3'] },
+      },
+      {
+        operation: 'summaries',
+        accountId: account.id,
+        input: { threadIds: ['t4', 't5'] },
+      },
+      {
+        operation: 'summaries',
+        accountId: account.id,
+        input: { threadIds: ['t6', 't7'] },
       },
     ]);
   });

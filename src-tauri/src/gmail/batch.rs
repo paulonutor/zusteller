@@ -4,9 +4,9 @@ use reqwest::blocking::Client;
 use serde_json::Value;
 use std::{io::Read as _, time::Instant};
 
-// Four thread reads cost 160 units. Even a full authentication retry fits
-// the 400-unit burst while preserving 80 units for interactive reads.
-pub const METADATA_LIMIT: usize = 4;
+// Payload structure is needed for attachment indicators, so even field-masked
+// row reads use format=full. Two reads and an auth retry leave two opens reserved.
+pub const METADATA_LIMIT: usize = 2;
 pub const LABEL_LIMIT: usize = 50;
 const MAX_RESPONSE: u64 = 24 * 1024 * 1024;
 
@@ -35,20 +35,24 @@ pub fn request(
     token: &str,
     reads: &[Read],
 ) -> Result<Vec<Result<Value>>> {
-    let cost: f64 = reads.iter().map(|r| quota::cost(&r.path)).sum();
-    if reads.is_empty() || reads.len() > LABEL_LIMIT || cost > 400.0 {
+    let cost: f64 = reads
+        .iter()
+        .map(|r| quota::request_cost(&r.path, &r.params))
+        .sum();
+    if reads.is_empty() || reads.len() > LABEL_LIMIT || cost > 800.0 {
         return Err(Error::new("invalid", "Invalid Gmail batch size"));
     }
     let started = Instant::now();
     if let Err(error) = quota.acquire_cost(cost) {
         for read in reads {
-            diagnostics.request(
+            diagnostics.request_cost(
                 &read.path,
                 None,
                 &Err(error.clone()),
                 (started.elapsed(), started.elapsed()),
                 None,
                 false,
+                quota::request_cost(&read.path, &read.params),
             );
         }
         return Err(error);
@@ -139,26 +143,28 @@ pub fn request(
                     }
                     Err(error)
                 };
-                diagnostics.request(
+                diagnostics.request_cost(
                     &read.path,
                     Some(part.status),
                     &result,
                     (started.elapsed(), wait),
                     reason.as_deref(),
                     true,
+                    quota::request_cost(&read.path, &read.params),
                 );
                 result
             })
             .collect()),
         Err(error) => {
             for read in reads {
-                diagnostics.request(
+                diagnostics.request_cost(
                     &read.path,
                     status,
                     &Err(error.clone()),
                     (started.elapsed(), wait),
                     reason.as_deref(),
                     true,
+                    quota::request_cost(&read.path, &read.params),
                 );
             }
             Err(error)

@@ -5,11 +5,11 @@ use std::{
 };
 
 // New Cloud projects allow 6,000 units/user/minute. Leave room for other clients:
-// 80 units/second plus a 400-unit burst uses at most 5,200 units in any minute.
+// 80 units/second plus an 800-unit burst uses at most 5,600 units in any minute.
 const UNITS_PER_SECOND: f64 = 80.0;
-const BURST: f64 = 400.0;
+const BURST: f64 = 800.0;
 // Keep two full thread reads available while background metadata is being fetched.
-const INTERACTIVE_RESERVE: f64 = 80.0;
+const INTERACTIVE_RESERVE: f64 = 240.0;
 
 pub struct Quota(Mutex<Budget>);
 struct Budget {
@@ -46,9 +46,10 @@ impl Quota {
         self.0
             .lock()
             .map_err(|_| Error::new("invalid", "Gmail request budget is unavailable"))?
-            .wait_for(Instant::now(), cost + INTERACTIVE_RESERVE)
+            .wait_for(Instant::now(), 2.0 * cost + INTERACTIVE_RESERVE)
     }
 
+    #[cfg(test)]
     pub fn acquire(&self, path: &str) -> Result<()> {
         self.acquire_cost(cost(path))
     }
@@ -118,108 +119,71 @@ pub fn cost(path: &str) -> f64 {
     }
 }
 
+/// Full bodies have a different cost than metadata, even at the same endpoint.
+pub fn request_cost(path: &str, params: &[(&str, String)]) -> f64 {
+    if params
+        .iter()
+        .any(|(key, value)| *key == "format" && ["full", "raw", "html"].contains(&value.as_str()))
+    {
+        if path.starts_with("threads/") {
+            return 120.0;
+        }
+        if path.starts_with("messages/") && !path.contains("/attachments/") {
+            return 60.0;
+        }
+    }
+    cost(path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn background_pacing_preserves_budget_for_interactive_reads() {
+    fn metadata_retry_preserves_two_full_conversation_reads() {
         let now = Instant::now();
         let mut budget = Budget {
             units: BURST,
             updated: now,
             cooldown: None,
         };
-        for _ in 0..7 {
+        let batch = 2.0 * request_cost("threads/t", &[("format", "full".into())]);
+        assert!(budget
+            .wait_for(now, 2.0 * batch + INTERACTIVE_RESERVE)
+            .unwrap()
+            .is_zero());
+        assert!(budget.reserve(now, batch).unwrap().is_zero());
+        assert!(budget.reserve(now, batch).unwrap().is_zero());
+        for _ in 0..2 {
             assert!(budget
-                .wait_for(now, 2.0 * cost("threads/t") + INTERACTIVE_RESERVE)
+                .reserve(now, request_cost("threads/t", &[("format", "full".into())]))
                 .unwrap()
                 .is_zero());
-            assert!(budget.reserve(now, cost("threads/t")).unwrap().is_zero());
         }
-        assert_eq!(
-            budget.wait_for(now, 80.0 + INTERACTIVE_RESERVE).unwrap(),
-            Duration::from_millis(500)
+        assert!(
+            budget
+                .wait_for(now, 2.0 * batch + INTERACTIVE_RESERVE)
+                .unwrap()
+                > Duration::ZERO
         );
-        // Even if the last background request needed an authentication retry,
-        // two interactive reads can still start immediately.
-        assert!(budget.reserve(now, cost("threads/t")).unwrap().is_zero());
-        // Checking background availability does not spend the remaining tokens.
-        assert!(budget
-            .reserve(now, cost("threads/opened"))
-            .unwrap()
-            .is_zero());
-        assert!(budget
-            .reserve(now, cost("threads/another"))
-            .unwrap()
-            .is_zero());
-        assert_eq!(budget.units, 0.0);
     }
 
     #[test]
-    fn four_thread_batch_and_full_auth_retry_preserve_two_interactive_reads() {
-        let now = Instant::now();
-        let mut budget = Budget {
-            units: BURST,
-            updated: now,
-            cooldown: None,
-        };
-        let batch_cost = 4.0 * cost("threads/t");
-        assert!(budget
-            .wait_for(now, 2.0 * batch_cost + INTERACTIVE_RESERVE)
-            .unwrap()
-            .is_zero());
-        assert!(budget.reserve(now, batch_cost).unwrap().is_zero());
+    fn full_body_costs_and_rolling_minute_bound_match_gmail() {
         assert_eq!(
-            budget
-                .wait_for(now, 2.0 * batch_cost + INTERACTIVE_RESERVE)
-                .unwrap(),
-            Duration::from_secs(2)
+            request_cost("threads/t", &[("format", "full".into())]),
+            120.0
         );
-        // A retry may use its reserved budget without waiting. Two foreground
-        // opens still fit immediately after both attempts.
-        assert!(budget.reserve(now, batch_cost).unwrap().is_zero());
-        assert!(budget
-            .reserve(now, cost("threads/first"))
-            .unwrap()
-            .is_zero());
-        assert!(budget
-            .reserve(now, cost("threads/second"))
-            .unwrap()
-            .is_zero());
-        assert_eq!(budget.units, 0.0);
-    }
-
-    #[test]
-    fn metadata_bursts_are_bounded_and_tokens_refill_without_accumulating() {
-        let now = Instant::now();
-        let mut budget = Budget {
-            units: BURST,
-            updated: now,
-            cooldown: None,
-        };
-        for _ in 0..10 {
-            assert!(budget.reserve(now, cost("threads/t")).unwrap().is_zero());
-        }
         assert_eq!(
-            budget.reserve(now, 40.0).unwrap(),
-            Duration::from_millis(500)
+            request_cost("threads/t", &[("format", "metadata".into())]),
+            40.0
         );
-        assert!(budget
-            .reserve(now + Duration::from_millis(500), 40.0)
-            .unwrap()
-            .is_zero());
         assert_eq!(
-            budget
-                .reserve(now + Duration::from_millis(500), 40.0)
-                .unwrap(),
-            Duration::from_millis(500)
+            request_cost("messages/m", &[("format", "raw".into())]),
+            60.0
         );
-        assert!(budget
-            .reserve(now + Duration::from_secs(60), 40.0)
-            .unwrap()
-            .is_zero());
-        assert_eq!(budget.units, BURST - 40.0);
+        assert_eq!(request_cost("messages/m/attachments/a", &[]), 20.0);
+        assert!(BURST + 60.0 * UNITS_PER_SECOND < 6000.0);
     }
 
     #[test]

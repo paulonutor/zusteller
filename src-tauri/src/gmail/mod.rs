@@ -4,6 +4,7 @@ mod attachments;
 mod auth;
 mod batch;
 mod diagnostics;
+mod metadata;
 mod model;
 mod privacy;
 mod quota;
@@ -50,6 +51,7 @@ pub struct State {
     cancelled: Arc<AtomicBool>,
     scheduler: Arc<scheduler::Scheduler>,
     syncing: Arc<AtomicBool>,
+    indexing: Arc<AtomicBool>,
 }
 
 impl State {
@@ -98,8 +100,7 @@ fn with_worker<R: tauri::Runtime, T>(
             .app_data_dir()
             .map_err(|_| Error::new("invalid", "App data directory is unavailable"))?
             .join("gmail/cache.sqlite");
-        let mut gmail = api::Gmail::new(store::Store::open(&path)?)?;
-        gmail.diagnostics = diagnostics.clone();
+        let gmail = api::Gmail::with_diagnostics(store::Store::open(&path)?, diagnostics.clone())?;
         *guard = Some(gmail);
     }
     task(guard.as_mut().unwrap())
@@ -141,7 +142,8 @@ async fn summaries_work<R: tauri::Runtime>(
     let diagnostics = state.diagnostics.clone();
     tauri::async_runtime::spawn_blocking(move || loop {
         let step = {
-            let _permit = scheduler.background();
+            let ticket = scheduler.foreground();
+            let _permit = ticket.enter();
             with_worker(&app, &gmail, &diagnostics, |g| {
                 if !g
                     .store
@@ -208,6 +210,31 @@ async fn sync_work<R: tauri::Runtime>(
     })
     .await
     .map_err(|_| Error::new("invalid", "Gmail sync worker failed"))?
+}
+
+fn start_backfill<R: tauri::Runtime>(app: tauri::AppHandle<R>, state: &State) {
+    if state.indexing.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let indexing = Syncing(state.indexing.clone());
+    let scheduler = state.scheduler.clone();
+    let gmail = state.gmail.clone();
+    let diagnostics = state.diagnostics.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let _indexing = indexing;
+        loop {
+            let step = {
+                let _permit = scheduler.background();
+                with_worker(&app, &gmail, &diagnostics, |g| g.backfill_step())
+            };
+            match step {
+                Ok(Some(wait)) => {
+                    std::thread::sleep(wait.min(std::time::Duration::from_millis(100)))
+                }
+                Ok(None) | Err(_) => break,
+            }
+        }
+    });
 }
 
 // This lock is independent of the sync worker, so the log stays readable during sync.
@@ -290,8 +317,11 @@ pub async fn gmail_read<R: tauri::Runtime>(
             input.unwrap_or(json!({})),
         )?;
     if operation == "sync" {
-        return sync_work(app, &state, account)
-            .await
+        let result = sync_work(app.clone(), &state, account).await;
+        if result.is_ok() {
+            start_backfill(app, &state);
+        }
+        return result
             .map(|changed| json!(changed))
             .map_err(|error| state.public_error(error));
     }
@@ -304,10 +334,10 @@ pub async fn gmail_read<R: tauri::Runtime>(
         if ids.len() > batch::METADATA_LIMIT {
             Err(Error::new("invalid", "Too many visible conversations"))
         } else {
-            summaries_work(app, &state, account, ids).await
+            summaries_work(app.clone(), &state, account, ids).await
         }
     } else {
-        work(app, &state, move |g| {
+        work(app.clone(), &state, move |g| {
             if operation == "accounts" {
                 return Ok(json!(g.store.accounts()?));
             }
@@ -335,6 +365,9 @@ pub async fn gmail_read<R: tauri::Runtime>(
         })
         .await
     };
+    if output_operation == "threads" && result.is_ok() {
+        start_backfill(app.clone(), &state);
+    }
     let mut privacy = state.privacy.lock().unwrap_or_else(|e| e.into_inner());
     match result {
         Ok(value) => privacy.output(&output_operation, value),

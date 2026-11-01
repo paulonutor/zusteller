@@ -117,13 +117,28 @@ changed. This is not a full offline mirror.
 
 Opening a mailbox, label or search drains every `threads.list` page at 500 IDs per
 request, deduplicates IDs and preserves Google's order. It fetches no thread
-metadata during this pass. Rows load metadata only when they are within 200 px of the
+metadata during this pass. Visible rows request metadata when they are within 200 px of the
 list viewport, including in short lists. Virtualizer overscan and offscreen selected
 rows do not trigger reads. Queued reads are cancelled when rows leave the viewport.
 Sender, subject, date and flags require this separate read because Google's
 [list endpoint](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.threads/list)
 omits messages. Bodies and inline images load only when a conversation is opened.
-Unchanged opened conversations reuse SQLite; unchanged row metadata reuses memory.
+Unchanged opened conversations reuse SQLite; row metadata reuses memory and a separate
+`gmail/metadata.sqlite` index. An independent writer persists row summaries without
+bodies, so indexing database locks cannot block opening or scrolling. Startup
+snapshots are consumed without waiting. Browsing and opening mail populate the same
+index and remove the need for duplicate background reads.
+
+After a list loads, idle work fills missing metadata for that list, one conversation
+at a time. It yields between reads and during quota waits. Visited mailbox/label/search
+scopes accumulate across sessions; a new list pass reconstructs pending work and
+skips persisted summaries. This is not yet account-wide discovery, full-text search,
+or complete-mailbox sorting. The metadata index has no recent-cache eviction;
+its disk and memory use grow with indexed conversations. Bodies retain their existing
+bounded cache. History invalidation removes affected index entries and queues
+replacement reads. Cursor mismatches after a crash discard stale persisted rows.
+Index storage failures appear as `metadata storage_unavailable` in diagnostics;
+network reads and the in-memory index continue.
 Only one row-metadata batch runs at a time, including while scrolling. Batches are
 background work: they wait for quota without holding the Gmail worker, so opening a
 conversation is not queued behind them. A rate-limit
@@ -137,7 +152,8 @@ the viewport, so their counts cover metadata loaded so far.
 
 The initial sync captures only a profile history ID. Later sync reads all history
 pages and atomically marks changed metadata stale and removes changed bodies.
-It never downloads replacement messages, including for previously unknown IDs.
+Sync itself never downloads replacement messages. Idle metadata work can replace
+invalidated summaries, while bodies remain on demand.
 An expired history cursor captures a fresh baseline and invalidates cached mail;
 its replacement loads on demand. Partial failures never advance the cursor.
 Deleting a message does not erase local overrides for its whole conversation.
@@ -147,20 +163,20 @@ Polling targets three seconds while active and fifteen seconds when inactive,
 with immediate checks on focus, reconnect and manual refresh outside a retry
 cooldown. Failures back off up to five minutes and honor Retry-After, including
 HTTP dates. Focus and manual refresh preserve the retry deadline. Native requests
-share an 80-quota-unit/second budget with a 400-unit burst, below the current
+share an 80-quota-unit/second budget with an 800-unit burst, below the current
 6,000-unit/user/minute default for new Google projects. Rate-limit responses pause
 all Gmail reads for at least sixty seconds, or longer when Retry-After requires
 it; cached mail and known local actions remain available. See Google's
 [quota reference](https://developers.google.com/workspace/gmail/api/reference/quota).
 Opening mail, loading mailbox/search lists, attachments and local actions take
 priority over background sync. Sync releases the native worker between history
-requests and during quota waits, and leaves 80 quota units available for interactive
+requests and during quota waits, and leaves 240 quota units available for interactive
 reads. A request already in flight must finish before the worker can switch to a
 user action. Sustained interaction can delay background sync.
 Diagnostics records `sync waiting_for_quota` when background pacing begins.
 The Gmail Activity window reports sync errors and the last successful sync.
 
-Visible row metadata uses Gmail multipart batches of up to four calls. Label-count
+Visible row metadata uses Gmail multipart batches of up to two calls. Label-count
 reads use batches of up to fifty. One remaining read is sent normally. The endpoint
 is `/batch` on Gmail's API host, as specified by its
 [discovery document](https://gmail.googleapis.com/$discovery/rest?version=v1).
@@ -170,13 +186,16 @@ is `/batch` on Gmail's API host, as specified by its
 | Initial sync baseline                   |             1 |           1 |
 | Sync with one history page              |             1 |           2 |
 | Complete list of 1,000 thread IDs       |             2 |          20 |
-| Metadata for 12 uncached visible rows   |             3 |         480 |
+| Metadata for 12 uncached visible rows   |             6 |       1,440 |
 | Counts for 30 already-listed labels     |             1 |          30 |
 | Reopen an unchanged cached conversation |             0 |           0 |
 
 These are successful reads without authentication retries or attachment downloads.
-The previous 100-thread bootstrap spent 4,011 quota units; the baseline now spends
-one. The reduction comes from removing eager reads, rather than batching alone.
+The baseline spends one unit. Row reads use `format=full` with a field mask to
+retain attachment structure, so Gmail charges 120 units per thread, the same as
+opening a body. Field masks reduce payload size, not quota. The shared budget
+allows at most 5,600 units in a rolling minute, reserving two full opens even
+when an idle read needs an authentication retry.
 Batching reduces HTTP overhead, not quota use. Every inner call spends its normal
 quota cost and has its own diagnostic entry; `batch sent` records the grouped
 call count. Responses are correlated by Content-ID. Missing, duplicate or invalid
@@ -213,6 +232,21 @@ complete list pagination and reuse of unchanged opened mail after restart.
 Batch fixtures check encoded nested GETs, response correlation, malformed parts,
 inner/outer rate limits, per-call quota totals and cache fallback on partial failure.
 The native CI jobs run these tests without real credentials or desktop interaction.
+
+Run the real-time quota simulation separately:
+
+```sh
+cargo test --manifest-path src-tauri/Cargo.toml gmail_limited_backfill_interleaves_opens_and_scrolling -- --ignored --nocapture
+```
+
+Its HTTP mock enforces a rolling 6,000-unit/minute Gmail limit and charges full
+reads at 120 units. It interleaves idle indexing, scrolling and opening mail across
+more than a minute, checks that reused metadata causes no duplicate reads, and
+asserts foreground opens stay below one second on loopback. It uses no account or
+OAuth. Regular native tests also hold an exclusive metadata database lock while
+opening mail and resolving visible rows, and cover restart, removal, and stale
+startup snapshots. These are synthetic backend checks, not native visual or
+real-account latency validation.
 
 With `npm run dev` running, `node scripts/gmail-preview-check.mjs` drives a
 synthetic desktop-provider UI in Chromium, checks connect/read/save/reset/disconnect

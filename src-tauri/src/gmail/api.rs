@@ -11,7 +11,7 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use reqwest::blocking::Client;
 use serde_json::{json, Value};
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeSet, HashMap, VecDeque},
     io::Read,
     sync::Arc,
     time::Instant,
@@ -27,19 +27,36 @@ pub struct Gmail {
     base: String,
     pub(super) quota: Quota,
     pub(super) generation: u64,
-    summaries: HashMap<(String, String), Value>,
+    metadata: super::metadata::Metadata,
+    pending: VecDeque<(String, String)>,
 }
 impl Gmail {
+    #[cfg(test)]
     pub fn new(store: Store) -> Result<Self> {
+        Self::with_diagnostics(store, Arc::new(Diagnostics::default()))
+    }
+    pub fn with_diagnostics(store: Store, diagnostics: Arc<Diagnostics>) -> Result<Self> {
+        let path = std::path::Path::new(store.0.path().unwrap()).with_file_name("metadata.sqlite");
+        let histories = store
+            .accounts()?
+            .iter()
+            .map(|a| {
+                let id = text(a, "id").to_owned();
+                let history = store.history(&id)?;
+                Ok((id, history))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let metadata = super::metadata::Metadata::start(path, histories, diagnostics.clone());
         Ok(Self {
             store,
-            diagnostics: Arc::new(Diagnostics::default()),
+            diagnostics,
             access: HashMap::new(),
             client: auth::client()?,
             base: BASE.into(),
             quota: Quota::default(),
             generation: 0,
-            summaries: HashMap::new(),
+            metadata,
+            pending: VecDeque::new(),
         })
     }
     pub fn install(
@@ -287,6 +304,7 @@ impl Gmail {
         Ok(counts)
     }
     pub fn threads(&mut self, account: &str, query: &Value) -> Result<Value> {
+        self.metadata.poll();
         self.store.evict(account)?;
         let key = format!("page:{}", query);
         let mut params = vec![
@@ -348,6 +366,13 @@ impl Gmail {
             params.retain(|(name, _)| *name != "pageToken");
             params.push(("pageToken", token.into()));
         }
+        let mut queued: BTreeSet<_> = self.pending.iter().cloned().collect();
+        for reference in &refs {
+            let key = (account.to_owned(), text(reference, "id").to_owned());
+            if queued.insert(key.clone()) {
+                self.pending.push_back(key);
+            }
+        }
         let page = json!({"threads":refs,"nextCursor":null,"stale":false});
         self.store.put(account, &key, &page)?;
         self.store.evict(account)?;
@@ -361,7 +386,7 @@ impl Gmail {
     }
 
     fn known_summary(&self, account: &str, id: &str) -> Result<Option<Value>> {
-        if let Some(value) = self.summaries.get(&(account.into(), id.into())) {
+        if let Some(value) = self.metadata.rows.get(&(account.into(), id.into())) {
             return Ok(Some(value.clone()));
         }
         if let Some(value) = self.store.get(account, &format!("thread:{id}"))? {
@@ -381,8 +406,24 @@ impl Gmail {
         ids: &BTreeSet<String>,
         all: bool,
     ) {
-        self.summaries
-            .retain(|(a, id), _| a != account || (!all && !ids.contains(id)));
+        let changed: Vec<_> = if all {
+            self.metadata
+                .rows
+                .keys()
+                .filter(|(a, _)| a == account)
+                .map(|(_, id)| id.clone())
+                .collect()
+        } else {
+            ids.iter().cloned().collect()
+        };
+        self.pending
+            .extend(changed.into_iter().map(|id| (account.to_owned(), id)));
+        self.metadata.invalidate(
+            account,
+            ids,
+            all,
+            self.store.history(account).ok().flatten(),
+        );
     }
 
     fn listed_summary(&self, account: &str, id: &str) -> Result<Option<Value>> {
@@ -408,6 +449,7 @@ impl Gmail {
 
     /// How long uncached rows must wait for quota before `summaries` can run without sleeping.
     pub fn summaries_wait(&mut self, account: &str, ids: &[String]) -> Result<std::time::Duration> {
+        self.metadata.poll();
         let mut missing = BTreeSet::new();
         for id in ids {
             if self.cached_summary(account, id)?.is_none() {
@@ -417,8 +459,9 @@ impl Gmail {
         if missing.is_empty() {
             return Ok(std::time::Duration::ZERO);
         }
-        self.quota
-            .metadata_wait(missing.len() as f64 * super::quota::cost("threads/x"))
+        self.quota.metadata_wait(
+            missing.len() as f64 * super::quota::request_cost("threads/x", &summary_params()),
+        )
     }
 
     pub fn summaries(&mut self, account: &str, ids: &[String]) -> Result<Value> {
@@ -440,11 +483,7 @@ impl Gmail {
             for (id, response) in chunk.iter().zip(self.get_many(account, &reads)?) {
                 let mut value = model::normalize(account, &response?, false)?;
                 value.as_object_mut().unwrap().remove("messages");
-                // Row metadata lives only in memory. Persistent mail is opened-only.
-                if self.summaries.len() >= 2000 {
-                    self.summaries.clear();
-                }
-                self.summaries.insert((account.into(), id.clone()), value);
+                self.metadata.put(account, id, value);
             }
         }
         ids.iter()
@@ -456,6 +495,32 @@ impl Gmail {
             })
             .collect::<Result<Vec<_>>>()
             .map(|values| json!(values))
+    }
+
+    /// One idle read at a time. Visible rows and opened bodies have already paid
+    /// for their metadata, so skip them without another Gmail request.
+    pub fn backfill_step(&mut self) -> Result<Option<std::time::Duration>> {
+        self.metadata.poll();
+        while let Some((account, id)) = self.pending.front().cloned() {
+            if self.cached_summary(&account, &id)?.is_some() {
+                self.pending.pop_front();
+                continue;
+            }
+            let wait = self
+                .quota
+                .background_wait_cost(super::quota::request_cost("threads/x", &summary_params()))?;
+            if !wait.is_zero() {
+                return Ok(Some(wait));
+            }
+            match self.summaries(&account, &[id]) {
+                Ok(_) => {}
+                Err(error) if error.code == "not_found" => {}
+                Err(error) => return Err(error),
+            }
+            self.pending.pop_front();
+            return Ok(Some(std::time::Duration::from_millis(100)));
+        }
+        Ok(None)
     }
 
     fn page_overlay(&self, account: &str, mut page: Value, query: &Value) -> Result<Value> {
@@ -502,6 +567,7 @@ impl Gmail {
         Ok(page)
     }
     pub fn thread(&mut self, account: &str, id: &str) -> Result<Value> {
+        self.metadata.poll();
         let key = format!("body:{id}");
         let mut thread = if let Some(value) = self.store.get(account, &key)? {
             self.diagnostics.event("cache", "reused", Some(1));
@@ -574,7 +640,7 @@ impl Gmail {
             let mut summary = value.clone();
             summary.as_object_mut().unwrap().remove("messages");
             self.store.put(account, &format!("thread:{id}"), &summary)?;
-            self.summaries.insert((account.into(), id.into()), summary);
+            self.metadata.put(account, id, summary);
             self.store.put(account, &key, &value)?;
             self.store.evict(account)?;
             value
@@ -688,6 +754,8 @@ impl Gmail {
     }
     pub fn disconnect(&mut self, account: &str) -> Result<Value> {
         self.invalidate_summaries(account, &BTreeSet::new(), true);
+        self.metadata.remove(account);
+        self.pending.retain(|(a, _)| a != account);
         auth::remove(account)?;
         self.access.remove(account);
         self.store.remove(account)?;
@@ -819,15 +887,16 @@ fn request(
     params: &[(&str, String)],
 ) -> Result<Value> {
     let started = Instant::now();
-    if let Err(error) = quota.acquire(path) {
+    if let Err(error) = quota.acquire_cost(super::quota::request_cost(path, params)) {
         let result = Err(error);
-        diagnostics.request(
+        diagnostics.request_cost(
             path,
             None,
             &result,
             (started.elapsed(), started.elapsed()),
             None,
             false,
+            super::quota::request_cost(path, params),
         );
         return result;
     }
@@ -879,13 +948,14 @@ fn request(
         }
         serde_json::from_slice(&bytes).map_err(|_| Error::new("invalid", "Invalid Gmail response"))
     })();
-    diagnostics.request(
+    diagnostics.request_cost(
         path,
         http_status,
         &result,
         (started.elapsed(), wait),
         reason.as_deref(),
         true,
+        super::quota::request_cost(path, params),
     );
     result
 }
@@ -1075,6 +1145,122 @@ mod tests {
         json!({"id":id,"messages":[{"id":"m","internalDate":"1000","labelIds":["INBOX","UNREAD"],"snippet":"A &amp; B","payload":{"headers":[{"name":"Subject","value":"Hello"}]}}]})
     }
     #[test]
+    fn locked_metadata_database_does_not_delay_opening_or_scrolling() {
+        let (mut g, server, dir) = fixture(vec![(200, mail("t")), (200, mail("u"))]);
+        g.metadata.flush();
+        let lock = rusqlite::Connection::open(dir.join("metadata.sqlite")).unwrap();
+        lock.execute_batch("BEGIN EXCLUSIVE").unwrap();
+        let started = Instant::now();
+        assert_eq!(g.thread("a", "t").unwrap()["subject"], "Hello");
+        assert_eq!(
+            g.summaries("a", &["u".into()]).unwrap()[0]["subject"],
+            "Hello"
+        );
+        // The index writer is blocked, but foreground work can finish and can
+        // immediately reuse the new metadata without querying SQLite.
+        assert!(started.elapsed() < Duration::from_secs(2));
+        assert_eq!(
+            g.summaries("a", &["u".into()]).unwrap()[0]["subject"],
+            "Hello"
+        );
+        lock.execute_batch("ROLLBACK").unwrap();
+        g.metadata.flush();
+        assert_eq!(server.join().unwrap().len(), 2);
+        drop(g);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    #[ignore = "real-time rolling Gmail quota simulation, about 85 seconds"]
+    fn gmail_limited_backfill_interleaves_opens_and_scrolling() {
+        let (mut g, empty, dir) = fixture(vec![]);
+        empty.join().unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        g.base = format!("http://{}/", listener.local_addr().unwrap());
+        // 60 full reads cost 7,200 units: this must span more than a minute.
+        let server = std::thread::spawn(move || {
+            let mut window = VecDeque::new();
+            let mut peak = 0;
+            for _ in 0..60 {
+                let (mut socket, _) = listener.accept().unwrap();
+                socket
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let request = read_http(&mut socket);
+                let route = request.split_whitespace().nth(1).unwrap();
+                let url = url::Url::parse(&format!("http://localhost{route}")).unwrap();
+                let id = url.path().trim_start_matches("/threads/");
+                assert!(url.query_pairs().any(|(k, v)| k == "format" && v == "full"));
+                let now = Instant::now();
+                while window
+                    .front()
+                    .is_some_and(|at| now.duration_since(*at) >= Duration::from_secs(60))
+                {
+                    window.pop_front();
+                }
+                let limited = (window.len() + 1) * 120 > 6000;
+                let (status, body) = if limited {
+                    (
+                        429,
+                        json!({"error":{"errors":[{"reason":"userRateLimitExceeded"}]}}),
+                    )
+                } else {
+                    window.push_back(now);
+                    (200, mail(id))
+                };
+                peak = peak.max(window.len() * 120);
+                let body = body.to_string();
+                write!(socket, "HTTP/1.1 {status} Test\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+                assert!(!limited, "client exceeded Gmail's rolling 6,000-unit limit");
+            }
+            peak
+        });
+        for i in 0..54 {
+            g.pending.push_back(("a".into(), format!("t{i}")));
+        }
+        let mut opens = 0;
+        let mut longest_open = Duration::ZERO;
+        for i in 0..54 {
+            if i % 9 == 0 {
+                let started = Instant::now();
+                g.thread("a", &format!("opened{opens}")).unwrap();
+                longest_open = longest_open.max(started.elapsed());
+                opens += 1;
+            }
+            // A scroll consumes the same pending row. Backfill must reuse it.
+            if i % 9 == 1 {
+                let id = format!("t{i}");
+                loop {
+                    let wait = g.summaries_wait("a", std::slice::from_ref(&id)).unwrap();
+                    if wait.is_zero() {
+                        break;
+                    }
+                    std::thread::sleep(wait.min(Duration::from_millis(100)));
+                }
+                g.summaries("a", &[id]).unwrap();
+            }
+            let target = format!("t{i}");
+            while g.pending.iter().any(|(_, id)| id == &target) {
+                if let Some(wait) = g.backfill_step().unwrap() {
+                    std::thread::sleep(wait.min(Duration::from_millis(100)));
+                }
+            }
+        }
+        assert!(
+            longest_open < Duration::from_secs(1),
+            "opens waited {longest_open:?}"
+        );
+        assert!(server.join().unwrap() <= 6000);
+        let snapshot = serde_json::to_value(g.diagnostics.snapshot()).unwrap();
+        assert_eq!(snapshot["requests"], 60);
+        assert_eq!(snapshot["quotaUnits"], 7200);
+        assert_eq!(snapshot["rateLimits"], 0);
+        eprintln!("Gmail mock: 60 reads, 7200 units, zero rate limits; slowest foreground open {longest_open:?}");
+        drop(g);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn lists_drain_all_pages_and_deduplicate_without_fetching_metadata() {
         let (mut g, server, dir) = fixture(vec![
             (
@@ -1118,12 +1304,16 @@ mod tests {
     }
 
     #[test]
-    fn visible_metadata_is_batched_reused_in_memory_and_persisted_only_on_open() {
+    fn browsing_metadata_persists_without_bodies_and_is_reused_after_restart() {
         let (mut g, server, dir) =
             fixture(vec![(200, mail("t")), (200, mail("u")), (200, mail("t"))]);
         let ids = vec!["t".into(), "u".into()];
         let rows = g.summaries("a", &ids).unwrap();
         assert_eq!(rows[0]["subject"], "Hello");
+        assert_eq!(
+            serde_json::to_value(g.diagnostics.snapshot()).unwrap()["quotaUnits"],
+            240
+        );
         assert!(g.store.get("a", "thread:t").unwrap().is_none());
         assert!(g.store.get("a", "body:t").unwrap().is_none());
         assert_eq!(g.summaries("a", &ids).unwrap(), rows);
@@ -1135,8 +1325,15 @@ mod tests {
         assert_eq!(requests.len(), 2);
         assert!(requests[0].starts_with("POST /batch "));
         assert!(requests[1].contains("format=full") && !requests[1].contains("fields="));
+        g.metadata.flush();
         drop(g);
         let mut reopened = Gmail::new(Store::open(&dir.join("cache.sqlite")).unwrap()).unwrap();
+        reopened.metadata.flush();
+        reopened.metadata.poll();
+        assert_eq!(
+            reopened.summaries("a", &["u".into()]).unwrap()[0]["subject"],
+            "Hello"
+        );
         assert_eq!(reopened.thread("a", "t").unwrap()["subject"], "Hello");
         assert_eq!(
             reopened.summaries("a", &["t".into()]).unwrap()[0]["subject"],

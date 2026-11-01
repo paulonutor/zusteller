@@ -59,9 +59,9 @@ cursor, and failed pagination/fetches leave the prior cursor intact.
 The native scheduler runs queued interactive work before background sync. A sync
 pass keeps pending changes outside the worker and yields between page requests,
 metadata batches and quota waits; the cursor is committed only after the full pass.
-Background requests preserve 80 quota units for foreground reads. Connection
+Background requests preserve 240 quota units for foreground reads. Connection
 changes invalidate pending passes before they can commit. Thread metadata uses
-multipart batches of up to four reads, label counts up to fifty; single reads
+multipart batches of up to two reads, label counts up to fifty; single reads
 remain direct. Quota is acquired for the whole batch and diagnostics account for
 each inner call. MIME parsing and Content-ID correlation handle independent
 statuses, with shared cooldowns for outer and inner rate limits.
@@ -79,7 +79,13 @@ apply only to intended fields and never replay as server writes. Label unread
 counts use `threadsUnread`, then estimated adjustments for known local overrides;
 the UI marks them as approximate. Search uses Gmail syntax over server state.
 
-The cache is bounded and bodies load on open. Provider subscriptions poll history
+The recent body/page cache is bounded and bodies load on open. Row summaries
+also accumulate in a separate `metadata.sqlite` index, owned by a writer thread.
+Interactions use memory and enqueue index writes; startup loading never blocks
+them. Idle reads fill missing rows for browsed scopes and reuse metadata from
+scrolling and opening mail. This does not establish account-wide coverage or
+provide whole-mailbox sorting. History invalidation and cursor checks prevent
+stale index reuse, including after an interrupted asynchronous write. Provider subscriptions poll history
 and invalidate lists/counts/details after changes, deferring refresh during local
 actions. Setup, security boundaries and user-facing limits are in
 [gmail-preview.md](gmail-preview.md). Trello continues to track delivery and

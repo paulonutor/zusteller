@@ -1,4 +1,6 @@
-use super::{quota, Result};
+#[cfg(test)]
+use super::quota;
+use super::Result;
 use serde::Serialize;
 use std::{
     collections::VecDeque,
@@ -72,6 +74,7 @@ impl Diagnostics {
         self.push(entry);
     }
 
+    #[cfg(test)]
     pub fn request(
         &self,
         path: &str,
@@ -80,6 +83,28 @@ impl Diagnostics {
         timing: (Duration, Duration),
         reason: Option<&str>,
         sent: bool,
+    ) {
+        self.request_cost(
+            path,
+            status,
+            result,
+            timing,
+            reason,
+            sent,
+            quota::cost(path),
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn request_cost(
+        &self,
+        path: &str,
+        status: Option<u16>,
+        result: &Result<serde_json::Value>,
+        timing: (Duration, Duration),
+        reason: Option<&str>,
+        sent: bool,
+        cost: f64,
     ) {
         // Classify the route, never retain URLs, IDs, query parameters or payloads.
         let operation = match path {
@@ -96,7 +121,7 @@ impl Diagnostics {
         entry.status = status;
         entry.duration_ms = timing.0.as_millis() as u64;
         entry.wait_ms = timing.1.as_millis() as u64;
-        entry.quota_units = if sent { quota::cost(path) as u64 } else { 0 };
+        entry.quota_units = if sent { cost as u64 } else { 0 };
         // Google reasons are untrusted strings. Retain only documented categories,
         // never arbitrary response text in the diagnostics window or copied log.
         entry.reason = reason.map(|reason| match reason {
