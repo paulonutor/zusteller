@@ -353,7 +353,7 @@ pub async fn gmail_read<R: tauri::Runtime>(
                 "labels" => g.labels(&account),
                 "counts" => g.counts(&account),
                 "threads" => g.threads(&account, &input),
-                "thread" => g.thread(&account, model::text(&input, "threadId")),
+                "thread" => g.fresh_thread(&account, model::text(&input, "threadId")),
                 "action" => g.action(&account, &input),
                 "reset" => {
                     g.store.reset(&account)?;
@@ -491,11 +491,30 @@ mod ipc_tests {
             .put("fixture@example.com", "thread:t", &thread)
             .unwrap();
         store.put("fixture@example.com", "body:t", &thread).unwrap();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}/", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            for _ in 0..if protected { 2 } else { 3 } {
+                let (mut socket, _) = listener.accept().unwrap();
+                let mut buffer = [0; 8192];
+                socket.read(&mut buffer).unwrap();
+                let body = raw.to_string();
+                write!(
+                    socket,
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                )
+                .unwrap();
+            }
+        });
+        let mut gmail = api::Gmail::new(store).unwrap();
+        gmail.fixture_access("fixture@example.com", base);
         let mut privacy = privacy::Privacy::new(protected);
         let thread_id = privacy.output("thread", thread.clone()).unwrap()["id"].clone();
         let state = State {
             privacy: Mutex::new(privacy),
-            gmail: Arc::new(Mutex::new(Some(api::Gmail::new(store).unwrap()))),
+            gmail: Arc::new(Mutex::new(Some(gmail))),
             ..State::default()
         };
         let app = mock_builder()
@@ -576,6 +595,7 @@ mod ipc_tests {
         assert!(!local.to_string().contains("token"));
         let error = call(json!({"operation":"send","accountId":account})).unwrap_err();
         assert_eq!(error["code"], "invalid");
+        server.join().unwrap();
         drop(webview);
         drop(app);
         std::fs::remove_dir_all(dir).unwrap();

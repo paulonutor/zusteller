@@ -88,13 +88,19 @@ export function useThread(accountId: ID | undefined, threadId: ID | null) {
   const result = useQuery({
     queryKey: mailKeys.thread(accountId ?? '', threadId ?? ''),
     queryFn: () => mail.getThread(accountId!, threadId!),
+    staleTime: 0,
+    refetchOnMount: 'always',
     enabled: !!accountId && !!threadId,
     ...cooldownRetry,
   });
   useEffect(() => {
     if (result.data) replaceSummary(client, result.data);
   }, [client, result.data]);
-  return result;
+  return {
+    ...result,
+    data: mail.localPreview && (result.isFetching || result.isError) ? undefined : result.data,
+    isLoading: result.isLoading || (mail.localPreview === true && result.isFetching),
+  };
 }
 
 function replaceSummary(client: ReturnType<typeof useQueryClient>, summary: ThreadSummary) {

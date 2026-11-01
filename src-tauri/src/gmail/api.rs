@@ -29,6 +29,7 @@ pub struct Gmail {
     pub(super) generation: u64,
     metadata: super::metadata::Metadata,
     pending: VecDeque<(String, String)>,
+    scans: HashMap<String, Value>,
 }
 impl Gmail {
     #[cfg(test)]
@@ -57,7 +58,19 @@ impl Gmail {
             generation: 0,
             metadata,
             pending: VecDeque::new(),
+            scans: HashMap::new(),
         })
+    }
+    #[cfg(test)]
+    pub(super) fn fixture_access(&mut self, account: &str, base: String) {
+        self.base = base;
+        self.access.insert(
+            account.into(),
+            auth::Access {
+                token: "fixture-only".into(),
+                expires: Instant::now() + std::time::Duration::from_secs(3600),
+            },
+        );
     }
     pub fn install(
         &mut self,
@@ -406,6 +419,9 @@ impl Gmail {
         ids: &BTreeSet<String>,
         all: bool,
     ) {
+        if all {
+            self.scans.remove(account);
+        }
         let changed: Vec<_> = if all {
             self.metadata
                 .rows
@@ -501,6 +517,9 @@ impl Gmail {
     /// for their metadata, so skip them without another Gmail request.
     pub fn backfill_step(&mut self) -> Result<Option<std::time::Duration>> {
         self.metadata.poll();
+        if !self.metadata.ready {
+            return Ok(Some(std::time::Duration::from_millis(100)));
+        }
         while let Some((account, id)) = self.pending.front().cloned() {
             if self.cached_summary(&account, &id)?.is_some() {
                 self.pending.pop_front();
@@ -518,6 +537,72 @@ impl Gmail {
                 Err(error) => return Err(error),
             }
             self.pending.pop_front();
+            return Ok(Some(std::time::Duration::from_millis(100)));
+        }
+        for account in self.store.accounts()? {
+            let account = text(&account, "id");
+            // Establish a history baseline before discovery so changes during the
+            // scan are reconciled by the normal history worker.
+            if self.store.history(account)?.is_none() {
+                continue;
+            }
+            if !self.scans.contains_key(account) {
+                let progress = self
+                    .metadata
+                    .rows
+                    .remove(&(account.into(), "$scan".into()))
+                    .unwrap_or(json!({"cursor":"","done":false,"ids":[]}));
+                for id in array(&progress["ids"]) {
+                    if let Some(id) = id.as_str() {
+                        self.pending.push_back((account.into(), id.into()));
+                    }
+                }
+                self.scans.insert(account.into(), progress);
+                if !self.pending.is_empty() {
+                    return Ok(Some(std::time::Duration::ZERO));
+                }
+            }
+            let scan = &self.scans[account];
+            if scan["done"] == true {
+                continue;
+            }
+            let wait = self.quota.background_wait("threads")?;
+            if !wait.is_zero() {
+                return Ok(Some(wait));
+            }
+            let mut params = vec![
+                ("maxResults", "500".into()),
+                ("includeSpamTrash", "true".into()),
+            ];
+            let cursor = text(scan, "cursor").to_owned();
+            if !cursor.is_empty() {
+                params.push(("pageToken", cursor));
+            }
+            let page = match self.get(account, "threads", &params) {
+                Err(error) if error.code == "invalid" && params.len() > 2 => {
+                    self.scans.remove(account);
+                    self.metadata
+                        .progress(account, json!({"cursor":"","done":false,"ids":[]}));
+                    return Ok(Some(std::time::Duration::from_secs(1)));
+                }
+                other => other?,
+            };
+            let ids: Vec<_> = array(&page["threads"])
+                .iter()
+                .map(|v| text(v, "id"))
+                .filter(|id| !id.is_empty())
+                .collect();
+            let cursor = text(&page, "nextPageToken");
+            let progress = json!({"cursor":cursor,"done":cursor.is_empty(),"ids":ids});
+            self.metadata.progress(account, progress.clone());
+            self.scans.insert(account.into(), progress);
+            self.pending
+                .extend(ids.into_iter().map(|id| (account.into(), id.into())));
+            self.diagnostics.event(
+                "metadata",
+                "discovered",
+                Some(array(&page["threads"]).len()),
+            );
             return Ok(Some(std::time::Duration::from_millis(100)));
         }
         Ok(None)
@@ -566,10 +651,21 @@ impl Gmail {
         page["items"] = json!(items);
         Ok(page)
     }
+    #[cfg(test)]
     pub fn thread(&mut self, account: &str, id: &str) -> Result<Value> {
+        self.read_thread(account, id, true)
+    }
+    pub fn fresh_thread(&mut self, account: &str, id: &str) -> Result<Value> {
+        self.read_thread(account, id, false)
+    }
+    fn read_thread(&mut self, account: &str, id: &str, allow_cache: bool) -> Result<Value> {
         self.metadata.poll();
         let key = format!("body:{id}");
-        let mut thread = if let Some(value) = self.store.get(account, &key)? {
+        let mut thread = if let Some(value) = if allow_cache {
+            self.store.get(account, &key)?
+        } else {
+            None
+        } {
             self.diagnostics.event("cache", "reused", Some(1));
             value
         } else {
@@ -756,6 +852,7 @@ impl Gmail {
         self.invalidate_summaries(account, &BTreeSet::new(), true);
         self.metadata.remove(account);
         self.pending.retain(|(a, _)| a != account);
+        self.scans.remove(account);
         auth::remove(account)?;
         self.access.remove(account);
         self.store.remove(account)?;
@@ -1144,6 +1241,78 @@ mod tests {
     fn mail(id: &str) -> Value {
         json!({"id":id,"messages":[{"id":"m","internalDate":"1000","labelIds":["INBOX","UNREAD"],"snippet":"A &amp; B","payload":{"headers":[{"name":"Subject","value":"Hello"}]}}]})
     }
+    #[test]
+    fn fresh_opens_observe_changes_without_history_poll_and_never_fall_back() {
+        let mut changed = mail("t");
+        changed["messages"][0]["payload"]["headers"][0]["value"] = json!("Updated");
+        let (mut g, server, dir) =
+            fixture(vec![(200, mail("t")), (200, changed), (404, json!({}))]);
+        assert_eq!(g.fresh_thread("a", "t").unwrap()["subject"], "Hello");
+        assert_eq!(g.fresh_thread("a", "t").unwrap()["subject"], "Updated");
+        assert_eq!(g.fresh_thread("a", "t").unwrap_err().code, "not_found");
+        assert_eq!(server.join().unwrap().len(), 3);
+        drop(g);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn fresh_open_does_not_return_cached_body_during_quota_cooldown() {
+        let (mut g, server, dir) = fixture(vec![(429, json!({}))]);
+        let body = model::normalize("a", &mail("t"), true).unwrap();
+        g.store.put("a", "body:t", &body).unwrap();
+        assert_eq!(g.fresh_thread("a", "t").unwrap_err().code, "rate_limit");
+        assert_eq!(g.fresh_thread("a", "t").unwrap_err().code, "rate_limit");
+        assert_eq!(server.join().unwrap().len(), 1);
+        drop(g);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn whole_account_discovery_resumes_page_after_restart_and_includes_spam_trash() {
+        let (mut g, server, dir) = fixture(vec![
+            (
+                200,
+                json!({"threads":[{"id":"t"},{"id":"u"}],"nextPageToken":"older"}),
+            ),
+            (200, mail("t")),
+        ]);
+        g.store.sync("a", "10", &[]).unwrap();
+        g.invalidate_summaries("a", &BTreeSet::new(), false);
+        g.metadata.flush();
+        g.backfill_step().unwrap(); // discovery
+        g.backfill_step().unwrap(); // metadata
+        let requests = server.join().unwrap();
+        assert!(requests[0].contains("includeSpamTrash=true"));
+        assert!(!requests[0].contains("labelIds") && !requests[0].contains("q="));
+        drop(g);
+        let (mut next, server, other_dir) = fixture(vec![
+            (200, mail("u")),
+            (200, json!({"threads":[{"id":"v"}]})),
+            (200, mail("v")),
+        ]);
+        next.store = Store::open(&dir.join("cache.sqlite")).unwrap();
+        next.metadata = super::super::metadata::Metadata::start(
+            dir.join("metadata.sqlite"),
+            vec![("a".into(), Some("10".into()))],
+            Arc::default(),
+        );
+        next.metadata.flush();
+        for _ in 0..10 {
+            if next.backfill_step().unwrap().is_none() {
+                break;
+            }
+        }
+        let requests = server.join().unwrap();
+        assert_eq!(requests.len(), 3);
+        assert!(requests[0].contains("threads/u"));
+        assert!(requests[1].contains("pageToken=older"));
+        assert!(next.metadata.rows.contains_key(&("a".into(), "t".into())));
+        assert!(next.metadata.rows.contains_key(&("a".into(), "u".into())));
+        drop(next);
+        std::fs::remove_dir_all(dir).unwrap();
+        std::fs::remove_dir_all(other_dir).unwrap();
+    }
+
     #[test]
     fn locked_metadata_database_does_not_delay_opening_or_scrolling() {
         let (mut g, server, dir) = fixture(vec![(200, mail("t")), (200, mail("u"))]);

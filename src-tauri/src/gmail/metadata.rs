@@ -12,6 +12,7 @@ enum Write {
     Put(Key, Value),
     Invalidate(String, BTreeSet<String>, bool, Option<String>),
     Remove(String),
+    Progress(String, Value),
     Stop,
     #[cfg(test)]
     Barrier(mpsc::Sender<()>),
@@ -24,6 +25,7 @@ pub struct Metadata {
     // Prevent a delayed startup snapshot from resurrecting changed/deleted rows.
     changed: BTreeSet<Key>,
     cleared: BTreeSet<String>,
+    pub ready: bool,
     worker: Option<std::thread::JoinHandle<()>>,
 }
 impl Metadata {
@@ -61,13 +63,25 @@ impl Metadata {
                 {
                     let mut stmt = store
                         .0
-                        .prepare("SELECT account,value FROM cache WHERE key LIKE 'thread:%'")?;
-                    let rows = stmt
-                        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
+                        .prepare("SELECT account,key,value FROM cache WHERE key LIKE 'thread:%' OR key='scan'")?;
+                    let rows = stmt.query_map([], |r| {
+                        Ok((
+                            r.get::<_, String>(0)?,
+                            r.get::<_, String>(1)?,
+                            r.get::<_, String>(2)?,
+                        ))
+                    })?;
                     for row in rows {
-                        let (account, raw) = row?;
+                        let (account, stored_key, raw) = row?;
                         if let Ok(value) = serde_json::from_str::<Value>(&raw) {
-                            let key = (account, text(&value, "id").to_owned());
+                            let key = (
+                                account,
+                                if stored_key == "scan" {
+                                    "$scan".to_owned()
+                                } else {
+                                    text(&value, "id").to_owned()
+                                },
+                            );
                             if snapshots.send((key, value)).is_err() {
                                 return Ok(());
                             }
@@ -82,6 +96,7 @@ impl Metadata {
                             store.put(&account, &format!("thread:{id}"), &value)?
                         }
                         Write::Invalidate(account, ids, all, history) => {
+                            store.add_account(&serde_json::json!({"id":account}))?;
                             let tx = store.0.transaction()?;
                             if all {
                                 tx.execute("DELETE FROM cache WHERE account=?1", [&account])?;
@@ -104,6 +119,9 @@ impl Metadata {
                                 .0
                                 .execute("DELETE FROM cache WHERE account=?1", [&account])?;
                         }
+                        Write::Progress(account, value) => {
+                            store.put(&account, "scan", &value)?;
+                        }
                         Write::Stop => break,
                         #[cfg(test)]
                         Write::Barrier(done) => {
@@ -124,16 +142,30 @@ impl Metadata {
             changed: BTreeSet::new(),
             cleared: BTreeSet::new(),
             worker: Some(worker),
+            ready: false,
         }
     }
     pub fn poll(&mut self) {
         // Bound the work per interaction, even during a large startup snapshot.
-        for (key, value) in self.loaded.try_iter().take(128) {
-            if !self.cleared.contains(&key.0) && !self.changed.contains(&key) {
-                self.rows.entry(key).or_insert(value);
+        for _ in 0..128 {
+            match self.loaded.try_recv() {
+                Ok((key, value)) => {
+                    if !self.cleared.contains(&key.0) && !self.changed.contains(&key) {
+                        self.rows.entry(key).or_insert(value);
+                    }
+                }
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    self.ready = true;
+                    break;
+                }
+                Err(mpsc::TryRecvError::Empty) => break,
             }
         }
     }
+    pub fn progress(&self, account: &str, value: Value) {
+        let _ = self.writes.send(Write::Progress(account.into(), value));
+    }
+
     pub fn put(&mut self, account: &str, id: &str, value: Value) {
         let key = (account.to_owned(), id.to_owned());
         self.changed.insert(key.clone());

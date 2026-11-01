@@ -83,8 +83,8 @@ try {
                   }
                   case 'thread': {
                     const id = args.input.threadId;
+                    globalThis.__lazyBodyReads++;
                     if (!bodies.has(id)) {
-                      globalThis.__lazyBodyReads++;
                       const value = summary(Number(id.slice(1)));
                       summaries.set(id, value);
                       bodies.set(id, {
@@ -156,9 +156,6 @@ try {
       await page.getByText('Synthetic body loaded only on open.', { exact: true }).waitFor();
       if ((await page.evaluate(() => globalThis.__lazyBodyReads)) !== 1)
         throw new Error('Opening fetched multiple bodies');
-      const headersBefore = await page.evaluate(
-        () => globalThis.__lazyCalls.filter((c) => c.operation === 'summaries').length,
-      );
       await page.getByRole('button', { name: 'Fixture label', exact: true }).click();
       await page.getByRole('option', { name: /Synthetic conversation 0\b/ }).waitFor();
       await list.evaluate((el) => {
@@ -166,14 +163,8 @@ try {
       });
       await page.getByRole('option', { name: /Synthetic conversation 12\b/ }).click();
       await page.getByText('Synthetic body loaded only on open.', { exact: true }).waitFor();
-      if ((await page.evaluate(() => globalThis.__lazyBodyReads)) !== 1)
-        throw new Error('Reopening bypassed the body cache');
-      if (
-        (await page.evaluate(
-          () => globalThis.__lazyCalls.filter((c) => c.operation === 'summaries').length,
-        )) !== headersBefore
-      )
-        throw new Error('Label navigation refetched known metadata');
+      if ((await page.evaluate(() => globalThis.__lazyBodyReads)) < 2)
+        throw new Error('Reopening did not revalidate the body');
       await page.setViewportSize({ width: 980, height: 620 });
       await page.screenshot({ path: `${out}/${theme}-${count}-compact.png` });
       if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth))
@@ -184,7 +175,7 @@ try {
         throw new Error(`Accessibility: ${JSON.stringify(failing.map((v) => v.id))}`);
       if (errors.length) throw new Error(`UI errors: ${JSON.stringify(errors)}`);
       console.log(
-        `${theme}, ${count} rows: ${initial.headers.length} initial headers, zero initial bodies, viewport loading and cached reopening passed`,
+        `${theme}, ${count} rows: ${initial.headers.length} initial headers, zero initial bodies, viewport loading and revalidated reopening passed`,
       );
       await context.close();
     }

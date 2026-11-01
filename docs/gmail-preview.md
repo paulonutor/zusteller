@@ -69,8 +69,9 @@ with mock mail (it overrides the window URL via `src-tauri/tauri.mock.conf.json`
 - Make a read/star/label change in Gmail and use **Refresh Gmail**, or wait for
   polling. Metadata changes invalidate previously cached bodies so the next open
   fetches the updated conversation.
-- Disconnect networking. Previously loaded pages and opened bodies remain
-  readable; uncached data reports an error. Reconnect and refresh.
+- Disconnect networking. Previously loaded lists remain readable, but opening
+  mail reports an error until Gmail can verify the current version. Reconnect
+  and refresh.
 - **Disconnect** removes the local account, cache, simulations and Keychain
   credential. It does not revoke Google's project-wide grant. To revoke that
   grant yourself, use your Google Account's third-party connections page; that
@@ -123,20 +124,31 @@ rows do not trigger reads. Queued reads are cancelled when rows leave the viewpo
 Sender, subject, date and flags require this separate read because Google's
 [list endpoint](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.threads/list)
 omits messages. Bodies and inline images load only when a conversation is opened.
-Unchanged opened conversations reuse SQLite; row metadata reuses memory and a separate
+Opened conversations are revalidated against Gmail; row metadata reuses memory and a separate
 `gmail/metadata.sqlite` index. An independent writer persists row summaries without
 bodies, so indexing database locks cannot block opening or scrolling. Startup
 snapshots are consumed without waiting. Browsing and opening mail populate the same
 index and remove the need for duplicate background reads.
 
-After a list loads, idle work fills missing metadata for that list, one conversation
-at a time. It yields between reads and during quota waits. Visited mailbox/label/search
-scopes accumulate across sessions; a new list pass reconstructs pending work and
-skips persisted summaries. This is not yet account-wide discovery, full-text search,
-or complete-mailbox sorting. The metadata index has no recent-cache eviction;
-its disk and memory use grow with indexed conversations. Bodies retain their existing
-bounded cache. History invalidation removes affected index entries and queues
-replacement reads. Cursor mismatches after a crash discard stale persisted rows.
+After the initial history baseline, idle work discovers the entire account with
+`threads.list`, including Spam and Trash, with 500 IDs per page and no mailbox or
+search filter. Each page's IDs and next-page token are persisted in the metadata
+writer. Restart replays the interrupted page, reuses finished summaries and resumes
+pagination. An invalid continuation token restarts discovery safely. History changes
+queue replacement metadata; an expired history cursor resets discovery. Browsing
+and opening mail still take priority over discovery and backfill.
+
+This builds conversation metadata, not full-text search or local sorting. Metadata
+memory and disk usage currently grow with account size. Bodies retain their existing
+bounded cache. Startup history-cursor mismatches discard the disposable index and
+restart discovery to avoid stale reuse after an interrupted write.
+
+Opening a conversation always requests `format=full` from Gmail, even if its body
+is cached and polling has not observed a change yet. The reader hides its previous
+body during revalidation. Offline, authentication and quota failures show an error
+or retry state; an old body is never silently returned as current. This sacrifices
+offline body reading to enforce freshness. Gmail's response is the freshness boundary;
+changes made after that response appear on a subsequent open or refresh.
 Index storage failures appear as `metadata storage_unavailable` in diagnostics;
 network reads and the in-memory index continue.
 Only one row-metadata batch runs at a time, including while scrolling. Batches are
@@ -145,8 +157,8 @@ conversation is not queued behind them. A rate-limit
 response leaves visible rows and the selected reader waiting until Retry-After,
 then retries automatically. Leaving the viewport cancels a row's retry. Opening
 a conversation resolves its pending row and cancels redundant metadata work.
-During an offline or rate-limit failure, a previously completed ID list and opened
-conversations remain available. A partially fetched list never replaces a complete
+During an offline or rate-limit failure, a previously completed ID list remains
+available, but opening a conversation requires successful Gmail revalidation. A partially fetched list never replaces a complete
 cached list. Client-side Unread/Starred filters resolve pending rows as they enter
 the viewport, so their counts cover metadata loaded so far.
 
@@ -181,14 +193,14 @@ reads use batches of up to fifty. One remaining read is sent normally. The endpo
 is `/batch` on Gmail's API host, as specified by its
 [discovery document](https://gmail.googleapis.com/$discovery/rest?version=v1).
 
-| Read work                               | HTTP requests | Quota units |
-| --------------------------------------- | ------------: | ----------: |
-| Initial sync baseline                   |             1 |           1 |
-| Sync with one history page              |             1 |           2 |
-| Complete list of 1,000 thread IDs       |             2 |          20 |
-| Metadata for 12 uncached visible rows   |             6 |       1,440 |
-| Counts for 30 already-listed labels     |             1 |          30 |
-| Reopen an unchanged cached conversation |             0 |           0 |
+| Read work                             | HTTP requests | Quota units |
+| ------------------------------------- | ------------: | ----------: |
+| Initial sync baseline                 |             1 |           1 |
+| Sync with one history page            |             1 |           2 |
+| Complete list of 1,000 thread IDs     |             2 |          20 |
+| Metadata for 12 uncached visible rows |             6 |       1,440 |
+| Counts for 30 already-listed labels   |             1 |          30 |
+| Reopen a conversation                 |             1 |         120 |
 
 These are successful reads without authentication retries or attachment downloads.
 The baseline spends one unit. Row reads use `format=full` with a field mask to

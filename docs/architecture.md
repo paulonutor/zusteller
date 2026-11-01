@@ -82,9 +82,11 @@ the UI marks them as approximate. Search uses Gmail syntax over server state.
 The recent body/page cache is bounded and bodies load on open. Row summaries
 also accumulate in a separate `metadata.sqlite` index, owned by a writer thread.
 Interactions use memory and enqueue index writes; startup loading never blocks
-them. Idle reads fill missing rows for browsed scopes and reuse metadata from
-scrolling and opening mail. This does not establish account-wide coverage or
-provide whole-mailbox sorting. History invalidation and cursor checks prevent
+them. Idle discovery pages through the entire account, including Spam and Trash.
+Persisted page IDs and continuation tokens resume interrupted indexing. Browsing
+and opening mail contribute metadata and retain scheduling priority. This does
+not yet provide full-text search or whole-mailbox sorting. Opens revalidate against
+Gmail every time and never silently fall back to cached bodies. History invalidation and cursor checks prevent
 stale index reuse, including after an interrupted asynchronous write. Provider subscriptions poll history
 and invalidate lists/counts/details after changes, deferring refresh during local
 actions. Setup, security boundaries and user-facing limits are in
