@@ -67,7 +67,12 @@ fn walk(
         let charset = mailparse::parse_content_type(&content_type).charset;
         let encoding =
             encoding_rs::Encoding::for_label(charset.as_bytes()).unwrap_or(encoding_rs::UTF_8);
-        let body = encoding.decode(&bytes).0.into_owned();
+        // Gmail can return UTF-8 text while retaining the original MIME charset.
+        // Keep the declared encoding as a fallback for unconverted body bytes.
+        let body = match std::str::from_utf8(&bytes) {
+            Ok(body) => body.to_owned(),
+            Err(_) => encoding.decode(&bytes).0.into_owned(),
+        };
         if text(part, "mimeType") == "text/html" {
             html.push(body);
         } else {
@@ -217,6 +222,26 @@ mod tests {
 #[cfg(test)]
 mod mime_tests {
     use super::*;
+    #[test]
+    fn decodes_utf8_body_with_original_latin1_header() {
+        for mime in ["text/html", "text/plain"] {
+            let body = "<p>möchten, darüber, Geschäftsbedingungen, Änderungen</p>";
+            let source = json!({"id":"t", "messages":[{"id":"m", "payload":{
+                "mimeType":mime,
+                "headers":[{"name":"Content-Type","value":format!("{mime}; charset=iso-8859-1")},
+                    {"name":"Content-Transfer-Encoding","value":"quoted-printable"}],
+                "body":{"data":URL_SAFE_NO_PAD.encode(body.as_bytes())}
+            }}]});
+            let result = normalize("a", &source, true).unwrap();
+            let field = if mime == "text/html" {
+                "html"
+            } else {
+                "plainText"
+            };
+            assert_eq!(result["messages"][0][field], body);
+        }
+    }
+
     #[test]
     fn decodes_alternatives_charsets_addresses_and_attachment_metadata() {
         let source = json!({"id":"t", "messages":[{"id":"m", "snippet":"A &amp; B", "internalDate":"1000", "payload":{
