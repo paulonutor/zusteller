@@ -41,7 +41,7 @@ export function useMailCommands({
   const { mail, platform } = useServices();
   const { run, refresh } = useMailActions(accountId);
   // New mail announced by the provider: refetch lists and counts (the list animates the arrivals).
-  useEffect(() => mail.subscribe?.(() => void refresh()), [mail, refresh]);
+  useEffect(() => mail.subscribe?.(() => void refresh(true)), [mail, refresh]);
 
   // Opening a conversation marks it read (once per open, not on every later state change).
   const markedFor = useRef<ID | null>(null);

@@ -45,6 +45,7 @@ export function useMailActions(accountId: ID | undefined) {
   const membership = useRef<OptimisticMembership | null>(null);
   membership.current ??= new OptimisticMembership(qc);
   const pendingCount = useRef(0);
+  const affectedThreads = useRef(new Set<ID>());
   const optimistic = useRef<OptimisticFlags | null>(null);
   optimistic.current ??= new OptimisticFlags(qc);
 
@@ -158,12 +159,21 @@ export function useMailActions(accountId: ID | undefined) {
       const pending = inFlight.current.get(dedupeKey);
       if (pending && latestIntent.current.get(target) === action) return pending;
       latestIntent.current.set(target, action);
+      ids.forEach((id) => affectedThreads.current.add(id));
       pendingCount.current++;
       const p = execute(action, ids, opts).finally(() => {
         if (inFlight.current.get(dedupeKey) === p) inFlight.current.delete(dedupeKey);
         if (--pendingCount.current === 0) {
           latestIntent.current.clear();
-          void qc.invalidateQueries({ queryKey: mailKeys.all, predicate: isMutable });
+          const affected = new Set(affectedThreads.current);
+          affectedThreads.current.clear();
+          void qc.invalidateQueries({
+            queryKey: mailKeys.all,
+            predicate: (q) =>
+              q.queryKey[2] === accountId &&
+              (['threads', 'counts'].includes(String(q.queryKey[1])) ||
+                (q.queryKey[1] === 'thread' && affected.has(String(q.queryKey[3])))),
+          });
         }
       });
       inFlight.current.set(dedupeKey, p);
@@ -173,11 +183,17 @@ export function useMailActions(accountId: ID | undefined) {
   );
 
   const refresh = useCallback(
-    () =>
+    (background = false) =>
       pendingCount.current > 0
         ? Promise.resolve()
-        : qc.invalidateQueries({ queryKey: mailKeys.all, predicate: isMutable }),
-    [qc],
+        : qc.invalidateQueries({
+            queryKey: mailKeys.all,
+            predicate: (q) =>
+              q.queryKey[2] === accountId &&
+              isMutable(q) &&
+              (!background || q.queryKey[1] !== 'thread'),
+          }),
+    [qc, accountId],
   );
   return { run, refresh };
 }

@@ -92,6 +92,38 @@ export function useThread(accountId: ID | undefined, threadId: ID | null) {
     ...cooldownRetry,
   });
   useEffect(() => {
+    if (!accountId || !threadId) return;
+    let active = true;
+    const key = mailKeys.thread(accountId, threadId);
+    const unsubscribe = mail.subscribe?.(() => {
+      // Probe metadata first: mailbox changes elsewhere must not reload this body.
+      if (!mail.getThreadSummary) {
+        void client.invalidateQueries({ queryKey: key });
+        return;
+      }
+      void mail
+        .getThreadSummary(accountId, threadId)
+        .then((summary) => {
+          if (!active) return;
+          const current = client.getQueryData<ThreadSummary>(key);
+          if (!current) return;
+          const changed = Object.keys(summary).some((field) => {
+            if (field === 'metadataPending') return false;
+            const property = field as keyof ThreadSummary;
+            return JSON.stringify(summary[property]) !== JSON.stringify(current[property]);
+          });
+          if (changed) void client.invalidateQueries({ queryKey: key });
+        })
+        .catch(() => {
+          // Keep the readable body on transient sync/metadata failures.
+        });
+    });
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
+  }, [mail, client, accountId, threadId]);
+  useEffect(() => {
     if (result.data) replaceSummary(client, result.data);
   }, [client, result.data]);
   return result;
